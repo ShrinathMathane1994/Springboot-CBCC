@@ -1,0 +1,11 @@
+2025-07-08 14:52:07.285 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 79412 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-08 14:52:07.307 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-08 14:52:09.973 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 3.307 seconds (process running for 4.773)
+2025-07-08 14:53:26.922 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
+2025-07-08 14:53:30.952 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.com/
+2025-07-08 14:57:21.455 [http-nio-8080-exec-5] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
+2025-07-08 14:57:26.459 [http-nio-8080-exec-5] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.com/
+2025-07-08 15:07:33.228 [http-nio-8080-exec-9] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
+2025-07-08 15:07:36.497 [http-nio-8080-exec-9] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.co.in/
+2025-07-08 15:08:48.186 [http-nio-8080-exec-10] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
+2025-07-08 15:08:58.303 [http-nio-8080-exec-10] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.co.in/

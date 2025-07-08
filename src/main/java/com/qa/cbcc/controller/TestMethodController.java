@@ -34,17 +34,5 @@ public class TestMethodController {
         }
         return results;
     }
-    
-//  @PostMapping("/run")
-//  public String runTestMethod(@RequestBody Map<String, String> payload) {
-//      String methodName = payload.get("methodName");
-//      return testMethodService.runTestMethod(methodName);
-//  }
-
-//    @PostMapping("/run")
-//    public Map<String, String> runTestMethod(@RequestBody Map<String, String> payload) {
-//        String methodName = payload.get("methodName");
-//        return testMethodService.runTestMethod(methodName); // returns Map, and expected Map
-//    }
 
 }

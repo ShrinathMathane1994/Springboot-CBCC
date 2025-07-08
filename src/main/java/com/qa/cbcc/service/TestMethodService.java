@@ -75,9 +75,9 @@ public class TestMethodService {
 	        testng.setXmlSuites(Collections.singletonList(suite));
 	        testng.run();
 
-	        response.put("status", "success");
+	        response.put("status", "Success");
 	    } catch (Exception e) {
-	        response.put("status", "error: " + e.getMessage());
+	        response.put("status", "Error: " + e.getMessage());
 	    } finally {
 	        System.setOut(originalOut);
 	    }
