@@ -7,13 +7,13 @@ public class SampleTest extends BaseClass {
 	@Test
 	public void getPageTitle() {
 		String title = driver.getTitle();
-		System.out.println("Title of Page is "+title);
+		logger.info("Title of Page is " + title);
 	}
 
 	@Test
 	public void getCurrentURL() {
 		String currURL = driver.getCurrentUrl();
-		System.out.println("Current Page URL is "+currURL);
+		logger.info("Current Page URL is " + currURL);
 	}
-	
+
 }

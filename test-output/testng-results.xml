@@ -2,20 +2,20 @@
 <testng-results ignored="1" total="2" passed="1" failed="0" skipped="0">
   <reporter-output>
   </reporter-output>
-  <suite started-at="2025-07-08T11:33:13 IST" name="DynamicSuite" finished-at="2025-07-08T11:33:16 IST" duration-ms="3537">
+  <suite started-at="2025-07-08T13:18:49 IST" name="DynamicSuite" finished-at="2025-07-08T13:18:54 IST" duration-ms="4260">
     <groups>
     </groups>
-    <test started-at="2025-07-08T11:33:13 IST" name="DynamicTest" finished-at="2025-07-08T11:33:16 IST" duration-ms="3537">
+    <test started-at="2025-07-08T13:18:49 IST" name="DynamicTest" finished-at="2025-07-08T13:18:54 IST" duration-ms="4260">
       <class name="com.qa.cbcc.SampleTest">
-        <test-method is-config="true" signature="setUp()[pri:0, instance:com.qa.cbcc.SampleTest@13da2fc3]" started-at="2025-07-08T11:33:13 IST" name="setUp" finished-at="2025-07-08T11:33:15 IST" duration-ms="2780" status="PASS">
+        <test-method is-config="true" signature="setUp()[pri:0, instance:com.qa.cbcc.SampleTest@531df262]" started-at="2025-07-08T13:18:49 IST" name="setUp" finished-at="2025-07-08T13:18:53 IST" duration-ms="3917" status="PASS">
           <reporter-output>
           </reporter-output>
         </test-method> <!-- setUp -->
-        <test-method signature="getPageTitle()[pri:0, instance:com.qa.cbcc.SampleTest@13da2fc3]" started-at="2025-07-08T11:33:15 IST" name="getPageTitle" finished-at="2025-07-08T11:33:15 IST" duration-ms="40" status="PASS">
+        <test-method signature="getCurrentURL()[pri:0, instance:com.qa.cbcc.SampleTest@531df262]" started-at="2025-07-08T13:18:53 IST" name="getCurrentURL" finished-at="2025-07-08T13:18:53 IST" duration-ms="20" status="PASS">
           <reporter-output>
           </reporter-output>
-        </test-method> <!-- getPageTitle -->
-        <test-method is-config="true" signature="tearDown()[pri:0, instance:com.qa.cbcc.SampleTest@13da2fc3]" started-at="2025-07-08T11:33:15 IST" name="tearDown" finished-at="2025-07-08T11:33:16 IST" duration-ms="707" status="PASS">
+        </test-method> <!-- getCurrentURL -->
+        <test-method is-config="true" signature="tearDown()[pri:0, instance:com.qa.cbcc.SampleTest@531df262]" started-at="2025-07-08T13:18:53 IST" name="tearDown" finished-at="2025-07-08T13:18:54 IST" duration-ms="318" status="PASS">
           <reporter-output>
           </reporter-output>
         </test-method> <!-- tearDown -->

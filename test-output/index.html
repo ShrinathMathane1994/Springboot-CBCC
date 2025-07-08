@@ -103,7 +103,7 @@
                     <div class="method-list-content passed suite-DynamicSuite">
                       <span>
                         <img src="passed.png" width="3%"/>
-                        <a href="#" panel-name="suite-DynamicSuite" title="com.qa.cbcc.SampleTest" class="method navigator-link" hash-for-method="getPageTitle">getPageTitle</a> <!-- method navigator-link -->
+                        <a href="#" panel-name="suite-DynamicSuite" title="com.qa.cbcc.SampleTest" class="method navigator-link" hash-for-method="getCurrentURL">getCurrentURL</a> <!-- method navigator-link -->
                       </span>
                       <br/>
                     </div> <!-- method-list-content passed suite-DynamicSuite -->
@@ -126,9 +126,9 @@
             <div class="main-panel-content rounded-window-bottom">
               <div class="method">
                 <div class="method-content">
-                  <a name="getPageTitle">
-                  </a> <!-- getPageTitle -->
-                  <span class="method-name">getPageTitle</span>
+                  <a name="getCurrentURL">
+                  </a> <!-- getCurrentURL -->
+                  <span class="method-name">getCurrentURL</span>
                 </div> <!-- method-content -->
               </div> <!-- method -->
             </div> <!-- main-panel-content rounded-window-bottom -->
@@ -146,7 +146,7 @@
     &lt;classes&gt;
       &lt;class name=&quot;com.qa.cbcc.SampleTest&quot;&gt;
         &lt;methods&gt;
-          &lt;exclude name=&quot;getCurrentURL&quot;/&gt;
+          &lt;include name=&quot;getCurrentURL&quot;/&gt;
         &lt;/methods&gt;
       &lt;/class&gt; &lt;!-- com.qa.cbcc.SampleTest --&gt;
     &lt;/classes&gt;
@@ -190,14 +190,14 @@ data.addColumn('string', 'Class');
 data.addColumn('number', 'Time (ms)');
 data.addRows(1);
 data.setCell(0, 0, 0)
-data.setCell(0, 1, 'getPageTitle')
+data.setCell(0, 1, 'getCurrentURL')
 data.setCell(0, 2, 'com.qa.cbcc.SampleTest')
-data.setCell(0, 3, 40);
+data.setCell(0, 3, 20);
 window.suiteTableData['DynamicSuite']= { tableData: data, tableDiv: 'times-div-DynamicSuite'}
 return data;
 }
               </script>
-              <span class="suite-total-time">Total running time: 40 ms</span>
+              <span class="suite-total-time">Total running time: 20 ms</span>
               <div id="times-div-DynamicSuite">
               </div> <!-- times-div-DynamicSuite -->
             </div> <!-- times-div -->
@@ -218,7 +218,7 @@ return data;
             <div class="ignored-class-div">
               <span class="ignored-class-name">com.qa.cbcc.SampleTest</span>
               <div class="ignored-methods-div">
-                <span class="ignored-method-name">getCurrentURL</span>
+                <span class="ignored-method-name">getPageTitle</span>
                 <br/>
               </div> <!-- ignored-methods-div -->
             </div> <!-- ignored-class-div -->
@@ -231,18 +231,18 @@ return data;
           <div class="main-panel-content rounded-window-bottom">
             <div class="chronological-class">
               <div class="chronological-class-name">com.qa.cbcc.SampleTest</div> <!-- chronological-class-name -->
-              <div class="configuration-test before">
+              <div class="configuration-method before">
                 <span class="method-name">setUp</span>
                 <span class="method-start">0 ms</span>
-              </div> <!-- configuration-test before -->
+              </div> <!-- configuration-method before -->
               <div class="test-method">
-                <span class="method-name">getPageTitle</span>
-                <span class="method-start">2790 ms</span>
+                <span class="method-name">getCurrentURL</span>
+                <span class="method-start">3919 ms</span>
               </div> <!-- test-method -->
-              <div class="configuration-test after">
+              <div class="configuration-method after">
                 <span class="method-name">tearDown</span>
-                <span class="method-start">2830 ms</span>
-              </div> <!-- configuration-test after -->
+                <span class="method-start">3941 ms</span>
+              </div> <!-- configuration-method after -->
           </div> <!-- main-panel-content rounded-window-bottom -->
         </div> <!-- panel -->
       </div> <!-- main-panel-root -->

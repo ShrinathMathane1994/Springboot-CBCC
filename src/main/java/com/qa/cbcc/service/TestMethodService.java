@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.testng.TestNG;
 import org.testng.annotations.Test;
 import org.testng.xml.XmlClass;
+import org.testng.xml.XmlInclude;
 import org.testng.xml.XmlSuite;
 import org.testng.xml.XmlTest;
 
@@ -25,7 +26,7 @@ public class TestMethodService {
 	public List<String> getTestMethods() {
 		List<String> testMethods = new ArrayList<>();
 
-		try (ScanResult scanResult = new ClassGraph().enableAllInfo().acceptPackages("com.qa.cbcc") // package
+		try (ScanResult scanResult = new ClassGraph().enableAllInfo().acceptPackages("com.qa.cbcc")
 				.scan()) {
 			scanResult.getAllClasses().forEach(classInfo -> {
 				try {
@@ -43,7 +44,6 @@ public class TestMethodService {
 
 		return testMethods;
 	}
-	
 
 	public Map<String, String> runTestMethod(String methodName) {
 	    Map<String, String> response = new HashMap<>();
@@ -56,17 +56,22 @@ public class TestMethodService {
 	        String className = "com.qa.cbcc." + parts[0];
 	        String method = parts[1];
 
+	        String suiteName = parts[0] + "." + method; 
+	        String testName = "Test for " + method;     
+
 	        XmlSuite suite = new XmlSuite();
-	        suite.setName("DynamicSuite");
+	        suite.setName(suiteName); 
 
 	        XmlTest test = new XmlTest(suite);
-	        test.setName("DynamicTest");
-
+	        test.setName(testName); 
+	        
 	        XmlClass xmlClass = new XmlClass(className);
-	        xmlClass.setExcludedMethods(Collections.singletonList(method));
+	        XmlInclude includeMethod = new XmlInclude(method);
+	        xmlClass.setIncludedMethods(Collections.singletonList(includeMethod));
 	        test.setXmlClasses(Collections.singletonList(xmlClass));
 
 	        TestNG testng = new TestNG();
+	        testng.setUseDefaultListeners(false);
 	        testng.setXmlSuites(Collections.singletonList(suite));
 	        testng.run();
 
@@ -77,8 +82,16 @@ public class TestMethodService {
 	        System.setOut(originalOut);
 	    }
 
-	    response.put("output", outputStream.toString().replace("\r\n", " , "));
+	    String cleanedOutput = outputStream.toString()
+	        .replaceAll("[\\r\\n]+", ", ")
+	        .replaceAll("=+", "")
+	        .replaceAll(",\\s*,", ", ")
+	        .replaceAll("(^,\\s*)|(,\\s*$)", "")
+	        .trim();
 
+	    response.put("output", cleanedOutput);
 	    return response;
 	}
+
+
 }
