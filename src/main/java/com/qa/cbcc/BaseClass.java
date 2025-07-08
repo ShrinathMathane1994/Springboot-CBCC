@@ -1,4 +1,4 @@
-package com.example.testscanner;
+package com.qa.cbcc;
 
 import java.time.Duration;
 

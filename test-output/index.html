@@ -103,7 +103,7 @@
                     <div class="method-list-content passed suite-DynamicSuite">
                       <span>
                         <img src="passed.png" width="3%"/>
-                        <a href="#" panel-name="suite-DynamicSuite" title="com.example.testscanner.SampleTest" class="method navigator-link" hash-for-method="getPageTitle">getPageTitle</a> <!-- method navigator-link -->
+                        <a href="#" panel-name="suite-DynamicSuite" title="com.qa.cbcc.SampleTest" class="method navigator-link" hash-for-method="getPageTitle">getPageTitle</a> <!-- method navigator-link -->
                       </span>
                       <br/>
                     </div> <!-- method-list-content passed suite-DynamicSuite -->
@@ -121,7 +121,7 @@
           <div class="suite-DynamicSuite-class-passed">
             <div class="main-panel-header rounded-window-top">
               <img src="passed.png"/>
-              <span class="class-name">com.example.testscanner.SampleTest</span>
+              <span class="class-name">com.qa.cbcc.SampleTest</span>
             </div> <!-- main-panel-header rounded-window-top -->
             <div class="main-panel-content rounded-window-bottom">
               <div class="method">
@@ -144,11 +144,11 @@
 &lt;suite name=&quot;DynamicSuite&quot;&gt;
   &lt;test thread-count=&quot;5&quot; name=&quot;DynamicTest&quot;&gt;
     &lt;classes&gt;
-      &lt;class name=&quot;com.example.testscanner.SampleTest&quot;&gt;
+      &lt;class name=&quot;com.qa.cbcc.SampleTest&quot;&gt;
         &lt;methods&gt;
           &lt;exclude name=&quot;getCurrentURL&quot;/&gt;
         &lt;/methods&gt;
-      &lt;/class&gt; &lt;!-- com.example.testscanner.SampleTest --&gt;
+      &lt;/class&gt; &lt;!-- com.qa.cbcc.SampleTest --&gt;
     &lt;/classes&gt;
   &lt;/test&gt; &lt;!-- DynamicTest --&gt;
 &lt;/suite&gt; &lt;!-- DynamicSuite --&gt;
@@ -191,13 +191,13 @@ data.addColumn('number', 'Time (ms)');
 data.addRows(1);
 data.setCell(0, 0, 0)
 data.setCell(0, 1, 'getPageTitle')
-data.setCell(0, 2, 'com.example.testscanner.SampleTest')
-data.setCell(0, 3, 30);
+data.setCell(0, 2, 'com.qa.cbcc.SampleTest')
+data.setCell(0, 3, 40);
 window.suiteTableData['DynamicSuite']= { tableData: data, tableDiv: 'times-div-DynamicSuite'}
 return data;
 }
               </script>
-              <span class="suite-total-time">Total running time: 30 ms</span>
+              <span class="suite-total-time">Total running time: 40 ms</span>
               <div id="times-div-DynamicSuite">
               </div> <!-- times-div-DynamicSuite -->
             </div> <!-- times-div -->
@@ -216,7 +216,7 @@ return data;
           </div> <!-- main-panel-header rounded-window-top -->
           <div class="main-panel-content rounded-window-bottom">
             <div class="ignored-class-div">
-              <span class="ignored-class-name">com.example.testscanner.SampleTest</span>
+              <span class="ignored-class-name">com.qa.cbcc.SampleTest</span>
               <div class="ignored-methods-div">
                 <span class="ignored-method-name">getCurrentURL</span>
                 <br/>
@@ -230,18 +230,18 @@ return data;
           </div> <!-- main-panel-header rounded-window-top -->
           <div class="main-panel-content rounded-window-bottom">
             <div class="chronological-class">
-              <div class="chronological-class-name">com.example.testscanner.SampleTest</div> <!-- chronological-class-name -->
+              <div class="chronological-class-name">com.qa.cbcc.SampleTest</div> <!-- chronological-class-name -->
               <div class="configuration-test before">
                 <span class="method-name">setUp</span>
                 <span class="method-start">0 ms</span>
               </div> <!-- configuration-test before -->
               <div class="test-method">
                 <span class="method-name">getPageTitle</span>
-                <span class="method-start">2771 ms</span>
+                <span class="method-start">2790 ms</span>
               </div> <!-- test-method -->
               <div class="configuration-test after">
                 <span class="method-name">tearDown</span>
-                <span class="method-start">2801 ms</span>
+                <span class="method-start">2830 ms</span>
               </div> <!-- configuration-test after -->
           </div> <!-- main-panel-content rounded-window-bottom -->
         </div> <!-- panel -->

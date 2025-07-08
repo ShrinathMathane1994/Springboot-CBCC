@@ -1,5 +1,5 @@
-com\example\testscanner\SampleTest.class
-com\example\testscanner\TestMethodScannerApplication.class
-com\example\testscanner\BaseClass.class
-com\example\testscanner\controller\TestMethodController.class
-com\example\testscanner\service\TestMethodService.class
+com\qa\cbcc\BaseClass.class
+com\qa\cbcc\SampleTest.class
+com\qa\cbcc\controller\TestMethodController.class
+com\qa\cbcc\service\TestMethodService.class
+com\qa\cbcc\TestMethodScannerApplication.class
