@@ -1,11 +1,58 @@
-2025-07-08 14:52:07.285 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 79412 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
-2025-07-08 14:52:07.307 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
-2025-07-08 14:52:09.973 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 3.307 seconds (process running for 4.773)
-2025-07-08 14:53:26.922 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
-2025-07-08 14:53:30.952 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.com/
-2025-07-08 14:57:21.455 [http-nio-8080-exec-5] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
-2025-07-08 14:57:26.459 [http-nio-8080-exec-5] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.com/
-2025-07-08 15:07:33.228 [http-nio-8080-exec-9] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
-2025-07-08 15:07:36.497 [http-nio-8080-exec-9] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.co.in/
-2025-07-08 15:08:48.186 [http-nio-8080-exec-10] INFO  com.qa.cbcc.BaseClass - Title of Page is Google
-2025-07-08 15:08:58.303 [http-nio-8080-exec-10] INFO  com.qa.cbcc.BaseClass - Current Page URL is https://www.google.co.in/
+2025-07-08 17:08:50.003 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 121516 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-08 17:08:50.019 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-08 17:08:52.190 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 2.673 seconds (process running for 4.052)
+2025-07-08 17:09:12.984 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: src/main/resources/testData/input.json & src/main/resources/testData/output.json
+2025-07-08 17:09:13.146 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in value for Key age:
+   INPUT: 30
+   OUTPUT: 31
+ - Key missing in second JSON: city
+ - Difference in value for Key email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - Key missing in first JSON: country
+
+2025-07-08 17:14:49.144 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 118416 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-08 17:14:49.159 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-08 17:14:51.554 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 2.838 seconds (process running for 4.037)
+2025-07-08 17:15:04.851 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Comparing: src/main/resources/testData/input.json & src/main/resources/testData/output.json
+2025-07-08 17:15:05.013 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in value for Key age:
+   INPUT: 30
+   OUTPUT: 31
+ - Key missing in OUTPUT JSON: city
+ - Difference in value for Key email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - Key missing in INPUT JSON: country
+

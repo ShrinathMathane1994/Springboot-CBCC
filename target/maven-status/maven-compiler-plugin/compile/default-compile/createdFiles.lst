@@ -3,4 +3,5 @@ com\qa\cbcc\utils\JsonComparator.class
 com\qa\cbcc\BaseClass.class
 com\qa\cbcc\controller\TestMethodController.class
 com\qa\cbcc\service\TestMethodService.class
+com\qa\cbcc\utils\SimpleJsonComparator.class
 com\qa\cbcc\TestMethodScannerApplication.class
