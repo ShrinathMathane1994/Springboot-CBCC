@@ -21,7 +21,7 @@ public class TestMethodController {
     private TestMethodService testMethodService;
 
     @GetMapping("/methods")
-    public List<String> getTestMethods() {
+    public List<Map<String, String>> getTestMethods() {
         return testMethodService.getTestMethods();
     }
     
@@ -30,7 +30,7 @@ public class TestMethodController {
         List<String> methodNames = payload.get("methodNames");
         List<Map<String, String>> results = new ArrayList<>();
         for (String methodName : methodNames) {
-            results.add(testMethodService.runTestMethod(methodName));
+            results.add(testMethodService.runTestMethod2(methodName));
         }
         return results;
     }

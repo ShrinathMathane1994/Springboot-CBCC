@@ -1,7 +1,12 @@
 com\qa\cbcc\SampleTest.class
-com\qa\cbcc\utils\JsonComparator.class
-com\qa\cbcc\BaseClass.class
-com\qa\cbcc\controller\TestMethodController.class
+com\qa\cbcc\controller\FileController.class
+com\qa\cbcc\model\TestCase.class
 com\qa\cbcc\service\TestMethodService.class
 com\qa\cbcc\utils\SimpleJsonComparator.class
 com\qa\cbcc\TestMethodScannerApplication.class
+com\qa\cbcc\repository\TestCaseRepository.class
+com\qa\cbcc\dto\TestCaseDTO.class
+com\qa\cbcc\BaseClass.class
+com\qa\cbcc\controller\TestCaseController.class
+com\qa\cbcc\controller\TestMethodController.class
+com\qa\cbcc\service\TestCaseService.class

@@ -12,6 +12,7 @@ import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Parameters;
 
 public class BaseClass {
 	public WebDriver driver;
@@ -19,9 +20,14 @@ public class BaseClass {
     public Logger logger;
 
 	@BeforeMethod
-	public void setUp() {
+	@Parameters({"json1", "json2"})
+	public void setUp(String json1, String json2) {
 		try {
 			logger = LogManager.getLogger(BaseClass.class);
+			if (json1 != null && json2 != null) {
+		        logger.info("Skipping browser launch for JSON comparison.");
+		        return;
+		    }
 			FileInputStream file = new FileInputStream(
 					System.getProperty("user.dir") + "\\src\\main\\java\\com\\qa\\cbcc\\config\\config.properties");
 			prop = new Properties();
@@ -59,10 +65,13 @@ public class BaseClass {
 
 	@AfterMethod
 	public void tearDown() {
-		try {
-			driver.quit();
-		} catch (Exception e) {
-			System.out.println(e.getMessage());
-		}
+	    try {
+	        if (driver != null) {
+	            driver.quit();
+	        }
+	    } catch (Exception e) {
+	        System.out.println(e.getMessage());
+	    }
 	}
+
 }

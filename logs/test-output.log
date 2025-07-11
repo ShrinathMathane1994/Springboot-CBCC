@@ -1,8 +1,12 @@
-2025-07-08 17:08:50.003 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 121516 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
-2025-07-08 17:08:50.019 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
-2025-07-08 17:08:52.190 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 2.673 seconds (process running for 4.052)
-2025-07-08 17:09:12.984 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: src/main/resources/testData/input.json & src/main/resources/testData/output.json
-2025-07-08 17:09:13.146 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+2025-07-10 16:00:36.791 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 139640 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:00:36.802 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:00:46.539 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 10.318 seconds (process running for 11.734)
+2025-07-10 16:08:38.094 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 139200 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:08:38.104 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:08:44.116 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.559 seconds (process running for 8.123)
+2025-07-10 16:09:01.235 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 16:09:01.241 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: src/main/resources/testData/input.json & src/main/resources/testData/output.json
+2025-07-10 16:09:01.390 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
 Differences:
 [ {
   "op" : "move",
@@ -18,20 +22,84 @@ Differences:
   "value" : "john.doe@example.com"
 } ]
 Detailed comparison:
- - Difference in value for Key age:
+ - Difference in VALUE for KEY age:
    INPUT: 30
    OUTPUT: 31
- - Key missing in second JSON: city
- - Difference in value for Key email:
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
    INPUT: "john@example.com"
    OUTPUT: "john.doe@example.com"
- - Key missing in first JSON: country
+ - KEY missing in INPUT JSON: country
 
-2025-07-08 17:14:49.144 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 118416 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
-2025-07-08 17:14:49.159 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
-2025-07-08 17:14:51.554 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 2.838 seconds (process running for 4.037)
-2025-07-08 17:15:04.851 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Comparing: src/main/resources/testData/input.json & src/main/resources/testData/output.json
-2025-07-08 17:15:05.013 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+2025-07-10 16:09:19.702 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 16:09:19.703 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json
+2025-07-10 16:09:19.705 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 16:18:06.534 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 132360 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:18:06.545 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:18:13.273 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.321 seconds (process running for 9.022)
+2025-07-10 16:18:36.478 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 16:18:36.487 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\target\classes\testData\2\input.json
+2025-07-10 16:18:36.490 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 16:24:49.687 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 120100 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:24:49.704 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:24:56.106 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.244 seconds (process running for 9.404)
+2025-07-10 16:49:27.238 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 137808 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:49:27.251 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:49:33.581 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.821 seconds (process running for 8.269)
+2025-07-10 16:49:49.214 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 16:49:49.224 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json
+2025-07-10 16:49:49.230 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 16:51:33.447 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 132920 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:51:33.462 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:51:39.822 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.914 seconds (process running for 8.35)
+2025-07-10 16:55:22.986 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 117200 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:55:23.000 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:55:29.148 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.718 seconds (process running for 8.149)
+2025-07-10 16:55:39.474 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 16:55:39.480 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC//src//main//resources//testData/2/input.json
+2025-07-10 16:55:39.483 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 16:59:47.827 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 134448 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 16:59:47.848 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 16:59:54.486 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.217 seconds (process running for 9.107)
+2025-07-10 17:03:59.965 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 132084 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 17:03:59.976 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 17:04:06.209 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.76 seconds (process running for 8.236)
+2025-07-10 17:04:15.337 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:04:15.344 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData/2/input.json
+2025-07-10 17:04:15.347 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 17:05:26.269 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 11200 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 17:05:26.286 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 17:05:32.378 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.632 seconds (process running for 8.153)
+2025-07-10 17:05:44.667 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:05:44.673 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData/2/input.json
+2025-07-10 17:05:44.676 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 17:30:12.720 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 132332 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 17:30:12.730 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 17:30:19.408 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.289 seconds (process running for 8.751)
+2025-07-10 17:33:13.660 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:33:13.699 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData/2/input.json
+2025-07-10 17:33:13.710 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 17:34:50.114 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 132432 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 17:34:50.144 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 17:34:57.988 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 8.891 seconds (process running for 11.01)
+2025-07-10 17:35:05.729 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:35:05.734 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json
+2025-07-10 17:35:05.738 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 17:37:52.027 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:37:52.041 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json
+2025-07-10 17:37:52.046 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 17:44:23.975 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 77000 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 17:44:23.997 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 17:44:35.287 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 12.477 seconds (process running for 15.615)
+2025-07-10 17:44:54.862 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:44:54.868 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - Comparing: D & \AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json
+2025-07-10 17:44:54.871 [http-nio-8080-exec-2] INFO  com.qa.cbcc.BaseClass - ❌ Error comparing JSON files: D (The system cannot find the file specified)
+2025-07-10 17:56:22.710 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 137944 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 17:56:22.722 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 17:56:29.325 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.183 seconds (process running for 8.846)
+2025-07-10 17:57:39.889 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 17:57:39.904 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Comparing: src/main/resources/testData/input.json & src/main/resources/testData/output.json
+2025-07-10 17:57:40.056 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
 Differences:
 [ {
   "op" : "move",
@@ -47,12 +115,314 @@ Differences:
   "value" : "john.doe@example.com"
 } ]
 Detailed comparison:
- - Difference in value for Key age:
+ - Difference in VALUE for KEY age:
    INPUT: 30
    OUTPUT: 31
- - Key missing in OUTPUT JSON: city
- - Difference in value for Key email:
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
    INPUT: "john@example.com"
    OUTPUT: "john.doe@example.com"
- - Key missing in INPUT JSON: country
+ - KEY missing in INPUT JSON: country
 
+2025-07-10 18:05:20.216 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 138448 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:05:20.230 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:05:26.800 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.125 seconds (process running for 8.487)
+2025-07-10 18:05:33.238 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:05:33.243 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:05:33.373 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:05:48.266 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:05:48.267 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:05:48.270 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:05:48.291 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:05:48.292 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:05:48.300 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+
+2025-07-10 18:07:26.747 [http-nio-8080-exec-6] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:07:26.750 [http-nio-8080-exec-6] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:07:26.757 [http-nio-8080-exec-6] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:07:26.783 [http-nio-8080-exec-6] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:07:26.784 [http-nio-8080-exec-6] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:07:26.788 [http-nio-8080-exec-6] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
+2025-07-10 18:11:12.673 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 137260 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:11:12.690 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:11:19.607 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.62 seconds (process running for 9.113)
+2025-07-10 18:13:41.512 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 73736 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:13:41.528 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:13:47.780 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.774 seconds (process running for 8.258)
+2025-07-10 18:13:56.802 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:13:56.811 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:13:56.977 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:13:57.015 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:13:57.016 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:13:57.017 [http-nio-8080-exec-4] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
+2025-07-10 18:24:21.133 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 14244 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:24:21.147 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:24:27.331 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 6.778 seconds (process running for 8.399)
+2025-07-10 18:24:36.186 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:24:36.208 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:24:36.540 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:24:36.726 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:24:36.728 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:24:36.731 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
+2025-07-10 18:36:44.408 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 129476 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:36:44.427 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:36:51.175 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.368 seconds (process running for 8.757)
+2025-07-10 18:36:56.819 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:36:56.828 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:36:57.057 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:36:57.133 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:36:57.136 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:36:57.139 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
+2025-07-10 18:45:57.303 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 28660 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:45:57.316 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:46:04.534 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.776 seconds (process running for 9.28)
+2025-07-10 18:46:14.583 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:46:14.596 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:46:14.737 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:46:14.766 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:46:14.767 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:46:14.767 [http-nio-8080-exec-3] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
+2025-07-10 18:47:44.784 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 125768 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-10 18:47:44.798 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-10 18:47:51.655 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.433 seconds (process running for 9.068)
+2025-07-10 18:48:04.218 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:48:04.224 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-10 18:48:04.354 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-10 18:48:04.383 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-10 18:48:04.384 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-10 18:48:04.385 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
+2025-07-11 07:22:31.670 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Starting TestMethodScannerApplication using Java 24.0.1 with PID 123924 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-11 07:22:31.684 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-11 07:22:38.406 [main] INFO  com.qa.cbcc.TestMethodScannerApplication - Started TestMethodScannerApplication in 7.378 seconds (process running for 9.11)
+2025-07-11 07:23:19.468 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-11 07:23:19.475 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\1\output.json
+2025-07-11 07:23:19.621 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ❌ JSON files are NOT equal.
+Differences:
+[ {
+  "op" : "move",
+  "path" : "/country",
+  "from" : "/city"
+}, {
+  "op" : "replace",
+  "path" : "/age",
+  "value" : 31
+}, {
+  "op" : "replace",
+  "path" : "/email",
+  "value" : "john.doe@example.com"
+} ]
+Detailed comparison:
+ - Difference in VALUE for KEY age:
+   INPUT: 30
+   OUTPUT: 31
+ - KEY missing in OUTPUT JSON: city
+ - Difference in VALUE for KEY email:
+   INPUT: "john@example.com"
+   OUTPUT: "john.doe@example.com"
+ - KEY missing in INPUT JSON: country
+
+2025-07-11 07:23:19.667 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Skipping browser launch for JSON comparison.
+2025-07-11 07:23:19.668 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - Comparing: D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\input.json & D:\AUtomation\Eclipse2\CBCC\src\main\resources\testData\2\output.json
+2025-07-11 07:23:19.670 [http-nio-8080-exec-1] INFO  com.qa.cbcc.BaseClass - ✅ JSON files are equal.
