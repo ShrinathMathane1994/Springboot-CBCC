@@ -4,8 +4,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class TestMethodScannerApplication {
+public class CbccApplication {
     public static void main(String[] args) {
-        SpringApplication.run(TestMethodScannerApplication.class, args);
+        SpringApplication.run(CbccApplication.class, args);
     }
 }
+
