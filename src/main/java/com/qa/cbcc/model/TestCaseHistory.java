@@ -4,12 +4,14 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "test_cases")
-public class TestCase {
+@Table(name = "test_case_history")
+public class TestCaseHistory {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long idTC;
+    private Long id;
+
+    private Long testCaseId;
 
     private String tcName;
 
@@ -21,17 +23,41 @@ public class TestCase {
 
     private String outputFile;
 
-    private LocalDateTime createdOn;
-
     private LocalDateTime modifiedOn;
 
-    private LocalDateTime executionOn;
+    private String changeType; // CREATE, UPDATE, DELETE
 
-    private Boolean isActive;  // ✅ Needed for soft delete and query filtering
+    // Constructors
+    public TestCaseHistory() {}
+
+    public TestCaseHistory(Long testCaseId, String tcName, String description,
+                           String featureScenarioJson, String inputFile,
+                           String outputFile, LocalDateTime modifiedOn, String changeType) {
+        this.testCaseId = testCaseId;
+        this.tcName = tcName;
+        this.description = description;
+        this.featureScenarioJson = featureScenarioJson;
+        this.inputFile = inputFile;
+        this.outputFile = outputFile;
+        this.modifiedOn = modifiedOn;
+        this.changeType = changeType;
+    }
 
     // Getters and Setters
     public Long getId() {
-        return idTC;
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Long getTestCaseId() {
+        return testCaseId;
+    }
+
+    public void setTestCaseId(Long testCaseId) {
+        this.testCaseId = testCaseId;
     }
 
     public String getTcName() {
@@ -74,14 +100,6 @@ public class TestCase {
         this.outputFile = outputFile;
     }
 
-    public LocalDateTime getCreatedOn() {
-        return createdOn;
-    }
-
-    public void setCreatedOn(LocalDateTime createdOn) {
-        this.createdOn = createdOn;
-    }
-
     public LocalDateTime getModifiedOn() {
         return modifiedOn;
     }
@@ -90,19 +108,11 @@ public class TestCase {
         this.modifiedOn = modifiedOn;
     }
 
-    public LocalDateTime getExecutionOn() {
-        return executionOn;
+    public String getChangeType() {
+        return changeType;
     }
 
-    public void setExecutionOn(LocalDateTime executionOn) {
-        this.executionOn = executionOn;
-    }
-
-    public Boolean getIsActive() {
-        return isActive;
-    }
-
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
+    public void setChangeType(String changeType) {
+        this.changeType = changeType;
     }
 }

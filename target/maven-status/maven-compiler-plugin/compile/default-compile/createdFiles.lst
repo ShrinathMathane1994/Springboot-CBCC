@@ -7,8 +7,11 @@ com\qa\cbcc\dto\TestCaseDTO.class
 com\qa\cbcc\controller\FeatureController.class
 com\qa\cbcc\controller\TestCaseController.class
 com\qa\cbcc\service\TestCaseService.class
+com\qa\cbcc\model\TestCaseHistory.class
 com\qa\cbcc\controller\FileController.class
 com\qa\cbcc\model\TestCase.class
+com\qa\cbcc\repository\TestCaseHistoryRepository.class
+com\qa\cbcc\dto\TestCaseResponseDTO.class
 com\qa\cbcc\repository\TestCaseRepository.class
 com\qa\cbcc\dto\TestCaseDTO$FeatureScenario.class
 com\qa\cbcc\service\FeatureService.class
