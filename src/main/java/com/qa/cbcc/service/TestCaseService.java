@@ -50,11 +50,15 @@ public class TestCaseService {
 			TestCase saved = repository.save(testCase);
 
 			// ✅ Call your centralized method to store files in the correct path
-			storeTestFiles(saved.getId(), inputFile, outputFile);
+			String inputFileName = inputFile.getOriginalFilename();
+			String outputFileName = outputFile.getOriginalFilename();
 
-			// ✅ Set relative paths for DB
-			saved.setInputFile("testData/" + saved.getId() + "/input.json");
-			saved.setOutputFile("testData/" + saved.getId() + "/output.json");
+			// Save files first
+			storeTestFiles(saved.getIdTC(), inputFile, outputFile);
+
+			// Save relative paths
+			saved.setInputFile("testData/" + saved.getIdTC() + "/" + inputFileName);
+			saved.setOutputFile("testData/" + saved.getIdTC() + "/" + outputFileName);
 
 			TestCase finalSaved = repository.save(saved);
 
@@ -68,8 +72,9 @@ public class TestCaseService {
 
 
 	public TestCase getTestCaseById(Long id) {
-		return repository.findByIdAndIsActiveTrue(id).orElse(null);
+	    return repository.findByIdTCAndIsActiveTrue(id).orElse(null);
 	}
+
 
 	public List<TestCase> getAllTestCases() {
 		return repository.findByIsActiveTrue();
@@ -87,27 +92,29 @@ public class TestCaseService {
 			repository.save(tc);
 		}
 	}
-
+	
 	public void storeTestFiles(Long testCaseId, MultipartFile inputFile, MultipartFile outputFile) throws IOException {
-	    // Dynamically resolve base directory relative to the project directory
-	    String baseDir = System.getProperty("user.dir") + File.separator + 
-	                     "src" + File.separator + 
-	                     "main" + File.separator + 
-	                     "resources" + File.separator + 
+	    String baseDir = System.getProperty("user.dir") + File.separator +
+	                     "src" + File.separator +
+	                     "main" + File.separator +
+	                     "resources" + File.separator +
 	                     "testData";
 
 	    File dir = new File(baseDir + File.separator + testCaseId);
-
 	    if (!dir.exists()) {
-	        dir.mkdirs(); // create directories if they don't exist
+	        dir.mkdirs();
 	    }
 
-	    File inputDest = new File(dir, "input.json");
-	    File outputDest = new File(dir, "output.json");
+	    String inputFileName = inputFile.getOriginalFilename();
+	    String outputFileName = outputFile.getOriginalFilename();
+
+	    File inputDest = new File(dir, inputFileName);
+	    File outputDest = new File(dir, outputFileName);
 
 	    inputFile.transferTo(inputDest);
 	    outputFile.transferTo(outputDest);
 	}
+
 
 
 	@Transactional
@@ -125,9 +132,13 @@ public class TestCaseService {
 			existing.setModifiedOn(LocalDateTime.now());
 
 			// Update files and set new paths
+			String inputFileName = inputFile.getOriginalFilename();
+			String outputFileName = outputFile.getOriginalFilename();
+
 			storeTestFiles(id, inputFile, outputFile);
-			existing.setInputFile("testData/" + id + "/input.json");
-			existing.setOutputFile("testData/" + id + "/output.json");
+
+			existing.setInputFile("testData/" + id + "/" + inputFileName);
+			existing.setOutputFile("testData/" + id + "/" + outputFileName);
 
 			TestCase updated = repository.save(existing);
 
@@ -141,7 +152,7 @@ public class TestCaseService {
 	}
 
 	@Transactional
-	public void softDeleteTestCase(Long id) {
+	public void deleteTestCase(Long id) {
 		TestCase existing = getTestCaseById(id);
 		if (existing == null) {
 			throw new RuntimeException("Test case with ID " + id + " not found.");
@@ -158,7 +169,7 @@ public class TestCaseService {
 	// ✅ Updated to save history record
 	private TestCaseHistory buildHistory(TestCase testCase, String changeType) {
 		TestCaseHistory history = new TestCaseHistory();
-		history.setTestCaseId(testCase.getId());
+		history.setTestCaseId(testCase.getIdTC());
 		history.setTcName(testCase.getTcName());
 		history.setDescription(testCase.getDescription());
 		history.setFeatureScenarioJson(testCase.getFeatureScenarioJson()); // ✅ this is good
@@ -176,10 +187,15 @@ public class TestCaseService {
 	public List<TestCase> getDeletedTestCases() {
 		return repository.findByIsActiveFalse();
 	}
+	
+	public TestCase getTestCaseByIdIncludingInactive(Long idTC) {
+	    return repository.findByIdTC(idTC).orElse(null);
+	}
+
 
 	public TestCaseResponseDTO toResponseDTO(TestCase testCase) {
 		TestCaseResponseDTO dto = new TestCaseResponseDTO();
-		dto.setId(testCase.getId());
+		dto.setId(testCase.getIdTC());
 		dto.setTcName(testCase.getTcName());
 		dto.setDescription(testCase.getDescription());
 		dto.setFeatureScenarioJson(testCase.getFeatureScenarioJson());

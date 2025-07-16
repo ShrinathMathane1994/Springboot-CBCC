@@ -4,7 +4,7 @@ import org.testng.Assert;
 import org.testng.annotations.Parameters;
 import org.testng.annotations.Test;
 
-import com.qa.cbcc.utils.SimpleJsonComparator;
+import com.qa.cbcc.utils.JsonComparator;
 
 public class SampleTest extends BaseClass {
 
@@ -24,7 +24,7 @@ public class SampleTest extends BaseClass {
 	@Parameters({"json1", "json2"})
 	public void jsonCompareTest2(String json1Path, String json2Path) {
 	    logger.info("Comparing: {} & {}", json1Path, json2Path);
-	    String result = SimpleJsonComparator.compareJsonFiles(json1Path, json2Path);
+	    String result = JsonComparator.compareJsonFiles(json1Path, json2Path);
 	    logger.info(result);
 
 	    // Fail test if not equal
@@ -45,7 +45,7 @@ public class SampleTest extends BaseClass {
 	    }
 
 	    logger.info("Comparing: {} & {}", json1Path, json2Path);
-	    String result = SimpleJsonComparator.compareJsonFiles(json1Path, json2Path);
+	    String result = JsonComparator.compareJsonFiles(json1Path, json2Path);
 	    logger.info(result);
 
 	    if (result.contains("NOT equal")) {

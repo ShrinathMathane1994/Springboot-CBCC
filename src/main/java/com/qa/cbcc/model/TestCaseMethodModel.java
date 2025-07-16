@@ -1,15 +1,15 @@
 package com.qa.cbcc.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Table;
-import jakarta.persistence.Id;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Table;
 
 
 @Entity
-//@Table(name = "test_cases")
+@Table(name = "test_case_method_model")  // Add this
 public class TestCaseMethodModel {
 
     @Id
@@ -31,7 +31,7 @@ public class TestCaseMethodModel {
     @Column(name = "description")
     private String description;
 
-	public Long getId() {
+	public Long getIdTC() {
 		return idTC;
 	}
 

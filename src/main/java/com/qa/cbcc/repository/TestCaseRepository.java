@@ -11,8 +11,10 @@ import java.util.Optional;
 @Repository
 public interface TestCaseRepository extends JpaRepository<TestCase, Long> {
 
-    Optional<TestCase> findByIdAndIsActiveTrue(Long id);
-
+    Optional<TestCase> findByIdTCAndIsActiveTrue(Long idTC);
+    
+    Optional<TestCase> findByIdTC(Long idTC); // ✅ gets both active and inactive
+    
     List<TestCase> findByIsActiveTrue();
 
     List<TestCase> findByIsActiveFalse();

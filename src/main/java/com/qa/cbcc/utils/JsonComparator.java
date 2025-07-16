@@ -7,7 +7,7 @@ import com.github.fge.jsonpatch.diff.JsonDiff;
 import java.io.File;
 import java.util.Iterator;
 
-public class SimpleJsonComparator {
+public class JsonComparator {
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
