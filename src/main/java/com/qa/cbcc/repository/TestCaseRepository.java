@@ -18,5 +18,8 @@ public interface TestCaseRepository extends JpaRepository<TestCase, Long> {
     List<TestCase> findByIsActiveTrue();
 
     List<TestCase> findByIsActiveFalse();
+    
+    List<TestCase> findByIdTCIn(List<Long> idTCs);
+
 }
 

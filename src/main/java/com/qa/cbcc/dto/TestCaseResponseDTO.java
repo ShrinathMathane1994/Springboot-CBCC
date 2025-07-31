@@ -12,8 +12,30 @@ public class TestCaseResponseDTO {
     private LocalDateTime createdOn;
     private LocalDateTime modifiedOn;
     private Boolean isActive;
+    private String country;
+    private String region;
+    private String pod;
 
-    // Getters and Setters
+
+    public String getCountry() {
+		return country;
+	}
+	public void setCountry(String country) {
+		this.country = country;
+	}
+	public String getRegion() {
+		return region;
+	}
+	public void setRegion(String region) {
+		this.region = region;
+	}
+	public String getPod() {
+		return pod;
+	}
+	public void setPod(String pod) {
+		this.pod = pod;
+	}
+	// Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 

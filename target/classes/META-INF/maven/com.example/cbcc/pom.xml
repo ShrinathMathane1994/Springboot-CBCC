@@ -49,12 +49,45 @@
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
 
+		<!-- Jackson for Java Time -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
+
+		<!-- ✅ Required Jackson Core Components (fixes NoClassDefFoundError) -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>2.15.2</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-annotations</artifactId>
+			<version>2.15.2</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.15.2</version>
+		</dependency>
+
 		<!-- PostgreSQL Driver -->
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<version>42.7.3</version>
 		</dependency>
+
+		<!-- MSSQLServer Driver -->
+		<dependency>
+			<groupId>com.microsoft.sqlserver</groupId>
+			<artifactId>mssql-jdbc</artifactId>
+			<version>12.10.1.jre11</version>
+		</dependency>
+
 
 		<!-- Log4j 2 + SLF4J bridge -->
 		<dependency>
@@ -89,21 +122,16 @@
 			<artifactId>messages</artifactId>
 			<version>27.0.0</version>
 		</dependency>
-
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-java</artifactId>
 			<version>7.14.0</version>
 		</dependency>
-
-		<!-- Cucumber TestNG Integration-->
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-testng</artifactId>
 			<version>7.14.0</version>
 		</dependency>
-		
-		<!-- Cucumber TestNG Integration-->
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-junit</artifactId>
@@ -116,7 +144,6 @@
 			<artifactId>xmlunit-core</artifactId>
 			<version>2.9.1</version>
 		</dependency>
-
 
 		<!-- Lombok -->
 		<dependency>
@@ -140,13 +167,6 @@
 			<version>4.8.162</version>
 		</dependency>
 
-		<!-- Jackson -->
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-			<version>2.15.2</version>
-		</dependency>
-
 		<!-- JSON Patch -->
 		<dependency>
 			<groupId>com.github.fge</groupId>
@@ -161,12 +181,12 @@
 			<version>7.7.0</version>
 		</dependency>
 
+		<!-- Spring Devtools -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
 			<optional>true</optional>
 		</dependency>
-
 	</dependencies>
 
 	<build>
@@ -190,5 +210,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>

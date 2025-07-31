@@ -9,7 +9,7 @@ import javax.persistence.Table;
 
 
 @Entity
-@Table(name = "test_case_method_model")  // Add this
+@Table(name = "test_case_methods")  // Add this
 public class TestCaseMethodModel {
 
     @Id

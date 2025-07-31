@@ -14,13 +14,17 @@ public class CompareXmlSteps {
     private String comparisonResult;
 
     @Given("XML file {string}")
-    public void xml_file(String filePath) {
+    public void xml_file(String fileName) {
+        String basePath = "src/main/resources/testData/";
+        String fullPath = basePath + fileName;
+
         if (firstXmlPath == null) {
-            firstXmlPath = filePath;
+            firstXmlPath = fullPath;
         } else {
-            secondXmlPath = filePath;
+            secondXmlPath = fullPath;
         }
     }
+
 
     @When("I compare the two XML files")
     public void i_compare_the_two_xml_files() {

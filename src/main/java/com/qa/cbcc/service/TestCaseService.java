@@ -2,9 +2,6 @@ package com.qa.cbcc.service;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -14,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.TestCaseDTO;
 import com.qa.cbcc.dto.TestCaseResponseDTO;
 import com.qa.cbcc.model.TestCase;
@@ -30,7 +28,13 @@ public class TestCaseService {
 	@Autowired
 	private TestCaseHistoryRepository historyRepository;
 
-	private final ObjectMapper objectMapper = new ObjectMapper();
+	private final ObjectMapper objectMapper;
+
+	public TestCaseService() {
+	    this.objectMapper = new ObjectMapper();
+	    this.objectMapper.registerModule(new JavaTimeModule());
+	}
+
 
 	@Transactional
 	public TestCase saveTestCase(TestCaseDTO dto, MultipartFile inputFile, MultipartFile outputFile) {
@@ -46,6 +50,11 @@ public class TestCaseService {
 			testCase.setCreatedOn(now);
 			testCase.setModifiedOn(now);
 			testCase.setIsActive(true);
+			
+			 // New fields
+		    testCase.setCountry(dto.getCountry());
+		    testCase.setRegion(dto.getRegion());
+		    testCase.setPod(dto.getPod());
 
 			TestCase saved = repository.save(testCase);
 
@@ -130,6 +139,10 @@ public class TestCaseService {
 			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
 			existing.setFeatureScenarioJson(json);
 			existing.setModifiedOn(LocalDateTime.now());
+			existing.setCountry(dto.getCountry());
+			existing.setRegion(dto.getRegion());
+			existing.setPod(dto.getPod());
+
 
 			// Update files and set new paths
 			String inputFileName = inputFile.getOriginalFilename();
@@ -177,6 +190,10 @@ public class TestCaseService {
 		history.setOutputFile(testCase.getOutputFile());
 		history.setModifiedOn(LocalDateTime.now());
 		history.setChangeType(changeType);
+		history.setCountry(testCase.getCountry());
+		history.setRegion(testCase.getRegion());
+		history.setPod(testCase.getPod());
+
 		return historyRepository.save(history); // ✅ make sure you are saving it
 	}
 
@@ -204,6 +221,10 @@ public class TestCaseService {
 		dto.setCreatedOn(testCase.getCreatedOn());
 		dto.setModifiedOn(testCase.getModifiedOn());
 		dto.setIsActive(testCase.getIsActive());
+		dto.setCountry(testCase.getCountry());
+		dto.setRegion(testCase.getRegion());
+		dto.setPod(testCase.getPod());
+
 		return dto;
 	}
 

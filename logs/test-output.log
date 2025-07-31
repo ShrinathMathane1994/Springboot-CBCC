@@ -1,0 +1,100 @@
+2025-07-28 12:09:14.134 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 76856 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-28 12:09:14.149 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-28 12:09:20.805 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 7.135 seconds (JVM running for 8.653)
+2025-07-28 12:10:58.821 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseController - Received request to create a new test case.
+2025-07-28 12:10:58.965 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseController - Parsed DTO: {"tcId":null,"tcName":"XML Scenario-1","description":"XML Comparison-1","featureScenarios":[{"feature":"compareXml.feature","scenarios":["XML files have differences","XML files are identical"],"scenarioBlocks":null}],"executionOn":null,"createdOn":null,"modifiedOn":null,"country":"USA","region":"North America","pod":"Pod-01"}
+2025-07-28 12:10:59.147 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseController - Test case created with ID: 1
+2025-07-28 12:16:05.432 [http-nio-8080-exec-5] INFO  com.qa.cbcc.controller.TestCaseController - Received request to update test case ID: 1
+2025-07-28 12:16:06.618 [http-nio-8080-exec-5] INFO  com.qa.cbcc.controller.TestCaseController - Updated test case ID: 1
+2025-07-28 12:16:06.638 [http-nio-8080-exec-5] INFO  com.qa.cbcc.controller.TestCaseController - Updated test case details: {"id":1,"tcName":"XML Scenario-1-Modofied","description":"XML Comparison-1-Modofied","featureScenarioJson":"[{\"feature\":\"compareXml.feature\",\"scenarios\":[\"XML files have differences\",\"XML files are identical\"],\"scenarioBlocks\":null}]","inputFile":"testData/1/input.json","outputFile":"testData/1/output.json","createdOn":"2025-07-28T12:10:58.992834","modifiedOn":"2025-07-28T12:16:06.5820825","isActive":true,"country":"USA","region":"North America","pod":"Pod-01"}
+2025-07-28 12:17:51.053 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 76856 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-28 12:17:51.054 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-28 12:17:52.782 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 2.035 seconds (JVM running for 520.631)
+2025-07-28 12:19:53.943 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 82644 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-28 12:19:53.959 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-28 12:20:00.635 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 7.218 seconds (JVM running for 8.921)
+2025-07-28 12:20:19.675 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseController - Received request to create a new test case.
+2025-07-28 12:20:19.810 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseController - Parsed DTO: {"tcId":null,"tcName":"XML Scenario-1","description":"XML Comparison-1","featureScenarios":[{"feature":"compareXml.feature","scenarios":["XML files have differences","XML files are identical"],"scenarioBlocks":null}],"executionOn":null,"createdOn":null,"modifiedOn":null,"country":"USA","region":"North America","pod":"Pod-01"}
+2025-07-28 12:20:19.955 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseController - Test case created with ID: 1
+2025-07-28 12:22:11.463 [http-nio-8080-exec-9] INFO  com.qa.cbcc.controller.TestCaseController - Received request to update test case ID: 1
+2025-07-28 12:22:11.709 [http-nio-8080-exec-9] INFO  com.qa.cbcc.controller.TestCaseController - Updated test case ID: 1
+2025-07-28 12:22:11.716 [http-nio-8080-exec-9] INFO  com.qa.cbcc.controller.TestCaseController - Updated test case details: {"id":1,"tcName":"XML Scenario-1-Modofied","description":"XML Comparison-1-Modofied","featureScenarioJson":"[{\"feature\":\"compareXml.feature\",\"scenarios\":[\"XML files have differences\",\"XML files are identical\"],\"scenarioBlocks\":null}]","inputFile":"testData/1/input.json","outputFile":"testData/1/output.json","createdOn":"2025-07-28T12:20:19.840543","modifiedOn":"2025-07-28T12:22:11.6984242","isActive":true,"country":"UK","region":"South America","pod":"Pod-02"}
+2025-07-28 12:23:23.936 [http-nio-8080-exec-8] INFO  com.qa.cbcc.controller.TestCaseRunController - Received request to run test case IDs: [1]
+2025-07-28 12:23:24.005 [http-nio-8080-exec-8] INFO  com.qa.cbcc.service.TestCaseRunService - Running test case: XML Scenario-1-Modofied
+2025-07-28 12:23:24.452 [http-nio-8080-exec-8] INFO  com.qa.cbcc.utils.XmlComparator - ===== Begin XML Comparison Output =====
+❌ XML files are NOT equal.
+Differences:
+Expected child nodelist length '2' but was '3' - comparing <bookstore...> at /bookstore[1] to <bookstore...> at /bookstore[1] (DIFFERENT)
+Expected child nodelist length '3' but was '4' - comparing <book...> at /bookstore[1]/book[2] to <book...> at /bookstore[1]/book[2] (DIFFERENT)
+Expected attribute value 'en' but was 'eu' - comparing <title lang="en"...> at /bookstore[1]/book[2]/title[1]/@lang to <title lang="eu"...> at /bookstore[1]/book[2]/title[1]/@lang (DIFFERENT)
+Expected text value 'Yuval Noah Harari' but was 'Yuval N. Harari' - comparing <author ...>Yuval Noah Harari</author> at /bookstore[1]/book[2]/author[1]/text()[1] to <author ...>Yuval N. Harari</author> at /bookstore[1]/book[2]/author[1]/text()[1] (DIFFERENT)
+Expected element tag name 'year' but was 'years' - comparing <year...> at /bookstore[1]/book[2]/year[1] to <years...> at /bookstore[1]/book[2]/years[1] (DIFFERENT)
+Expected child 'null' but was 'month' - comparing <NULL> to <month...> at /bookstore[1]/book[2]/month[1] (DIFFERENT)
+Expected child 'null' but was 'book' - comparing <NULL> to <book...> at /bookstore[1]/book[3] (DIFFERENT)
+===== End XML Comparison Output =====
+2025-07-28 12:23:24.498 [http-nio-8080-exec-8] INFO  com.qa.cbcc.service.TestCaseRunService - ===== Begin Test Output =====
+Scenario: XML files have differences                            # ///C:/Users/shree/AppData/Local/Temp/testcase_8595730954116169725.feature:3
+  Given XML file "input.xml"                                    # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  And XML file "output.xml"                                     # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  When I compare the two XML files                              # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
+  Then the comparison result should indicate they are not equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_not_equal()
+
+Scenario: XML files are identical                           # ///C:/Users/shree/AppData/Local/Temp/testcase_8595730954116169725.feature:9
+  Given XML file "input.xml"                                # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  And XML file "output.xml"                                 # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  When I compare the two XML files                          # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
+  Then the comparison result should indicate they are equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_equal()
+===== End Test Output =====
+2025-07-30 20:34:39.199 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 154612 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 20:34:39.214 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 21:34:56.444 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 149716 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 21:34:56.462 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 21:44:07.788 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 17268 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 21:44:07.810 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 21:48:50.025 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 155256 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 21:48:50.044 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 21:49:55.111 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 151624 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 21:49:55.134 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 21:54:31.159 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 147284 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 21:54:31.175 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 22:04:53.704 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 140440 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 22:04:53.722 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 22:18:24.634 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 74664 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 22:18:24.655 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 22:26:54.049 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 153148 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 22:26:54.062 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 22:44:22.479 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 139396 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 22:44:22.496 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-30 22:48:24.525 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 24.0.1 on Shree with PID 141372 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-30 22:48:24.539 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-31 08:00:34.172 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 17648 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-31 08:00:34.188 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-31 08:01:24.432 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 10128 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-31 08:01:24.444 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-31 08:01:30.843 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 6.854 seconds (JVM running for 8.619)
+2025-07-31 08:02:08.677 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseRunController - Received request to run test case IDs: [1]
+2025-07-31 08:02:09.101 [http-nio-8080-exec-1] INFO  com.qa.cbcc.service.TestCaseRunService - Running test case: XML Scenario-1-Modofied
+2025-07-31 08:02:09.748 [http-nio-8080-exec-1] INFO  com.qa.cbcc.utils.XmlComparator - ===== Begin XML Comparison Output =====
+❌ XML files are NOT equal.
+Differences:
+Expected child nodelist length '2' but was '3' - comparing <bookstore...> at /bookstore[1] to <bookstore...> at /bookstore[1] (DIFFERENT)
+Expected child nodelist length '3' but was '4' - comparing <book...> at /bookstore[1]/book[2] to <book...> at /bookstore[1]/book[2] (DIFFERENT)
+Expected attribute value 'en' but was 'eu' - comparing <title lang="en"...> at /bookstore[1]/book[2]/title[1]/@lang to <title lang="eu"...> at /bookstore[1]/book[2]/title[1]/@lang (DIFFERENT)
+Expected text value 'Yuval Noah Harari' but was 'Yuval N. Harari' - comparing <author ...>Yuval Noah Harari</author> at /bookstore[1]/book[2]/author[1]/text()[1] to <author ...>Yuval N. Harari</author> at /bookstore[1]/book[2]/author[1]/text()[1] (DIFFERENT)
+Expected element tag name 'year' but was 'years' - comparing <year...> at /bookstore[1]/book[2]/year[1] to <years...> at /bookstore[1]/book[2]/years[1] (DIFFERENT)
+Expected child 'null' but was 'month' - comparing <NULL> to <month...> at /bookstore[1]/book[2]/month[1] (DIFFERENT)
+Expected child 'null' but was 'book' - comparing <NULL> to <book...> at /bookstore[1]/book[3] (DIFFERENT)
+===== End XML Comparison Output =====
+2025-07-31 08:02:09.815 [http-nio-8080-exec-1] INFO  com.qa.cbcc.service.TestCaseRunService - ===== Begin Test Output =====
+Scenario: XML files have differences                            # ///C:/Users/shree/AppData/Local/Temp/testcase_4558349992641986493.feature:3
+  Given XML file "input.xml"                                    # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  And XML file "output.xml"                                     # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  When I compare the two XML files                              # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
+  Then the comparison result should indicate they are not equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_not_equal()
+
+Scenario: XML files are identical                           # ///C:/Users/shree/AppData/Local/Temp/testcase_4558349992641986493.feature:9
+  Given XML file "input.xml"                                # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  And XML file "output.xml"                                 # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  When I compare the two XML files                          # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
+  Then the comparison result should indicate they are equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_equal()
+===== End Test Output =====

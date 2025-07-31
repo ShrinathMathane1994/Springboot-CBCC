@@ -17,27 +17,26 @@ public class TestCaseHistory {
     private Long id;
 
     private Long testCaseId;
-
     private String tcName;
-
     private String description;
-
     private String featureScenarioJson;
-
     private String inputFile;
-
     private String outputFile;
-
     private LocalDateTime modifiedOn;
-
     private String changeType; // CREATE, UPDATE, DELETE
+
+    // ✅ Newly added fields
+    private String country;
+    private String region;
+    private String pod;
 
     // Constructors
     public TestCaseHistory() {}
 
     public TestCaseHistory(Long testCaseId, String tcName, String description,
                            String featureScenarioJson, String inputFile,
-                           String outputFile, LocalDateTime modifiedOn, String changeType) {
+                           String outputFile, LocalDateTime modifiedOn,
+                           String changeType, String country, String region, String pod) {
         this.testCaseId = testCaseId;
         this.tcName = tcName;
         this.description = description;
@@ -46,6 +45,9 @@ public class TestCaseHistory {
         this.outputFile = outputFile;
         this.modifiedOn = modifiedOn;
         this.changeType = changeType;
+        this.country = country;
+        this.region = region;
+        this.pod = pod;
     }
 
     // Getters and Setters
@@ -119,5 +121,30 @@ public class TestCaseHistory {
 
     public void setChangeType(String changeType) {
         this.changeType = changeType;
+    }
+
+    // ✅ Getters and setters for new fields
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
+    }
+
+    public String getPod() {
+        return pod;
+    }
+
+    public void setPod(String pod) {
+        this.pod = pod;
     }
 }
