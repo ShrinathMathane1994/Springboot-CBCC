@@ -98,3 +98,35 @@ Scenario: XML files are identical                           # ///C:/Users/shree/
   When I compare the two XML files                          # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
   Then the comparison result should indicate they are equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_equal()
 ===== End Test Output =====
+2025-07-31 08:38:07.014 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 26188 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-31 08:38:07.030 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-31 08:38:14.584 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 8.187 seconds (JVM running for 10.04)
+2025-07-31 08:38:21.074 [http-nio-8080-exec-1] INFO  com.qa.cbcc.controller.TestCaseRunController - Received request to run test case IDs: [1]
+2025-07-31 08:38:21.437 [http-nio-8080-exec-1] INFO  com.qa.cbcc.service.TestCaseRunService - Running test case: XML Scenario-1-Modofied
+2025-07-31 08:38:22.040 [http-nio-8080-exec-1] INFO  com.qa.cbcc.utils.XmlComparator - ===== Begin XML Comparison Output =====
+❌ XML files are NOT equal.
+Differences:
+Expected child nodelist length '2' but was '3' - comparing <bookstore...> at /bookstore[1] to <bookstore...> at /bookstore[1] (DIFFERENT)
+Expected child nodelist length '3' but was '4' - comparing <book...> at /bookstore[1]/book[2] to <book...> at /bookstore[1]/book[2] (DIFFERENT)
+Expected attribute value 'en' but was 'eu' - comparing <title lang="en"...> at /bookstore[1]/book[2]/title[1]/@lang to <title lang="eu"...> at /bookstore[1]/book[2]/title[1]/@lang (DIFFERENT)
+Expected text value 'Yuval Noah Harari' but was 'Yuval N. Harari' - comparing <author ...>Yuval Noah Harari</author> at /bookstore[1]/book[2]/author[1]/text()[1] to <author ...>Yuval N. Harari</author> at /bookstore[1]/book[2]/author[1]/text()[1] (DIFFERENT)
+Expected element tag name 'year' but was 'years' - comparing <year...> at /bookstore[1]/book[2]/year[1] to <years...> at /bookstore[1]/book[2]/years[1] (DIFFERENT)
+Expected child 'null' but was 'month' - comparing <NULL> to <month...> at /bookstore[1]/book[2]/month[1] (DIFFERENT)
+Expected child 'null' but was 'book' - comparing <NULL> to <book...> at /bookstore[1]/book[3] (DIFFERENT)
+===== End XML Comparison Output =====
+2025-07-31 08:38:22.114 [http-nio-8080-exec-1] INFO  com.qa.cbcc.service.TestCaseRunService - ===== Begin Test Output =====
+Scenario: XML files have differences                            # ///C:/Users/shree/AppData/Local/Temp/testcase_2668392348427851606.feature:3
+  Given XML file "input.xml"                                    # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  And XML file "output.xml"                                     # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  When I compare the two XML files                              # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
+  Then the comparison result should indicate they are not equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_not_equal()
+
+Scenario: XML files are identical                           # ///C:/Users/shree/AppData/Local/Temp/testcase_2668392348427851606.feature:9
+  Given XML file "input.xml"                                # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  And XML file "output.xml"                                 # com.qa.cbcc.stepdefinitions.CompareXmlSteps.xml_file(java.lang.String)
+  When I compare the two XML files                          # com.qa.cbcc.stepdefinitions.CompareXmlSteps.i_compare_the_two_xml_files()
+  Then the comparison result should indicate they are equal # com.qa.cbcc.stepdefinitions.CompareXmlSteps.the_comparison_result_should_indicate_they_are_equal()
+===== End Test Output =====
+2025-07-31 09:59:59.560 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 21.0.6 on Shree with PID 26188 (D:\AUtomation\Eclipse2\CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\CBCC)
+2025-07-31 09:59:59.561 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-07-31 10:00:02.196 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 2.805 seconds (JVM running for 4917.71)

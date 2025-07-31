@@ -6,6 +6,9 @@ mvn spring-boot: run
 src\main\resources\application.properties file
 spring.datasource.url=jdbc:postgresql://localhost:5432/cbcc_db - Here cbcc_db is DB Name 
 
+#Get Methods API 
+GET - http://localhost:8080/api/tests/methods
+
 #Get Scenarios API 
 GET - http://localhost:8080/api/scenarios?tags= - For All Scenarios
 GET - http://localhost:8080/api/scenarios?tags=US,A2 - For Tag Specific Scenarios
@@ -17,7 +20,18 @@ Body(Payload) as form-data
 inputFile Key Type as File 
 outputFile Key Type as File 
 data Key Type as Text 
-(e.g. { "tcName": "My Multi Scenario Test1", "description": "Covers login/logout scenarios2", "featureScenarios": [ { "feature": "login.feature", "scenarios": ["Valid Login", "Invalid Login"] }, { "feature": "logout.feature", "scenarios": ["Successful Logout"] } ] })
+(e.g. {"tcName": "XML Scenario-1",
+  "description": "XML Comparison-1",
+  "featureScenarios": [
+    {
+      "feature": "compareXml.feature",
+      "scenarios": ["XML files have differences","XML files are identical"]
+    }
+  ],
+  "country": "USA",
+  "region": "North America",
+  "pod": "Pod-01"
+})
 
 #Get Test Case API 
 GET - http://localhost:8080/api/test-cases - For All Test Cases
@@ -29,11 +43,31 @@ Body(Payload) as form-data
 inputFile Key Type as File 
 outputFile Key Type as File 
 data Key Type as Text 
-(e.g. { "tcName": "My Multi Scenario Test1", "description": "Covers login/logout scenarios2", "featureScenarios": [ { "feature": "login.feature", "scenarios": ["Valid Login", "Invalid Login"] }, { "feature": "logout.feature", "scenarios": ["Successful Logout"] } ] })
+(e.g. {"tcName": "XML Scenario-1-Modified",
+  "description": "XML Comparison-1-Modified",
+  "featureScenarios": [
+    {
+      "feature": "compareXml.feature",
+      "scenarios": ["XML files have differences","XML files are identical"]
+    }
+  ],
+  "country": "UK",
+  "region": "South America",
+  "pod": "Pod-02"
+})
+
+#Delete Test Case API 
+DELETE - http://localhost:8080/api/test-cases/{id}/delete
+
+#Run Test Case API
+POST - http://localhost:8080/api/test-cases/run
+Body(Payload) as JSON
+{
+  "testCaseIds": [1]
+} 
 
 #Get Test Case History API 
 GET - http://localhost:8080/api/test-cases/{id}/history
 
-#Delete Test Case API 
-DELETE - http://localhost:8080/api/test-cases/{id}/delete
+
 
