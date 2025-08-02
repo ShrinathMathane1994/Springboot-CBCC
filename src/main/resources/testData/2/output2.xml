@@ -1,0 +1,18 @@
+<bookstore>
+    <book category="fiction">
+        <title lang="en">The Great Gatsby</title>
+        <author>F. Scott Fitzgerald</author>
+        <year>1925</year>
+    </book>
+    <book category="non-fiction">
+        <title lang="eu">Sapiens</title>
+        <author>Yuval N. Harari</author>
+        <years>2011</years>
+        <month>June</month>
+    </book>
+    <book category="other">
+        <title lang="en">The Great Gatsby</title>
+        <author>F. Scott Fitzgerald</author>
+        <year>1925</year>
+    </book>
+</bookstore>

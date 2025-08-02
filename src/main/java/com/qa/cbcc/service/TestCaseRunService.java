@@ -1,20 +1,30 @@
 package com.qa.cbcc.service;
 
-import java.io.*;
-import java.nio.file.*;
+import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.regex.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import com.qa.cbcc.dto.TestCaseDTO;
-import com.qa.cbcc.model.TestCase;
-import com.qa.cbcc.model.TestCaseRunHistory;
-import com.qa.cbcc.repository.TestCaseRepository;
-import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
-import com.qa.cbcc.utils.TestContext;
-
-import io.cucumber.core.cli.Main;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +35,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.qa.cbcc.dto.TestCaseDTO;
+import com.qa.cbcc.model.TestCase;
+import com.qa.cbcc.model.TestCaseRunHistory;
+import com.qa.cbcc.repository.TestCaseRepository;
+import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
+import com.qa.cbcc.utils.TestContext;
+
+import io.cucumber.core.cli.Main;
 
 @Service
 public class TestCaseRunService {
@@ -68,14 +86,12 @@ public class TestCaseRunService {
 			TestContext.setTestCaseId(testCase.getTcId());
 			Set<String> executedScenarioNames = new LinkedHashSet<>();
 			Map<String, String> scenarioToFeatureMap = new HashMap<>();
-
 			List<String> missingFeatures = new ArrayList<>();
 
 			for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
 				List<String> blocks = new ArrayList<>();
 				String featureFilePath = Paths.get(baseFeaturePath, fs.getFeature()).toString();
 				boolean featureExists = Files.exists(Paths.get(featureFilePath));
-
 				if (!featureExists)
 					missingFeatures.add(fs.getFeature());
 
@@ -113,6 +129,7 @@ public class TestCaseRunService {
 			String fullOutput = baos.toString();
 			logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
 
+			Set<String> failedScenariosFromFooter = extractFailedScenariosFromFooter(fullOutput);
 			Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
 			String[] lines = fullOutput.split("\n");
 
@@ -127,27 +144,22 @@ public class TestCaseRunService {
 					if (currentScenario != null) {
 						executedScenarios.add(createScenarioResult(currentScenario, diffBuffer.toString(),
 								!scenarioFailed, executedScenarioNames,
-								scenarioToFeatureMap.getOrDefault(currentScenario, "unknown")));
+								scenarioToFeatureMap.getOrDefault(currentScenario, "unknown"),
+								failedScenariosFromFooter));
 					}
 					currentScenario = line.replace("Scenario:", "").split("#")[0].trim();
 					diffBuffer.setLength(0);
 					scenarioFailed = false;
 					inScenario = true;
+				} else if (inScenario) {
+					diffBuffer.append(line).append("\n");
 				}
-				if (inScenario) {
-					if (!line.startsWith("Scenario:")) {
-						diffBuffer.append(line).append("\n");
-						if (line.contains("AssertionError") || line.contains("expected [")
-								|| line.contains("Expected XML files to be equal")) {
-							scenarioFailed = true;
-						}
-					}
-				}
-
 			}
+
 			if (currentScenario != null) {
 				executedScenarios.add(createScenarioResult(currentScenario, diffBuffer.toString(), !scenarioFailed,
-						executedScenarioNames, scenarioToFeatureMap.getOrDefault(currentScenario, "unknown")));
+						executedScenarioNames, scenarioToFeatureMap.getOrDefault(currentScenario, "unknown"),
+						failedScenariosFromFooter));
 			}
 
 			executedScenarios
@@ -170,6 +182,7 @@ public class TestCaseRunService {
 			for (String featureName : usedFeatures) {
 				Set<Map<String, Object>> relatedScenarios = executedScenarios.stream()
 						.filter(s -> featureName.equals(s.get("featureFileName"))).collect(Collectors.toSet());
+
 				Map<String, Object> xmlDetail = buildXmlComparisonDetails(inputPath, outputPath, featureName,
 						relatedScenarios, objectMapper);
 				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
@@ -249,6 +262,12 @@ public class TestCaseRunService {
 			result.put("diffSummary", computeDiffSummary(xmlComparisonDetails, executedScenarios));
 
 			results.add(result);
+			if (entity != null) {
+				entity.setExecutionOn(executedOn);
+				entity.setExecutionStatus(finalStatus);
+				testCaseRepository.save(entity);
+			}
+
 			TestContext.clear();
 		}
 
@@ -256,14 +275,22 @@ public class TestCaseRunService {
 	}
 
 	private Map<String, Object> createScenarioResult(String scenarioName, String differences, boolean passed,
-			Set<String> executedScenarioNames, String featureFileName) {
+			Set<String> executedScenarioNames, String featureFileName, Set<String> failedScenariosFromFooter) {
 		executedScenarioNames.add(scenarioName);
 		Map<String, Object> result = new LinkedHashMap<>();
 		result.put("scenarioName", scenarioName);
 		result.put("featureFileName", featureFileName);
-		result.put("status", passed ? "Passed" : "Failed");
-		if (!passed) {
-			List<Map<String, Object>> parsedDiffs = extractXmlDifferences(differences);
+
+		List<Map<String, Object>> parsedDiffs = extractXmlDifferences(differences);
+		boolean shouldFail = parsedDiffs.stream().anyMatch(diff -> {
+			Object type = diff.get("differenceType");
+			return type != null && !type.equals("Assertion Result") && !type.equals("False Positive Equality");
+		});
+
+		boolean scenarioPass = passed && !shouldFail && !failedScenariosFromFooter.contains(scenarioName);
+
+		result.put("status", scenarioPass ? "Passed" : "Failed");
+		if (!scenarioPass) {
 			result.put("parsedDifferences", parsedDiffs);
 			result.put("diffCount", parsedDiffs.size());
 		}
@@ -300,8 +327,10 @@ public class TestCaseRunService {
 
 		for (String line : diffOutput.split("\r?\n")) {
 			line = line.trim();
+
 			boolean isNewStart = line.matches("(?i)^Expected .+ but was .+ - comparing .+ at .+")
-					|| line.contains("Expected XML files to be equal") || line.contains("AssertionError")
+					|| line.contains("Expected XML files to be equal")
+					|| line.contains("Expected XML files to be NOT equal") || line.contains("AssertionError")
 					|| line.contains("expected [") || line.contains("Expected child")
 					|| line.contains("Expected element") || line.contains("Expected attribute");
 
@@ -314,68 +343,111 @@ public class TestCaseRunService {
 				}
 				inside = true;
 			}
+
 			if (inside)
 				buffer.append(line).append("\n");
 		}
+
 		if (buffer.length() > 0) {
 			Map<String, Object> parsed = parseSingleDiff(buffer.toString(), seen);
 			if (parsed != null)
 				diffs.add(parsed);
 		}
+
 		return diffs;
 	}
 
+	private String cleanStackAndFooterLines(String raw) {
+		StringBuilder cleaned = new StringBuilder();
+		for (String line : raw.split("\r?\n")) {
+			line = line.trim();
+			if (line.matches("^at .+\\(.+\\.java:\\d+\\)$"))
+				continue;
+			if (line.matches("^\\d+\\s+(Scenarios|Steps).*"))
+				continue;
+			if (line.matches("^\\d+m\\d+\\.\\d+s.*"))
+				continue;
+			if (line.equalsIgnoreCase("Failed scenarios:"))
+				continue;
+			if (line.startsWith("at ✽."))
+				continue;
+			if (line.matches("file:///.+\\.feature:\\d+\\s+#.+"))
+				continue;
+			cleaned.append(line).append("\n");
+		}
+		return cleaned.toString().trim().replaceAll("\n{2,}", "\n");
+	}
+
+	// src/utils/XmlDiffParser.java
+
+	private static final List<DiffPattern> DIFF_PATTERNS = List.of(
+			new DiffPattern("Text Mismatch", Pattern.compile("Expected text value '(.*?)' but was '(.*?)' - comparing"),
+					(m, raw) -> Map.of("expected", m.group(1), "actual", m.group(2))),
+			new DiffPattern("Attribute Mismatch",
+					Pattern.compile("Expected attribute value '(.*?)' but was '(.*?)' - comparing"), (m, raw) -> {
+						Map<String, Object> data = new LinkedHashMap<>();
+						data.put("expected", m.group(1));
+						data.put("actual", m.group(2));
+						data.put("attribute", extractAttributeName(raw));
+						return data;
+					}),
+			new DiffPattern("Tag Mismatch",
+					Pattern.compile("Expected element tag name '(.*?)' but was '(.*?)' - comparing"),
+					(m, raw) -> Map.of("expected", m.group(1), "actual", m.group(2))),
+			new DiffPattern("Child Count Mismatch",
+					Pattern.compile("Expected child nodelist length '.*?' but was '.*?' - comparing.*"),
+					(m, raw) -> Map.of("description", raw)),
+			new DiffPattern("Missing/Extra Node", Pattern.compile("Expected child '.*?' but was '.*?' - comparing.*"),
+					(m, raw) -> Map.of("description", raw)),
+			new DiffPattern("False Positive Equality",
+					Pattern.compile(
+							"Expected XML files to be NOT equal, but got:.*expected \\[true\\] but found \\[false\\]"),
+					(m, raw) -> Map.of("description", raw)),
+			new DiffPattern("Assertion Result",
+					Pattern.compile("^(?!.*NOT equal).*expected \\[true\\] but found \\[false\\]"),
+					(m, raw) -> Map.of("description", raw)),
+			new DiffPattern("Parsing Error",
+					Pattern.compile(".*(invalid xml|parsing error).*", Pattern.CASE_INSENSITIVE),
+					(m, raw) -> Map.of("description", raw)),
+			new DiffPattern("Namespace Mismatch", Pattern.compile(".*(namespace|xmlns).*", Pattern.CASE_INSENSITIVE),
+					(m, raw) -> Map.of("description", raw)));
+
 	private Map<String, Object> parseSingleDiff(String raw, Set<String> seen) {
-		raw = raw.trim();
+		raw = cleanStackAndFooterLines(raw);
+		String normalized = raw.replaceAll("file://.*#.*", "").replaceAll("\s+", " ").trim();
 
-		// Remove stack traces and footer summary from raw
-		raw = raw.replaceAll(
-				"(?s)(?m)^at org\\.testng\\..*|^at com\\.qa\\.cbcc\\..*|^at ✽\\..*|^Failed scenarios:.*|^\\d+ Scenarios.*|^\\d+ Steps.*|^\\d+m\\d+\\.\\d+s.*",
-				"").replaceAll("\n{2,}", "\n").trim();
-
-		String xpath = extractXPath(raw);
+		String xpath = extractXPath(normalized);
 		String node = extractNodeNameFromXPath(xpath);
-		String dedupKey = (xpath != null ? xpath : "") + "|" + node + "|" + raw;
+		String dedupKey = (xpath != null ? xpath : "") + "|" + node + "|" + normalized;
 		if (!seen.add(dedupKey))
 			return null;
 
-		Map<String, Object> m = new LinkedHashMap<>();
-		m.put("xpath", xpath);
-		if (xpath != null)
-			m.put("node", node);
-
-		if (raw.contains("Expected text value")) {
-			m.put("differenceType", "Text Mismatch");
-			m.put("expected", extractBetween(raw, "Expected text value '", "' but was '"));
-			m.put("actual", extractBetween(raw, "but was '", "' - comparing"));
-		} else if (raw.contains("Expected attribute value")) {
-			m.put("differenceType", "Attribute Mismatch");
-			m.put("expected", extractBetween(raw, "Expected attribute value '", "' but was '"));
-			m.put("actual", extractBetween(raw, "but was '", "' - comparing"));
-			m.put("attribute", extractAttributeName(raw));
-		} else if (raw.contains("Expected element tag name")) {
-			m.put("differenceType", "Tag Mismatch");
-			m.put("expected", extractBetween(raw, "Expected element tag name '", "' but was '"));
-			m.put("actual", extractBetween(raw, "but was '", "' - comparing"));
-		} else if (raw.contains("Expected child nodelist length")) {
-			m.put("differenceType", "Child Count Mismatch");
-			m.put("description", raw);
-		} else if (raw.contains("Expected child 'null'") || raw.contains("Expected child")) {
-			m.put("differenceType", "Missing/Extra Node");
-			m.put("description", raw);
-		} else if (raw.contains("expected [true] but found [false]")) {
-			m.put("differenceType", "Assertion Result");
-			m.put("description", raw);
-		} else {
-			return null;
+		for (DiffPattern dp : DIFF_PATTERNS) {
+			Matcher matcher = dp.pattern.matcher(normalized);
+			if (matcher.find()) {
+				Map<String, Object> result = new LinkedHashMap<>();
+				result.put("xpath", xpath);
+				if (xpath != null)
+					result.put("node", node);
+				result.put("differenceType", dp.type);
+				result.putAll(dp.extractor.apply(matcher, raw));
+				return result;
+			}
 		}
-		return m;
+
+		return null;
 	}
 
-	private String extractBetween(String line, String start, String end) {
-		int s = line.indexOf(start);
-		int e = line.indexOf(end, s + start.length());
-		return (s >= 0 && e >= 0) ? line.substring(s + start.length(), e) : null;
+	private static class DiffPattern {
+		String type;
+		Pattern pattern;
+		BiFunction<Matcher, String, Map<String, Object>> extractor;
+
+		DiffPattern(String type, Pattern pattern, BiFunction<Matcher, String, Map<String, Object>> extractor) {
+			this.type = type;
+			this.pattern = pattern;
+			this.extractor = extractor;
+		}
 	}
 
 	private String extractXPath(String line) {
@@ -390,7 +462,7 @@ public class TestCaseRunService {
 		return parts.length > 0 ? parts[parts.length - 1].replaceAll("\\[.*?\\]", "") : xpath;
 	}
 
-	private String extractAttributeName(String line) {
+	private static String extractAttributeName(String line) {
 		Pattern pattern = Pattern.compile("@([a-zA-Z0-9_-]+)");
 		Matcher matcher = pattern.matcher(line);
 		return matcher.find() ? matcher.group(1) : null;
@@ -500,6 +572,36 @@ public class TestCaseRunService {
 
 	private boolean isXml(String fileName) {
 		return fileName != null && fileName.toLowerCase().endsWith(".xml");
+	}
+
+	private Set<String> extractFailedScenariosFromFooter(String output) {
+		Set<String> failedScenarios = new HashSet<>();
+		boolean insideFailedBlock = false;
+
+		for (String line : output.split("\n")) {
+			String cleanLine = removeAnsiCodes(line).trim();
+
+			if (cleanLine.equalsIgnoreCase("Failed scenarios:")) {
+				insideFailedBlock = true;
+				continue;
+			}
+
+			if (insideFailedBlock) {
+				if (cleanLine.isBlank() || cleanLine.matches("^\\d+ Scenarios.*")) {
+					insideFailedBlock = false;
+					continue;
+				}
+
+				// Match line like: "file:///.../testcase_123.feature:3 # Scenario Name"
+				Matcher matcher = Pattern.compile(".*feature:\\d+\\s+#\\s+(.*)").matcher(cleanLine);
+				if (matcher.find()) {
+					String scenarioName = matcher.group(1).trim();
+					failedScenarios.add(scenarioName);
+				}
+			}
+		}
+
+		return failedScenarios;
 	}
 
 }
