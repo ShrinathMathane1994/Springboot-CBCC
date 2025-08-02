@@ -15,6 +15,9 @@ public class TestCaseResponseDTO {
     private String country;
     private String region;
     private String pod;
+    private LocalDateTime executionOn;
+    private String executionStatus;
+
 
 
     public String getCountry() {
@@ -62,4 +65,21 @@ public class TestCaseResponseDTO {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+    
+    public LocalDateTime getExecutionOn() {
+        return executionOn;
+    }
+
+    public void setExecutionOn(LocalDateTime executionOn) {
+        this.executionOn = executionOn;
+    }
+
+    public String getExecutionStatus() {
+        return executionStatus;
+    }
+
+    public void setExecutionStatus(String executionStatus) {
+        this.executionStatus = executionStatus;
+    }
+
 }

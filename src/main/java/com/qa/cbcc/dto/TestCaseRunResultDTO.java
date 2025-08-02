@@ -3,14 +3,14 @@ package com.qa.cbcc.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public class TestCaseExecutionResultDTO {
+public class TestCaseRunResultDTO {
     private Long testCaseId;
     private String testCaseName;
     private LocalDateTime executionOn;
     private List<ScenarioResultDTO> executedScenarios;
     private String tcStatus;
-
-    // Getters and setters
+    private List<String> executedScenarioNames;
+    private List<String> unexecutedScenarioNames;
 
     public Long getTestCaseId() {
         return testCaseId;
@@ -50,5 +50,21 @@ public class TestCaseExecutionResultDTO {
 
     public void setTcStatus(String tcStatus) {
         this.tcStatus = tcStatus;
+    }
+
+    public List<String> getExecutedScenarioNames() {
+        return executedScenarioNames;
+    }
+
+    public void setExecutedScenarioNames(List<String> executedScenarioNames) {
+        this.executedScenarioNames = executedScenarioNames;
+    }
+
+    public List<String> getUnexecutedScenarioNames() {
+        return unexecutedScenarioNames;
+    }
+
+    public void setUnexecutedScenarioNames(List<String> unexecutedScenarioNames) {
+        this.unexecutedScenarioNames = unexecutedScenarioNames;
     }
 }

@@ -1,5 +1,5 @@
 @APAC @A2
-Feature: Login Feature
+Feature: Login Feature Local
 
   @US
   Scenario Outline: GTRF Inbound Flow e2e Tests | "<Scenario>"

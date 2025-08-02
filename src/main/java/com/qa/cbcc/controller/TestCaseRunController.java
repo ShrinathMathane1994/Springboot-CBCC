@@ -1,12 +1,13 @@
-package com.qa.cbcc.controller;
+package com.qa.cbcc.controller; 
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.qa.cbcc.dto.TestCaseExecutionResultDTO;
-import com.qa.cbcc.model.TestCaseExecutionHistory;
-import com.qa.cbcc.repository.TestCaseExecutionHistoryRepository;
+import com.qa.cbcc.dto.TestCaseRunResultDTO;
+import com.qa.cbcc.model.TestCaseRunHistory;
+import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
 import com.qa.cbcc.service.TestCaseRunService;
 
 import org.slf4j.Logger;
@@ -29,10 +30,10 @@ public class TestCaseRunController {
     private TestCaseRunService testCaseRunService;
 
     @Autowired
-    private TestCaseExecutionHistoryRepository historyRepository;
+    private TestCaseRunHistoryRepository historyRepository;
 
     @PostMapping("/run")
-    public List<LinkedHashMap<String, Object>> runTestCasesByIds(@RequestBody java.util.LinkedHashMap<String, List<Integer>> payload) {
+    public List<Map<String, Object>> runTestCasesByIds(@RequestBody java.util.LinkedHashMap<String, List<Integer>> payload) {
         List<Integer> testCaseIds = payload.get("testCaseIds");
         logger.info("Received request to run test case IDs: {}", testCaseIds);
 
@@ -41,7 +42,7 @@ public class TestCaseRunController {
                     .map(Integer::longValue)
                     .collect(Collectors.toList());
 
-            List<LinkedHashMap<String, Object>> results = testCaseRunService.runByIds(longIds);
+            List<Map<String, Object>> results = testCaseRunService.runByIds(longIds);
 
             // Optional: JSON logging for debugging
             ObjectMapper mapper = new ObjectMapper();
@@ -58,7 +59,7 @@ public class TestCaseRunController {
     }
 
     @GetMapping("/{tcId}/history")
-    public List<TestCaseExecutionHistory> getExecutionHistory(@PathVariable Long tcId) {
+    public List<TestCaseRunHistory> getExecutionHistory(@PathVariable Long tcId) {
         return historyRepository.findAll().stream()
                 .filter(h -> h.getTestCaseId().equals(tcId))
                 .collect(Collectors.toList());

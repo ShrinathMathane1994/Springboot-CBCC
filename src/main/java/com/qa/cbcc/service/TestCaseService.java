@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -211,21 +212,30 @@ public class TestCaseService {
 
 
 	public TestCaseResponseDTO toResponseDTO(TestCase testCase) {
-		TestCaseResponseDTO dto = new TestCaseResponseDTO();
-		dto.setId(testCase.getIdTC());
-		dto.setTcName(testCase.getTcName());
-		dto.setDescription(testCase.getDescription());
-		dto.setFeatureScenarioJson(testCase.getFeatureScenarioJson());
-		dto.setInputFile(testCase.getInputFile());
-		dto.setOutputFile(testCase.getOutputFile());
-		dto.setCreatedOn(testCase.getCreatedOn());
-		dto.setModifiedOn(testCase.getModifiedOn());
-		dto.setIsActive(testCase.getIsActive());
-		dto.setCountry(testCase.getCountry());
-		dto.setRegion(testCase.getRegion());
-		dto.setPod(testCase.getPod());
-
-		return dto;
+	    TestCaseResponseDTO dto = new TestCaseResponseDTO();
+	    dto.setId(testCase.getIdTC());
+	    dto.setTcName(testCase.getTcName());
+	    dto.setDescription(testCase.getDescription());
+	    dto.setFeatureScenarioJson(testCase.getFeatureScenarioJson());
+	    dto.setInputFile(testCase.getInputFile());
+	    dto.setOutputFile(testCase.getOutputFile());
+	    dto.setCreatedOn(testCase.getCreatedOn());
+	    dto.setModifiedOn(testCase.getModifiedOn());
+	    dto.setExecutionOn(testCase.getExecutionOn());          // ✅ now included
+	    dto.setExecutionStatus(testCase.getExecutionStatus());  // ✅ now included
+	    dto.setIsActive(testCase.getIsActive());
+	    dto.setCountry(testCase.getCountry());
+	    dto.setRegion(testCase.getRegion());
+	    dto.setPod(testCase.getPod());
+	    return dto;
 	}
+	
+	public List<TestCaseResponseDTO> getFilteredTestCases(String country, String region, String pod) {
+	    return repository.findFiltered(country, region, pod).stream()
+	            .map(this::toResponseDTO)
+	            .collect(Collectors.toList());
+	}
+
+
 
 }

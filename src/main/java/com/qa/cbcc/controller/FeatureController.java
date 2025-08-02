@@ -1,18 +1,22 @@
 package com.qa.cbcc.controller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.qa.cbcc.dto.ScenarioDTO;
-import com.qa.cbcc.service.FeatureService;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qa.cbcc.dto.ScenarioDTO;
+import com.qa.cbcc.service.FeatureService;
 
 @RestController
 @RequestMapping("/api")
@@ -43,7 +47,6 @@ public class FeatureController {
                         ));
             }
 
-            // Log pretty JSON output of scenarios
             try {
                 String jsonOutput = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(scenarios);
                 logger.info("Successfully retrieved {} scenarios:\n{}", scenarios.size(), jsonOutput);
@@ -61,6 +64,23 @@ public class FeatureController {
             logger.error("Unexpected error while fetching scenarios: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Internal server error", "status", 500));
+        }
+    }
+
+    @GetMapping("/sync-features")
+    public ResponseEntity<?> syncFeaturesFromGit() {
+        try {
+            featureService.syncGitAndParseFeatures();
+            int total = featureService.getScenariosByTags(List.of()).size();
+            return ResponseEntity.ok(Map.of(
+                    "message", "Features synced and parsed successfully",
+                    "totalScenarios", total,
+                    "status", 200
+            ));
+        } catch (IOException e) {
+            logger.error("Git sync failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Git sync error: " + e.getMessage(), "status", 500));
         }
     }
 }

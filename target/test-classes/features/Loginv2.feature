@@ -1,5 +1,5 @@
 @US @A1
-Feature: Login Feature
+Feature: Login Feature Local v2
 
   @region=US @pod=A1
   Scenario Outline: Valid login

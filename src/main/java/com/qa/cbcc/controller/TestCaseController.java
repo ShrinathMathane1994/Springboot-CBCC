@@ -8,14 +8,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -52,7 +45,7 @@ public class TestCaseController {
 			TestCase created = testCaseService.saveTestCase(dto, inputFile, outputFile);
 			logger.info("Test case created with ID: {}", created.getIdTC());
 
-			return ResponseEntity.ok(testCaseService.toResponseDTO(created)); // ✅ hides executionOn
+			return ResponseEntity.ok(testCaseService.toResponseDTO(created));
 		} catch (Exception e) {
 			logger.error("Failed to create test case: {}", e.getMessage(), e);
 			return ResponseEntity.badRequest()
@@ -72,13 +65,13 @@ public class TestCaseController {
 
 			TestCase updated = testCaseService.updateTestCase(id, dto, inputFile, outputFile);
 			logger.info("Updated test case ID: {}", id);
-			
-			TestCaseResponseDTO response =  testCaseService.toResponseDTO(updated);
+
+			TestCaseResponseDTO response = testCaseService.toResponseDTO(updated);
 			ObjectMapper mapper = new ObjectMapper();
 			mapper.registerModule(new JavaTimeModule());
-			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
+			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 			logger.info("Updated test case details: {}", mapper.writeValueAsString(response));
-			return ResponseEntity.ok(response); // ✅ hides executionOn
+			return ResponseEntity.ok(response);
 		} catch (Exception e) {
 			logger.error("Update failed for test case ID {}: {}", id, e.getMessage(), e);
 			return ResponseEntity.badRequest()
@@ -88,20 +81,32 @@ public class TestCaseController {
 
 	@GetMapping("/{id}")
 	public ResponseEntity<?> getTestCaseById(@PathVariable Long id) {
-		logger.info("Fetching test case ID: {}", id);
-		TestCase testCase = testCaseService.getTestCaseById(id);
-		if (testCase == null) {
-			logger.warn("Test case ID {} not found.", id);
-			return ResponseEntity.notFound().build();
-		}
-		return ResponseEntity.ok(testCaseService.toResponseDTO(testCase));
+	    logger.info("Fetching test case ID: {}", id);
+	    TestCase testCase = testCaseService.getTestCaseById(id);
+	    if (testCase == null) {
+	        logger.warn("Test case ID {} not found.", id);
+	        return ResponseEntity.status(404).body(Map.of("message", "Test case not found."));
+	    }
+	    return ResponseEntity.ok(testCaseService.toResponseDTO(testCase));
 	}
 
+
+	// ✅ UPDATED: filter by country, region, pod
 	@GetMapping
-	public ResponseEntity<List<TestCaseResponseDTO>> getAllTestCases() {
-		logger.info("Fetching all test cases.");
-		List<TestCase> testCases = testCaseService.getAllTestCases();
-		return ResponseEntity.ok(testCases.stream().map(testCaseService::toResponseDTO).collect(Collectors.toList()));
+	public ResponseEntity<?> getAllTestCases(
+	        @RequestParam(required = false) String country,
+	        @RequestParam(required = false) String region,
+	        @RequestParam(required = false) String pod) {
+
+	    logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
+	    List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
+
+	    if (result.isEmpty()) {
+	        logger.warn("No test cases found with given filters.");
+	        return ResponseEntity.ok(Map.of("message", "No test cases found."));
+	    }
+
+	    return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/deleted")
@@ -127,7 +132,7 @@ public class TestCaseController {
 
 			ObjectMapper mapper = new ObjectMapper();
 			mapper.registerModule(new JavaTimeModule());
-			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
+			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 			logger.info("Deleted test case details: {}", mapper.writeValueAsString(responseDTO));
 
 			return ResponseEntity.ok(responseDTO);
@@ -142,16 +147,16 @@ public class TestCaseController {
 		logger.info("Fetching history for test case ID: {}", id);
 		List<TestCaseHistory> historyList = testCaseService.getTestCaseHistory(id);
 
-	    try {
-	        ObjectMapper mapper = new ObjectMapper();
-	        mapper.registerModule(new JavaTimeModule());
-	        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-	        logger.info("History for test case ID {}: {}", id, mapper.writeValueAsString(historyList));
-	    } catch (Exception e) {
-	        logger.error("Failed to serialize history for logging: {}", e.getMessage(), e);
-	    }
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			mapper.registerModule(new JavaTimeModule());
+			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+			logger.info("History for test case ID {}: {}", id, mapper.writeValueAsString(historyList));
+		} catch (Exception e) {
+			logger.error("Failed to serialize history for logging: {}", e.getMessage(), e);
+		}
 
-	    return ResponseEntity.ok(historyList);
+		return ResponseEntity.ok(historyList);
 	}
 
 	@PutMapping("/{id}/executed")
@@ -159,6 +164,6 @@ public class TestCaseController {
 		logger.info("Marking test case ID {} as executed.", id);
 		testCaseService.updateExecutionTime(id);
 		TestCase updated = testCaseService.getTestCaseById(id);
-		return ResponseEntity.ok(testCaseService.toResponseDTO(updated)); // ✅ hides executionOn
+		return ResponseEntity.ok(testCaseService.toResponseDTO(updated));
 	}
 }

@@ -31,6 +31,8 @@ public class TestCase {
     private LocalDateTime modifiedOn;
 
     private LocalDateTime executionOn;
+    
+    private String executionStatus;  // <- New field for tracking last status
 
     private Boolean isActive;  // ✅ Needed for soft delete and query filtering
     
@@ -140,4 +142,13 @@ public class TestCase {
     public void setIsActive(Boolean isActive) {
         this.isActive = isActive;
     }
+    
+    public String getExecutionStatus() {
+        return executionStatus;
+    }
+
+    public void setExecutionStatus(String executionStatus) {
+        this.executionStatus = executionStatus;
+    }
+
 }

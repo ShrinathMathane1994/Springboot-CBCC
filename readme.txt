@@ -36,6 +36,8 @@ data Key Type as Text
 #Get Test Case API 
 GET - http://localhost:8080/api/test-cases - For All Test Cases
 GET - http://localhost:8080/api/test-cases/{id} - For Specific Test Case ID
+GET - http://localhost:8080/api/test-cases?country=US - For Specific Country
+GET - http://localhost:8080/api/test-cases?region=IN&pod=Pod-2 - - For Specific Region & Pod
 
 #Update Test Case API 
 PUT - http://localhost:8080/api/test-cases/{id}

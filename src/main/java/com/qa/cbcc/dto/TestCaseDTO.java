@@ -17,6 +17,8 @@ public class TestCaseDTO {
     private LocalDateTime executionOn;
     private LocalDateTime createdOn;
     private LocalDateTime modifiedOn;
+    private String executionStatus;  // <- New field for tracking last status
+
     private String country;
     private String region;
     private String pod;
@@ -134,5 +136,13 @@ public class TestCaseDTO {
 
     public void setModifiedOn(LocalDateTime modifiedOn) {
         this.modifiedOn = modifiedOn;
+    }
+    
+    public String getExecutionStatus() {
+        return executionStatus;
+    }
+
+    public void setExecutionStatus(String executionStatus) {
+        this.executionStatus = executionStatus;
     }
 }
