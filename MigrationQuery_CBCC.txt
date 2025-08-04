@@ -1,0 +1,100 @@
+CREATE TABLE test_cases (
+    idtc SERIAL PRIMARY KEY,
+    tc_name VARCHAR(255),
+    description TEXT,
+    feature_scenario_json TEXT,
+    input_file VARCHAR(500),
+    output_file VARCHAR(500),
+    created_on TIMESTAMP,
+    modified_on TIMESTAMP,
+    last_run_on TIMESTAMP,
+    last_run_status VARCHAR(100),
+    is_active BOOLEAN DEFAULT TRUE,
+    country VARCHAR(100),
+    region VARCHAR(100),
+    pod VARCHAR(100)
+);
+----------------------
+
+
+CREATE TABLE test_case_history (
+    id SERIAL PRIMARY KEY,
+    test_case_id INT NOT NULL,
+    tc_name VARCHAR(255),
+    description TEXT,
+    feature_scenario_json TEXT,
+    input_file VARCHAR(500),
+    output_file VARCHAR(500),
+    modified_on TIMESTAMP,
+    change_type VARCHAR(50),
+    country VARCHAR(100),
+    region VARCHAR(100),
+    pod VARCHAR(100),
+    CONSTRAINT fk_history_test_case
+        FOREIGN KEY (test_case_id)
+        REFERENCES test_cases(idtc)
+        ON DELETE CASCADE
+);
+
+
+------------------------
+
+CREATE TABLE test_case_run_history (
+    id SERIAL PRIMARY KEY,
+    test_case_id INT NOT NULL,
+    run_on TIMESTAMP,
+    run_status VARCHAR(100),
+    output_log TEXT,
+    executed_scenarios TEXT,
+    unexecuted_scenarios TEXT,
+    raw_log TEXT,
+    xmlparsed_differences_json TEXT,
+    xml_diff_status VARCHAR(50),
+    CONSTRAINT fk_run_test_case
+        FOREIGN KEY (test_case_id)
+        REFERENCES test_cases(idtc)
+        ON DELETE CASCADE
+);
+
+
+{"tcName": "XML Scenario-3",
+  "description": "XML Comparison-3",
+  "featureScenarios": [
+    {
+      "feature": "compareXmlLocal.feature",
+      "scenarios": ["XML files have differences","XML files are identical"]
+    },    {
+      "feature": "compareXmlLocal2.feature",
+      "scenarios": ["XML files have differences"]
+    }
+  ],
+  "country": "UK",
+  "region": "North America",
+  "pod": "Pod-02"
+}
+
+{"tcName": "XML Scenario-1",
+  "description": "XML Comparison-1",
+  "featureScenarios": [
+    {
+      "feature": "compareXmlLocal.feature",
+      "scenarios": ["XML files have differences","XML files are identical"]
+    }
+  ],
+  "country": "USA",
+  "region": "North America",
+  "pod": "Pod-01"
+}
+
+{"tcName": "XML Scenario-2",
+  "description": "XML Comparison-2",
+  "featureScenarios": [
+    {
+      "feature": "compareXmlLocal.feature",
+      "scenarios": ["XML files are identical"]
+    }
+  ],
+  "country": "USA",
+  "region": "North America",
+  "pod": "Pod-01"
+}
