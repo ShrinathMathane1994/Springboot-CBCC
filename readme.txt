@@ -71,5 +71,6 @@ Body(Payload) as JSON
 #Get Test Case History API 
 GET - http://localhost:8080/api/test-cases/{id}/history
 
-
+#Sync Features Scenarios
+GET - http://localhost:8080/api/sync-features
 

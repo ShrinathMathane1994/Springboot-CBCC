@@ -490,7 +490,7 @@ public class TestCaseRunService {
 
 	private Map<String, Object> parseSingleDiff(String raw, Set<String> seen) {
 		raw = cleanStackAndFooterLines(raw);
-		String normalized = raw.replaceAll("file://.*#.*", "").replaceAll("\s+", " ").trim();
+		String normalized = raw.replaceAll("file://.*#", "").replaceAll("\\s+", " ").trim();
 
 		String xpath = extractXPath(normalized);
 		String node = extractNodeNameFromXPath(xpath);
