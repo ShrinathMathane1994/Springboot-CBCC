@@ -98,7 +98,7 @@ public class TestCaseService {
 	public void updateExecutionTime(Long testCaseId) {
 		TestCase tc = getTestCaseById(testCaseId);
 		if (tc != null) {
-			tc.setExecutionOn(LocalDateTime.now());
+			tc.setLastRunOn(LocalDateTime.now());
 			repository.save(tc);
 		}
 	}
@@ -183,7 +183,7 @@ public class TestCaseService {
 	// ✅ Updated to save history record
 	private TestCaseHistory buildHistory(TestCase testCase, String changeType) {
 		TestCaseHistory history = new TestCaseHistory();
-		history.setTestCaseId(testCase.getIdTC());
+		history.setTestCase(testCase);
 		history.setTcName(testCase.getTcName());
 		history.setDescription(testCase.getDescription());
 		history.setFeatureScenarioJson(testCase.getFeatureScenarioJson()); // ✅ this is good
@@ -199,7 +199,7 @@ public class TestCaseService {
 	}
 
 	public List<TestCaseHistory> getTestCaseHistory(Long testCaseId) {
-		return historyRepository.findByTestCaseIdOrderByModifiedOnDesc(testCaseId);
+	    return historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
 	}
 
 	public List<TestCase> getDeletedTestCases() {
@@ -221,8 +221,8 @@ public class TestCaseService {
 	    dto.setOutputFile(testCase.getOutputFile());
 	    dto.setCreatedOn(testCase.getCreatedOn());
 	    dto.setModifiedOn(testCase.getModifiedOn());
-	    dto.setExecutionOn(testCase.getExecutionOn());          // ✅ now included
-	    dto.setExecutionStatus(testCase.getExecutionStatus());  // ✅ now included
+	    dto.setExecutionOn(testCase.getLastRunOn());          // ✅ now included
+	    dto.setExecutionStatus(testCase.getLastRunStatus());  // ✅ now included
 	    dto.setIsActive(testCase.getIsActive());
 	    dto.setCountry(testCase.getCountry());
 	    dto.setRegion(testCase.getRegion());

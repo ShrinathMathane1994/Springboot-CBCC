@@ -72,6 +72,8 @@ public class TestCaseRunService {
 		this.prettyWriter = objectMapper.writerWithDefaultPrettyPrinter();
 	}
 
+	// file: TestCaseRunService.java
+
 	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) throws Exception {
 		if (featureSource.equalsIgnoreCase("git")) {
 			featureService.syncGitAndParseFeatures();
@@ -179,18 +181,43 @@ public class TestCaseRunService {
 			Set<String> usedFeatures = executedScenarios.stream().map(s -> (String) s.get("featureFileName"))
 					.collect(Collectors.toSet());
 
-			for (String featureName : usedFeatures) {
-				Set<Map<String, Object>> relatedScenarios = executedScenarios.stream()
-						.filter(s -> featureName.equals(s.get("featureFileName"))).collect(Collectors.toSet());
+			Set<String> allScenarioNames = testCase.getFeatureScenarios().stream()
+					.flatMap(fs -> fs.getScenarios().stream()).collect(Collectors.toSet());
+			Set<String> executedNamesSet = executedScenarios.stream().map(s -> s.get("scenarioName").toString())
+					.collect(Collectors.toSet());
+			Set<String> unexecuted = new HashSet<>(allScenarioNames);
+			unexecuted.removeAll(executedNamesSet);
 
-				Map<String, Object> xmlDetail = buildXmlComparisonDetails(inputPath, outputPath, featureName,
-						relatedScenarios, objectMapper);
-				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
-						.orElse(0);
-				xmlDetail.put("diffCount", diffCount);
-				xmlDetail.put("scenarioName", relatedScenarios.stream().map(s -> (String) s.get("scenarioName"))
-						.findFirst().orElse("XML Comparison"));
-				xmlComparisonDetails.add(xmlDetail);
+			List<Map<String, Object>> unexecutedList = new ArrayList<>();
+			if (!unexecuted.isEmpty()) {
+				for (String scenarioName : unexecuted) {
+					Map<String, Object> detail = new LinkedHashMap<>();
+					detail.put("scenarioName", scenarioName);
+
+					try {
+						Optional<String> featureOpt = testCase.getFeatureScenarios().stream()
+								.filter(fs -> fs.getScenarios().contains(scenarioName))
+								.map(TestCaseDTO.FeatureScenario::getFeature).findFirst();
+
+						String feature = featureOpt.orElse(null);
+
+						if (feature == null) {
+							detail.put("reason", "Scenario declared but not linked to any feature in test case JSON");
+						} else if (missingFeatures.contains(feature)) {
+							detail.put("reason", "Feature file not found: " + feature);
+						} else if (!scenarioToFeatureMap.containsKey(scenarioName)) {
+							detail.put("reason", "Scenario block not found in feature file: " + feature);
+						} else {
+							detail.put("reason", "Unknown reason – check logs for full trace");
+						}
+					} catch (Exception e) {
+						detail.put("reason", "Exception during reason detection");
+						detail.put("exception", e.getClass().getSimpleName());
+						detail.put("message", e.getMessage());
+					}
+
+					unexecutedList.add(detail);
+				}
 			}
 
 			if (executedScenarios.isEmpty() && !missingFeatures.isEmpty()) {
@@ -198,7 +225,45 @@ public class TestCaseRunService {
 				missingDetail.put("message", "No scenarios executed (feature file(s) missing)");
 				missingDetail.put("errorType", "MissingFeatureFile");
 				missingDetail.put("missingFiles", missingFeatures);
+
+				// Group unexecuted reasons per feature
+				List<Map<String, Object>> perMissingUnexecuted = unexecutedList.stream().filter(e -> {
+					String name = (String) e.get("scenarioName");
+					return missingFeatures.stream().anyMatch(f -> testCase.getFeatureScenarios().stream()
+							.anyMatch(fs -> fs.getFeature().equals(f) && fs.getScenarios().contains(name)));
+				}).collect(Collectors.toList());
+
+				if (!perMissingUnexecuted.isEmpty()) {
+					missingDetail.put("unexecutedScenarios", perMissingUnexecuted);
+				}
+
 				xmlComparisonDetails.add(missingDetail);
+			}
+
+			for (String featureName : usedFeatures) {
+				Set<Map<String, Object>> relatedScenarios = executedScenarios.stream()
+						.filter(s -> featureName.equals(s.get("featureFileName"))).collect(Collectors.toSet());
+
+				Map<String, Object> xmlDetail = buildXmlComparisonDetails(inputPath, outputPath, featureName,
+						relatedScenarios, objectMapper);
+
+				List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
+					String name = (String) e.get("scenarioName");
+					return testCase.getFeatureScenarios().stream().filter(fs -> fs.getScenarios().contains(name))
+							.map(TestCaseDTO.FeatureScenario::getFeature).anyMatch(f -> f.equals(featureName));
+				}).collect(Collectors.toList());
+
+				if (!unexecutedForFeature.isEmpty()) {
+					xmlDetail.put("unexecutedScenarios", unexecutedForFeature);
+				}
+
+				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
+						.orElse(0);
+				xmlDetail.put("diffCount", diffCount);
+				xmlDetail.put("scenarioName", relatedScenarios.stream().map(s -> (String) s.get("scenarioName"))
+						.findFirst().orElse("XML Comparison"));
+
+				xmlComparisonDetails.add(xmlDetail);
 			}
 
 			String comparisonStatus = executedScenarios.isEmpty() && !missingFeatures.isEmpty() ? null
@@ -212,7 +277,7 @@ public class TestCaseRunService {
 
 			LocalDateTime executedOn = LocalDateTime.now();
 			TestCaseRunHistory history = new TestCaseRunHistory();
-			history.setTestCaseId(testCase.getTcId());
+			history.setTestCase(entity);
 			history.setRunTime(executedOn);
 			history.setRunStatus(finalStatus);
 			history.setXmlDiffStatus(comparisonStatus);
@@ -223,27 +288,33 @@ public class TestCaseRunService {
 
 			List<String> passedNames = executedScenarios.stream().filter(s -> "Passed".equals(s.get("status")))
 					.map(s -> (String) s.get("scenarioName")).collect(Collectors.toList());
+
 			List<String> failedNames = executedScenarios.stream().filter(s -> "Failed".equals(s.get("status")))
 					.map(s -> (String) s.get("scenarioName")).collect(Collectors.toList());
 
-			Set<String> allScenarioNames = testCase.getFeatureScenarios().stream()
-					.flatMap(fs -> fs.getScenarios().stream()).collect(Collectors.toSet());
-			Set<String> executedNamesSet = executedScenarios.stream().map(s -> s.get("scenarioName").toString())
-					.collect(Collectors.toSet());
-			Set<String> unexecuted = new HashSet<>(allScenarioNames);
-			unexecuted.removeAll(executedNamesSet);
-
 			Map<String, Object> runSummary = new LinkedHashMap<>();
 			runSummary.put("totalExecutedScenarios", executedScenarios.size());
-			runSummary.put("failedScenarioNames", failedNames);
 			runSummary.put("passedScenarioNames", passedNames);
 			runSummary.put("totalFailedScenarios", failedNames.size());
 			runSummary.put("totalPassedScenarios", passedNames.size());
 			runSummary.put("durationMillis", System.currentTimeMillis() - durationStart);
-			runSummary.put("totalMissingScenarios", unexecuted.size());
+			runSummary.put("totalUnexecutedScenarios", unexecuted.size());
 
 			Map<String, Object> outputLogMap = new LinkedHashMap<>();
 			outputLogMap.put("runSummary", runSummary);
+			outputLogMap.put("unexecutedScenarioReasons", unexecutedList);
+
+			List<Map<String, Object>> failedReasons = new ArrayList<>();
+			for (Map<String, Object> exec : executedScenarios) {
+				if ("Failed".equals(exec.get("status"))) {
+					Map<String, Object> entry = new LinkedHashMap<>();
+					entry.put("scenarioName", exec.get("scenarioName"));
+					entry.put("parsedDifferences", exec.getOrDefault("parsedDifferences", List.of()));
+					failedReasons.add(entry);
+				}
+			}
+			outputLogMap.put("failedScenarioReasons", failedReasons);
+
 			history.setOutputLog(prettyWriter.writeValueAsString(outputLogMap));
 			history.setRawCucumberLog(formatRawLog(fullOutput));
 			history.setUnexecutedScenarios(unexecuted.isEmpty() ? null : String.join(", ", unexecuted));
@@ -256,15 +327,20 @@ public class TestCaseRunService {
 			result.put("tcStatus", finalStatus);
 			result.put("xmlComparisonStatus", comparisonStatus);
 			result.put("xmlComparisonDetails", xmlComparisonDetails);
+			result.put("diffSummary", computeDiffSummary(xmlComparisonDetails, executedScenarios));
+
 			if (!executedScenarios.isEmpty()) {
 				result.put("executedScenarios", executedScenarios);
 			}
-			result.put("diffSummary", computeDiffSummary(xmlComparisonDetails, executedScenarios));
+			if (!unexecutedList.isEmpty()) {
+				result.put("unexecutedScenarios", unexecutedList);
+			}
 
 			results.add(result);
+
 			if (entity != null) {
-				entity.setExecutionOn(executedOn);
-				entity.setExecutionStatus(finalStatus);
+				entity.setLastRunOn(executedOn);
+				entity.setLastRunStatus(finalStatus);
 				testCaseRepository.save(entity);
 			}
 

@@ -11,8 +11,9 @@ public class TestCaseRunHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "test_case_id")
-    private Long testCaseId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "test_case_id", nullable = false)
+    private TestCase testCase;
 
     @Column(name = "run_on")
     private LocalDateTime runTime;
@@ -38,8 +39,7 @@ public class TestCaseRunHistory {
     @Column(name = "xml_diff_status")
     private String xmlDiffStatus;
 
-    // --- Getters & Setters ---
-
+    // Getters and Setters
     public Long getId() {
         return id;
     }
@@ -48,28 +48,32 @@ public class TestCaseRunHistory {
         this.id = id;
     }
 
-    public Long getTestCaseId() {
-        return testCaseId;
+    public TestCase getTestCase() {
+        return testCase;
+    }
+
+    public void setTestCase(TestCase testCase) {
+        this.testCase = testCase;
     }
 
     public LocalDateTime getRunTime() {
-		return runTime;
-	}
+        return runTime;
+    }
 
-	public void setRunTime(LocalDateTime runTime) {
-		this.runTime = runTime;
-	}
+    public void setRunTime(LocalDateTime runTime) {
+        this.runTime = runTime;
+    }
 
-	public String getRunStatus() {
-		return runStatus;
-	}
+    public String getRunStatus() {
+        return runStatus;
+    }
 
-	public void setRunStatus(String runStatus) {
-		this.runStatus = runStatus;
-	}
+    public void setRunStatus(String runStatus) {
+        this.runStatus = runStatus;
+    }
 
-	public void setTestCaseId(Long testCaseId) {
-        this.testCaseId = testCaseId;
+    public String getOutputLog() {
+        return outputLog;
     }
 
     public void setOutputLog(String outputLog) {
@@ -100,23 +104,19 @@ public class TestCaseRunHistory {
         this.rawCucumberLog = rawCucumberLog;
     }
 
-	public String getXmlParsedDifferencesJson() {
-		return xmlParsedDifferencesJson;
-	}
+    public String getXmlParsedDifferencesJson() {
+        return xmlParsedDifferencesJson;
+    }
 
-	public void setXmlParsedDifferencesJson(String xmlParsedDifferencesJson) {
-		this.xmlParsedDifferencesJson = xmlParsedDifferencesJson;
-	}
+    public void setXmlParsedDifferencesJson(String xmlParsedDifferencesJson) {
+        this.xmlParsedDifferencesJson = xmlParsedDifferencesJson;
+    }
 
-	public String getXmlDiffStatus() {
-		return xmlDiffStatus;
-	}
+    public String getXmlDiffStatus() {
+        return xmlDiffStatus;
+    }
 
-	public void setXmlDiffStatus(String xmlDiffStatus) {
-		this.xmlDiffStatus = xmlDiffStatus;
-	}
-
-	public String getOutputLog() {
-		return outputLog;
-	}
+    public void setXmlDiffStatus(String xmlDiffStatus) {
+        this.xmlDiffStatus = xmlDiffStatus;
+    }
 }

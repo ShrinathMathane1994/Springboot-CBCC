@@ -61,7 +61,8 @@ public class TestCaseRunController {
     @GetMapping("/{tcId}/history")
     public List<TestCaseRunHistory> getExecutionHistory(@PathVariable Long tcId) {
         return historyRepository.findAll().stream()
-                .filter(h -> h.getTestCaseId().equals(tcId))
+                .filter(h -> h.getTestCase().getIdTC().equals(tcId))
                 .collect(Collectors.toList());
     }
+
 }
