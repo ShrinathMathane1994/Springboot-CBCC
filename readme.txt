@@ -1,10 +1,42 @@
-#For Make Server Live 
-mvn clean install 
-mvn spring-boot: run
+#Prerequisites
+Ensure the following are installed and enviroment path set
+JDK 11+
+Maven 3.6+
+Postgres 17+
 
 #Update Postgres DB Details change under 
 src\main\resources\application.properties file
 spring.datasource.url=jdbc:postgresql://localhost:5432/cbcc_db - Here cbcc_db is DB Name 
+spring.datasource.username=postgres - DB Username
+spring.datasource.password=admin - DB Pass
+
+#Execute MigrationQuery_CBCC.txt file query in cbcc_db via PgAdmin4 GUI
+
+#For Make Server Live do this on Project root folder
+Open CMD and then execute below command
+mvn clean install 
+mvn spring-boot: run
+
+#Get Git Config
+GET - http://localhost:8080/api/git-config
+
+#Update Git Config
+POST - http://localhost:8080/api/git-config
+Body as JSON
+{
+    "sourceType": "local",
+    "repoUrl": "https://github.com/ShrinathMathane1994/Springboot-CBCC.git",
+    "cloneDir": "features-repo",
+    "featurePath": "src/test/resources/features",
+    "branch": "testingv2",
+    "username": "",
+    "password": "",
+    "localPath": "src/test/resources/features",
+    "refreshInterval": 300000
+}
+
+#Sync Features Scenarios
+GET - http://localhost:8080/api/sync-features
 
 #Get Methods API 
 GET - http://localhost:8080/api/tests/methods
@@ -49,8 +81,8 @@ data Key Type as Text
   "description": "XML Comparison-1-Modified",
   "featureScenarios": [
     {
-      "feature": "compareXml.feature",
-      "scenarios": ["XML files have differences","XML files are identical"]
+      "feature": "compareXmlLocalSrc.feature",
+      "scenarios": ["XML files are identical"]
     }
   ],
   "country": "UK",
@@ -70,7 +102,3 @@ Body(Payload) as JSON
 
 #Get Test Case History API 
 GET - http://localhost:8080/api/test-cases/{id}/history
-
-#Sync Features Scenarios
-GET - http://localhost:8080/api/sync-features
-

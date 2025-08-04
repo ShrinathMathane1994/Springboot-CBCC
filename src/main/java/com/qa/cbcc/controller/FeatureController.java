@@ -9,10 +9,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qa.cbcc.dto.GitConfigDTO;
 import com.qa.cbcc.dto.ScenarioDTO;
 import com.qa.cbcc.service.FeatureService;
 
@@ -89,4 +95,17 @@ public class FeatureController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
+    
+    @GetMapping("/git-config")
+    public ResponseEntity<GitConfigDTO> getGitConfig() {
+        return ResponseEntity.ok(featureService.getGitConfig());
+    }
+    
+    @PostMapping("/git-config")
+    public ResponseEntity<Map<String, Object>> updateGitConfig(@RequestBody GitConfigDTO configDTO) {
+        Map<String, Object> response = featureService.updateGitConfig(configDTO);
+        int status = (int) response.getOrDefault("status", 500);
+        return ResponseEntity.status(status).body(response);
+    }
+
 }

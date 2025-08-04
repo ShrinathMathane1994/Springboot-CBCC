@@ -11,13 +11,17 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import javax.annotation.PostConstruct;
 
 import org.apache.commons.io.FileUtils;
 import org.eclipse.jgit.api.Git;
@@ -29,12 +33,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.qa.cbcc.dto.ExampleDTO;
+import com.qa.cbcc.dto.GitConfigDTO;
 import com.qa.cbcc.dto.ScenarioDTO;
 
 @Service
 public class FeatureService {
 
 	private static final Logger logger = LoggerFactory.getLogger(FeatureService.class);
+	private static final String CONFIG_FILE = "src/main/resources/git-config.properties";
 
 	@Value("${feature.source:local}")
 	private String featureSource;
@@ -60,8 +66,27 @@ public class FeatureService {
 	@Value("${feature.git.branch:main}")
 	private String gitBranch;
 
+	@Value("${feature.refresh.interval.ms:300000}")
+	private Long refreshInterval;
+
 	private List<ScenarioDTO> cachedScenarios = new ArrayList<>();
 	private final Map<String, List<ScenarioDTO>> tagIndex = new ConcurrentHashMap<>();
+
+	public String getFeatureSource() {
+		return featureSource;
+	}
+
+	public void setFeatureSource(String featureSource) {
+		this.featureSource = featureSource;
+	}
+
+	public List<ScenarioDTO> getCachedScenarios() {
+		return cachedScenarios;
+	}
+
+	public void setCachedScenarios(List<ScenarioDTO> cachedScenarios) {
+		this.cachedScenarios = cachedScenarios;
+	}
 
 	public synchronized void syncGitAndParseFeatures() throws IOException {
 		String featuresPath;
@@ -135,89 +160,58 @@ public class FeatureService {
 	}
 
 	private void cloneRepositoryIfNeeded() throws IOException {
-    File repoDir = new File(localCloneDir);
-    File gitDir = new File(repoDir, ".git");
+		File repoDir = new File(localCloneDir);
+		File gitDir = new File(repoDir, ".git");
 
-    boolean credentialsProvided = gitUsername != null && !gitUsername.isEmpty();
-    UsernamePasswordCredentialsProvider credentials = credentialsProvided
-            ? new UsernamePasswordCredentialsProvider(gitUsername, gitPassword)
-            : null;
+		boolean credentialsProvided = gitUsername != null && !gitUsername.isEmpty();
+		UsernamePasswordCredentialsProvider credentials = credentialsProvided
+				? new UsernamePasswordCredentialsProvider(gitUsername, gitPassword)
+				: null;
 
-    try {
-        // If directory doesn't exist, clone fresh
-        if (!repoDir.exists() || !gitDir.exists()) {
-            logger.info("Repo folder doesn't exist or missing .git. Cloning fresh.");
-            FileUtils.deleteQuietly(repoDir);
-            cloneFresh(repoDir, credentials);
-            return;
-        }
+		try {
+			// If directory doesn't exist, clone fresh
+			if (!repoDir.exists() || !gitDir.exists()) {
+				logger.info("Repo folder doesn't exist or missing .git. Cloning fresh.");
+				FileUtils.deleteQuietly(repoDir);
+				cloneFresh(repoDir, credentials);
+				return;
+			}
 
-        try (Git git = Git.open(repoDir)) {
-            String currentBranch = git.getRepository().getBranch();
-            logger.info("Current local branch: '{}'", currentBranch);
+			try (Git git = Git.open(repoDir)) {
+				String currentBranch = git.getRepository().getBranch();
+				logger.info("Current local branch: '{}'", currentBranch);
 
-            // Branch mismatch -> delete and reclone
-            if (!currentBranch.equals(gitBranch)) {
-                logger.warn("Branch mismatch (expected '{}', found '{}'). Cleaning and recloning.", gitBranch, currentBranch);
-                git.getRepository().close();
-                FileUtils.deleteDirectory(repoDir);
-                cloneFresh(repoDir, credentials);
-                return;
-            }
+				// Branch mismatch -> delete and reclone
+				if (!currentBranch.equals(gitBranch)) {
+					logger.warn("Branch mismatch (expected '{}', found '{}'). Cleaning and recloning.", gitBranch,
+							currentBranch);
+					git.getRepository().close();
+					FileUtils.deleteDirectory(repoDir);
+					cloneFresh(repoDir, credentials);
+					return;
+				}
 
-            // Pull if branch matches
-            git.pull().setCredentialsProvider(credentials).call();
-            logger.info("Repository updated (pull completed).");
+				// Pull if branch matches
+				git.pull().setCredentialsProvider(credentials).call();
+				logger.info("Repository updated (pull completed).");
 
-        } catch (Exception e) {
-            logger.error("Failed to open or update repo. Re-cloning. Reason: {}", e.getMessage());
-            FileUtils.deleteDirectory(repoDir);
-            cloneFresh(repoDir, credentials);
-        }
+			} catch (Exception e) {
+				logger.error("Failed to open or update repo. Re-cloning. Reason: {}", e.getMessage());
+				FileUtils.deleteDirectory(repoDir);
+				cloneFresh(repoDir, credentials);
+			}
 
-    } catch (Exception e) {
-        logger.error("Git sync failed: {}", e.getMessage(), e);
-        throw new IOException("Git sync failed: " + e.getMessage(), e);
-    }
-}
-
+		} catch (Exception e) {
+			logger.error("Git sync failed: {}", e.getMessage(), e);
+			throw new IOException("Git sync failed: " + e.getMessage(), e);
+		}
+	}
 
 	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials) throws GitAPIException {
-	    logger.info("Cloning fresh from {}", gitRepoUrl);
-	    Git.cloneRepository()
-	            .setURI(gitRepoUrl)
-	            .setDirectory(repoDir)
-	            .setBranch(gitBranch)
-	            .setCredentialsProvider(credentials)
-	            .call();
-	    logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
-	}
-
-
-	private void deleteDirectory(Path path) throws IOException {
-		Files.walkFileTree(path, new SimpleFileVisitor<>() {
-			@Override
-			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-				Files.deleteIfExists(file);
-				return FileVisitResult.CONTINUE;
-			}
-
-			@Override
-			public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-				Files.deleteIfExists(dir);
-				return FileVisitResult.CONTINUE;
-			}
-		});
-	}
-
-	private void cleanRepoExceptGit(Path repoPath) throws IOException {
-		try (DirectoryStream<Path> stream = Files.newDirectoryStream(repoPath)) {
-			for (Path entry : stream) {
-				if (!entry.getFileName().toString().equals(".git")) {
-					deleteDirectory(entry);
-				}
-			}
-		}
+		logger.info("Cloning fresh from {}", gitRepoUrl);
+		Git.cloneRepository().setURI(gitRepoUrl).setDirectory(repoDir).setBranch(gitBranch)
+				.setCredentialsProvider(credentials).call();
+		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
 	}
 
 	public List<ScenarioDTO> getScenariosByTags(List<String> tagsToMatch) throws IOException {
@@ -284,19 +278,131 @@ public class FeatureService {
 		return result;
 	}
 
-	public String getFeatureSource() {
-		return featureSource;
+	private Properties loadConfig() throws IOException {
+		Properties props = new Properties();
+		Path path = Paths.get(CONFIG_FILE);
+
+		if (Files.exists(path)) {
+			try (var reader = Files.newBufferedReader(path)) {
+				props.load(reader);
+			}
+		}
+
+		return props;
 	}
 
-	public void setFeatureSource(String featureSource) {
-		this.featureSource = featureSource;
+	private void saveConfig(Properties props) throws IOException {
+		Path path = Paths.get(CONFIG_FILE);
+
+		try (var writer = Files.newBufferedWriter(path)) {
+			props.store(writer, "Updated Git configuration");
+		}
 	}
 
-	public List<ScenarioDTO> getCachedScenarios() {
-		return cachedScenarios;
+	public GitConfigDTO getGitConfig() {
+		GitConfigDTO dto = new GitConfigDTO();
+		dto.setSourceType(featureSource);
+		dto.setRepoUrl(gitRepoUrl);
+		dto.setCloneDir(localCloneDir);
+		dto.setFeaturePath(gitFeatureSubPath);
+		dto.setBranch(gitBranch);
+		dto.setUsername(gitUsername);
+		dto.setPassword(gitPassword);
+		dto.setLocalPath(localFeatureDir);
+		dto.setRefreshInterval(refreshInterval);
+		return dto;
 	}
 
-	public void setCachedScenarios(List<ScenarioDTO> cachedScenarios) {
-		this.cachedScenarios = cachedScenarios;
+	public Map<String, Object> updateGitConfig(GitConfigDTO newConfig) {
+		Map<String, Object> response = new HashMap<>();
+		Map<String, Object> updatedFields = new HashMap<>();
+
+		try {
+			Properties props = loadConfig();
+
+			if (newConfig.getSourceType() != null) {
+				props.setProperty("feature.source", newConfig.getSourceType());
+				this.featureSource = newConfig.getSourceType();
+				updatedFields.put("sourceType", newConfig.getSourceType());
+			}
+
+			if (newConfig.getRepoUrl() != null) {
+				props.setProperty("feature.git.repo-url", newConfig.getRepoUrl());
+				this.gitRepoUrl = newConfig.getRepoUrl();
+				updatedFields.put("repoUrl", newConfig.getRepoUrl());
+			}
+
+			if (newConfig.getCloneDir() != null) {
+				props.setProperty("feature.git.clone-dir", newConfig.getCloneDir());
+				this.localCloneDir = newConfig.getCloneDir();
+				updatedFields.put("cloneDir", newConfig.getCloneDir());
+			}
+
+			if (newConfig.getFeaturePath() != null) {
+				props.setProperty("feature.git.feature-path", newConfig.getFeaturePath());
+				this.gitFeatureSubPath = newConfig.getFeaturePath();
+				updatedFields.put("featurePath", newConfig.getFeaturePath());
+			}
+
+			if (newConfig.getBranch() != null) {
+				props.setProperty("feature.git.branch", newConfig.getBranch());
+				this.gitBranch = newConfig.getBranch();
+				updatedFields.put("branch", newConfig.getBranch());
+			}
+
+			if (newConfig.getUsername() != null) {
+				props.setProperty("feature.git.username", newConfig.getUsername());
+				this.gitUsername = newConfig.getUsername();
+				updatedFields.put("username", newConfig.getUsername());
+			}
+
+			if (newConfig.getPassword() != null) {
+				props.setProperty("feature.git.password", newConfig.getPassword());
+				this.gitPassword = newConfig.getPassword();
+				updatedFields.put("password", newConfig.getPassword());
+			}
+
+			if (newConfig.getLocalPath() != null) {
+				props.setProperty("feature.local.path", newConfig.getLocalPath());
+				this.localFeatureDir = newConfig.getLocalPath();
+				updatedFields.put("localPath", newConfig.getLocalPath());
+			}
+
+			if (newConfig.getRefreshInterval() != null) {
+				props.setProperty("feature.refresh.interval.ms", newConfig.getRefreshInterval().toString());
+				updatedFields.put("refreshInterval", newConfig.getRefreshInterval());
+			}
+
+			saveConfig(props);
+
+			response.put("status", 200);
+			response.put("message", "Git configuration updated successfully.");
+			response.put("updatedFields", updatedFields);
+
+		} catch (IOException e) {
+			response.put("status", 500);
+			response.put("message", "Failed to update Git configuration: " + e.getMessage());
+		}
+
+		return response;
 	}
+
+	@PostConstruct
+	public void initializeGitPropertiesFromFile() {
+		try {
+			Properties props = loadConfig();
+			this.featureSource = props.getProperty("feature.source", "local");
+			this.gitRepoUrl = props.getProperty("feature.git.repo-url", "");
+			this.localCloneDir = props.getProperty("feature.git.clone-dir", "features-repo");
+			this.gitFeatureSubPath = props.getProperty("feature.git.feature-path", "");
+			this.gitBranch = props.getProperty("feature.git.branch", "main");
+			this.gitUsername = props.getProperty("feature.git.username", "");
+			this.gitPassword = props.getProperty("feature.git.password", "");
+			this.localFeatureDir = props.getProperty("feature.local.path", "src/test/resources/features");
+			this.refreshInterval = Long.parseLong(props.getProperty("feature.refresh.interval.ms", "300000"));
+		} catch (IOException e) {
+			logger.error("Failed to load git config: {}", e.getMessage());
+		}
+	}
+
 }

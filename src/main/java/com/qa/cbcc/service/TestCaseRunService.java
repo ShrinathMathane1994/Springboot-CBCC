@@ -7,6 +7,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -24,17 +25,18 @@ import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.qa.cbcc.dto.GitConfigDTO;
 import com.qa.cbcc.dto.TestCaseDTO;
 import com.qa.cbcc.model.TestCase;
 import com.qa.cbcc.model.TestCaseRunHistory;
@@ -51,14 +53,6 @@ public class TestCaseRunService {
 
 	@Autowired
 	private FeatureService featureService;
-	@Value("${feature.source:local}")
-	private String featureSource;
-	@Value("${feature.local.path:src/test/resources/features}")
-	private String localFeatureDir;
-	@Value("${feature.git.clone-dir:features-repo}")
-	private String localCloneDir;
-	@Value("${feature.git.feature-path:path/to/features}")
-	private String gitFeatureSubPath;
 
 	private final TestCaseRepository testCaseRepository;
 	private final TestCaseRunHistoryRepository historyRepository;
@@ -72,15 +66,30 @@ public class TestCaseRunService {
 		this.prettyWriter = objectMapper.writerWithDefaultPrettyPrinter();
 	}
 
-	// file: TestCaseRunService.java
+	private Optional<Path> findFeatureFileRecursive(Path rootDir, String featureFileName) {
+	    try (Stream<Path> paths = Files.walk(rootDir)) {
+	        return paths
+	            .filter(Files::isRegularFile)
+	            .filter(path -> path.getFileName().toString().equalsIgnoreCase(featureFileName))
+	            .findFirst();
+	    } catch (IOException e) {
+	        logger.error("Error walking feature directory", e);
+	        return Optional.empty();
+	    }
+	}
+
 
 	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) throws Exception {
-		if (featureSource.equalsIgnoreCase("git")) {
+
+		GitConfigDTO config = featureService.getGitConfig();
+
+		if (config.getSourceType().equalsIgnoreCase("git")) {
 			featureService.syncGitAndParseFeatures();
 		}
-		String baseFeaturePath = featureSource.equalsIgnoreCase("git")
-				? Paths.get(localCloneDir, gitFeatureSubPath).toString()
-				: localFeatureDir;
+
+		String baseFeaturePath = config.getSourceType().equalsIgnoreCase("git")
+				? Paths.get(config.getCloneDir(), config.getFeaturePath()).toString()
+				: config.getFeaturePath(); // Local fallback
 
 		List<Map<String, Object>> results = new ArrayList<>();
 
@@ -92,8 +101,15 @@ public class TestCaseRunService {
 
 			for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
 				List<String> blocks = new ArrayList<>();
-				String featureFilePath = Paths.get(baseFeaturePath, fs.getFeature()).toString();
-				boolean featureExists = Files.exists(Paths.get(featureFilePath));
+//				String featureFilePath = Paths.get(baseFeaturePath, fs.getFeature()).toString();
+//				boolean featureExists = Files.exists(Paths.get(featureFilePath));
+				
+				Path featureRoot = Paths.get(baseFeaturePath);
+				Optional<Path> featurePathOpt = findFeatureFileRecursive(featureRoot, fs.getFeature());
+
+				boolean featureExists = featurePathOpt.isPresent();
+				String featureFilePath = featurePathOpt.map(Path::toString).orElse(null);
+
 				if (!featureExists)
 					missingFeatures.add(fs.getFeature());
 
@@ -453,8 +469,6 @@ public class TestCaseRunService {
 		}
 		return cleaned.toString().trim().replaceAll("\n{2,}", "\n");
 	}
-
-	// src/utils/XmlDiffParser.java
 
 	private static final List<DiffPattern> DIFF_PATTERNS = List.of(
 			new DiffPattern("Text Mismatch", Pattern.compile("Expected text value '(.*?)' but was '(.*?)' - comparing"),

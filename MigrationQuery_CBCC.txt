@@ -56,6 +56,47 @@ CREATE TABLE test_case_run_history (
         ON DELETE CASCADE
 );
 
+-------------------------
+-- Check all test cases
+SELECT * FROM test_cases;
+
+-- Check case histories for a specific test case
+SELECT * FROM test_case_history
+WHERE test_case_id = 3
+ORDER BY modified_on DESC;
+
+-- Check run histories for a specific test case
+SELECT * FROM test_case_run_history
+WHERE test_case_id = 3
+ORDER BY run_on DESC;
+-------------------------
+{"tcName": "XML Scenario-1",
+  "description": "Comparing the two xml files",
+  "featureScenarios": [
+    {
+      "feature": "compareXmlLocal.feature",
+      "scenarios": ["XML files are identical"]
+    }
+  ],
+  "country": "USA",
+  "region": "North America",
+  "pod": "Pod-01"
+}
+=========================
+
+{"tcName": "XML Scenario-2",
+  "description": "Comparing the two xml files",
+  "featureScenarios": [
+    {
+      "feature": "compareXmlLocal.feature",
+      "scenarios": ["XML files have differences"]
+    }
+  ],
+  "country": "UK",
+  "region": "East UK",
+  "pod": "Pod-02"
+}
+==========================
 
 {"tcName": "XML Scenario-3",
   "description": "XML Comparison-3",
@@ -72,29 +113,4 @@ CREATE TABLE test_case_run_history (
   "region": "North America",
   "pod": "Pod-02"
 }
-
-{"tcName": "XML Scenario-1",
-  "description": "XML Comparison-1",
-  "featureScenarios": [
-    {
-      "feature": "compareXmlLocal.feature",
-      "scenarios": ["XML files have differences","XML files are identical"]
-    }
-  ],
-  "country": "USA",
-  "region": "North America",
-  "pod": "Pod-01"
-}
-
-{"tcName": "XML Scenario-2",
-  "description": "XML Comparison-2",
-  "featureScenarios": [
-    {
-      "feature": "compareXmlLocal.feature",
-      "scenarios": ["XML files are identical"]
-    }
-  ],
-  "country": "USA",
-  "region": "North America",
-  "pod": "Pod-01"
-}
+============================
