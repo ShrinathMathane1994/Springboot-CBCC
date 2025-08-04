@@ -28,3 +28,9 @@ Feature: Login Feature
     Given user is on login page
     When user enters <username> and <password>
     Then user should be logged in
+
+  @UK
+  Scenario: Valid login v4
+    Given user is on login page
+    When user enters <username> and <password>
+    Then user should be logged in
