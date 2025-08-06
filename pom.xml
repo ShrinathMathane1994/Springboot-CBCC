@@ -112,6 +112,12 @@
 			<version>2.11.0</version>
 		</dependency>
 
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.14.0</version> <!-- or latest -->
+		</dependency>
+
 		<!-- Cucumber -->
 		<dependency>
 			<groupId>io.cucumber</groupId>

@@ -1,19 +1,12 @@
-Feature: Compare two XML files for structural and content equality
+Feature: Compare two XML files for structural and content equality using Scenario Outline
 
-  Scenario: XML files are identical
-    Given XML file "input.xml"
-    And XML file "output.xml"
+  Scenario Outline: Compare two XML files for equality
+    Given XML file "<file1>"
+    And XML file "<file2>"
     When I compare the two XML files
-    Then the comparison result should indicate they are equal
+    Then the comparison result should indicate they are <result>
 
-  Scenario: XML files have differences
-    Given XML file "input.xml"  
-    And XML file "output.xml"
-    When I compare the two XML files
-    Then the comparison result should indicate they are not equal
-    
-    Scenario: XML files have differences2
-    Given XML file "input.xml"  
-    And XML file "output.xml"
-    When I compare the two XML files
-    Then the comparison result should indicate they are not equal
+    Examples:
+      | file1       | file2       | result    |
+      | input.xml   | output.xml  | equal     |
+      | input.xml   | output.xml  | not equal |

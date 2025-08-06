@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -27,12 +28,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -67,20 +71,16 @@ public class TestCaseRunService {
 	}
 
 	private Optional<Path> findFeatureFileRecursive(Path rootDir, String featureFileName) {
-	    try (Stream<Path> paths = Files.walk(rootDir)) {
-	        return paths
-	            .filter(Files::isRegularFile)
-	            .filter(path -> path.getFileName().toString().equalsIgnoreCase(featureFileName))
-	            .findFirst();
-	    } catch (IOException e) {
-	        logger.error("Error walking feature directory", e);
-	        return Optional.empty();
-	    }
+		try (Stream<Path> paths = Files.walk(rootDir)) {
+			return paths.filter(Files::isRegularFile)
+					.filter(path -> path.getFileName().toString().equalsIgnoreCase(featureFileName)).findFirst();
+		} catch (IOException e) {
+			logger.error("Error walking feature directory", e);
+			return Optional.empty();
+		}
 	}
 
-
 	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) throws Exception {
-
 		GitConfigDTO config = featureService.getGitConfig();
 
 		if (config.getSourceType().equalsIgnoreCase("git")) {
@@ -89,100 +89,134 @@ public class TestCaseRunService {
 
 		String baseFeaturePath = config.getSourceType().equalsIgnoreCase("git")
 				? Paths.get(config.getCloneDir(), config.getFeaturePath()).toString()
-				: config.getFeaturePath(); // Local fallback
+				: config.getFeaturePath();
 
 		List<Map<String, Object>> results = new ArrayList<>();
 
 		for (TestCaseDTO testCase : testCases) {
 			TestContext.setTestCaseId(testCase.getTcId());
-			Set<String> executedScenarioNames = new LinkedHashSet<>();
+			Map<String, String> featureToPathMap = new HashMap<>();
 			Map<String, String> scenarioToFeatureMap = new HashMap<>();
 			List<String> missingFeatures = new ArrayList<>();
 
 			for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
 				List<String> blocks = new ArrayList<>();
-//				String featureFilePath = Paths.get(baseFeaturePath, fs.getFeature()).toString();
-//				boolean featureExists = Files.exists(Paths.get(featureFilePath));
-				
+
 				Path featureRoot = Paths.get(baseFeaturePath);
 				Optional<Path> featurePathOpt = findFeatureFileRecursive(featureRoot, fs.getFeature());
 
 				boolean featureExists = featurePathOpt.isPresent();
 				String featureFilePath = featurePathOpt.map(Path::toString).orElse(null);
 
-				if (!featureExists)
+				if (!featureExists) {
 					missingFeatures.add(fs.getFeature());
+				}
 
 				for (String scenarioName : fs.getScenarios()) {
 					if (featureExists) {
 						try {
+							featureToPathMap.put(fs.getFeature(), featureFilePath);
 							String block = extractScenarioBlock(featureFilePath, scenarioName);
 							if (!block.isBlank()) {
 								blocks.add(block);
-								scenarioToFeatureMap.put(scenarioName, fs.getFeature());
+								scenarioToFeatureMap.put(scenarioName,
+										Paths.get(featureFilePath).getFileName().toString()); // `featurePathOpt`
 							}
 						} catch (IOException e) {
 							logger.error("Error reading feature file: {}", featureFilePath, e);
 						}
 					}
 				}
+
 				fs.setScenarioBlocks(blocks);
 			}
 
-			File featureFile = generateTempFeatureFile(testCase);
-			String[] argv = new String[] { "--glue", "com.qa.cbcc.stepdefinitions", featureFile.getAbsolutePath(),
-					"--plugin", "pretty" };
+			Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
 
+			// 1. Generate temporary feature file from TestCaseDTO
+			File featureFile = generateTempFeatureFile(testCase);
+			File jsonReportFile = File.createTempFile("cucumber-report", ".json");
+
+			// 2. Setup Cucumber command-line arguments
+			String[] argv = new String[] { "--glue", "com.qa.cbcc.stepdefinitions", featureFile.getAbsolutePath(),
+					"--plugin", "pretty", "--plugin", "json:" + jsonReportFile.getAbsolutePath() };
+
+			// 3. Capture Cucumber stdout (optional)
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			PrintStream originalOut = System.out;
 			System.setOut(new PrintStream(baos));
+
+			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
 			try {
 				Main.run(argv, Thread.currentThread().getContextClassLoader());
+
+				// ✅ Extract from the temp feature file BEFORE deleting it
+				exampleMap = extractExamplesFromFeature(featureFile);
 			} finally {
 				System.out.flush();
 				System.setOut(originalOut);
-				featureFile.delete();
+				if (featureFile.exists())
+					featureFile.delete();
 			}
 
 			String fullOutput = baos.toString();
 			logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
 
-			Set<String> failedScenariosFromFooter = extractFailedScenariosFromFooter(fullOutput);
-			Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
-			String[] lines = fullOutput.split("\n");
+			// 5. Parse the generated JSON report
+			executedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
+//			Set<Map<String, Object>> executedScenarios = parseCucumberJson(jsonFile, exampleLookup, featureToPathMap);
 
-			String currentScenario = null;
-			boolean scenarioFailed = false;
-			boolean inScenario = false;
-			StringBuilder diffBuffer = new StringBuilder();
+			if (jsonReportFile.exists())
+				jsonReportFile.delete();
 
-			for (String line : lines) {
-				line = removeAnsiCodes(line).trim();
-				if (line.startsWith("Scenario:")) {
-					if (currentScenario != null) {
-						executedScenarios.add(createScenarioResult(currentScenario, diffBuffer.toString(),
-								!scenarioFailed, executedScenarioNames,
-								scenarioToFeatureMap.getOrDefault(currentScenario, "unknown"),
-								failedScenariosFromFooter));
+			// 6. Extract scenario names from executedScenarios
+			Set<String> executedScenarioNames = executedScenarios.stream()
+					.map(s -> s.get("scenarioName").toString().trim())
+					.map(name -> name.replaceAll("\\s*\\[example #[0-9]+\\]$", "")) // strip example suffix
+					.collect(Collectors.toSet());
+
+			// Ensure declared names match example format: "[example #1]", "[example #2]"
+			Set<String> declaredScenarioNames = testCase.getFeatureScenarios().stream()
+					.flatMap(fs -> fs.getScenarios().stream()).map(String::trim).collect(Collectors.toSet());
+
+			Set<String> unexecuted = declaredScenarioNames.stream()
+					.filter(declared -> executedScenarioNames.stream().noneMatch(
+							executed -> executed.equals(declared) || executed.startsWith(declared + " [example")))
+					.collect(Collectors.toSet());
+
+			if (!unexecuted.isEmpty()) {
+				logger.warn("The following scenarios were not executed: {}", unexecuted);
+			}
+
+			List<Map<String, Object>> unexecutedList = new ArrayList<>();
+			for (String scenarioName : unexecuted) {
+				Map<String, Object> detail = new LinkedHashMap<>();
+				detail.put("scenarioName", scenarioName);
+
+				try {
+					Optional<String> featureOpt = testCase.getFeatureScenarios().stream()
+							.filter(fs -> fs.getScenarios().contains(scenarioName))
+							.map(TestCaseDTO.FeatureScenario::getFeature).findFirst();
+
+					String feature = featureOpt.orElse(null);
+
+					if (feature == null) {
+						detail.put("reason", "Scenario declared but not linked to any feature in test case JSON");
+					} else if (missingFeatures.contains(feature)) {
+						detail.put("reason", "Feature file not found: " + feature);
+					} else if (!scenarioToFeatureMap.containsKey(scenarioName)) {
+						detail.put("reason", "Scenario block not found in feature file: " + feature);
+					} else {
+						detail.put("reason", "Unknown reason – check logs for full trace");
 					}
-					currentScenario = line.replace("Scenario:", "").split("#")[0].trim();
-					diffBuffer.setLength(0);
-					scenarioFailed = false;
-					inScenario = true;
-				} else if (inScenario) {
-					diffBuffer.append(line).append("\n");
+				} catch (Exception e) {
+					detail.put("reason", "Exception during reason detection");
+					detail.put("exception", e.getClass().getSimpleName());
+					detail.put("message", e.getMessage());
 				}
-			}
 
-			if (currentScenario != null) {
-				executedScenarios.add(createScenarioResult(currentScenario, diffBuffer.toString(), !scenarioFailed,
-						executedScenarioNames, scenarioToFeatureMap.getOrDefault(currentScenario, "unknown"),
-						failedScenariosFromFooter));
+				unexecutedList.add(detail);
 			}
-
-			executedScenarios
-					.removeIf(s -> !testCase.getFeatureScenarios().stream().flatMap(fs -> fs.getScenarios().stream())
-							.collect(Collectors.toSet()).contains(s.get("scenarioName")));
 
 			boolean anyFailed = executedScenarios.stream().anyMatch(s -> "Failed".equals(s.get("status")));
 			boolean allFailed = executedScenarios.isEmpty()
@@ -192,92 +226,88 @@ public class TestCaseRunService {
 			TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
 			String inputPath = entity != null ? entity.getInputFile() : null;
 			String outputPath = entity != null ? entity.getOutputFile() : null;
+			// Old Code
+//			List<Map<String, Object>> xmlComparisonDetails = new ArrayList<>();
+//
+//			for (Map<String, Object> scenario : executedScenarios) {
+//			    String featureName = (String) scenario.get("featureFileName");
+//			    if (featureName == null) continue;
+//
+//			    Map<String, Object> xmlDetail = buildXmlComparisonDetails(
+//			        inputPath,
+//			        outputPath,
+//			        Paths.get(featureName).getFileName().toString(), // Just filename
+//			        Collections.singleton(scenario), // Single scenario at a time
+//			        objectMapper
+//			    );
+//
+//			    // Unexecuted logic per scenario (optional, or move outside this loop)
+//			    List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
+//			        String name = (String) e.get("scenarioName");
+//			        return testCase.getFeatureScenarios().stream()
+//			                .filter(fs -> fs.getScenarios().contains(name))
+//			                .map(TestCaseDTO.FeatureScenario::getFeature)
+//			                .anyMatch(f -> f.equals(Paths.get(featureName).getFileName().toString()));
+//			    }).collect(Collectors.toList());
+//
+//			    if (!unexecutedForFeature.isEmpty()) {
+//			        xmlDetail.put("unexecutedScenarios", unexecutedForFeature);
+//			    }
+//
+//			    int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences"))
+//			            .map(d -> ((List<?>) d).size())
+//			            .orElse(0);
+//
+//			    xmlDetail.put("diffCount", diffCount);
+//			    xmlDetail.put("scenarioName", scenario.get("scenarioName"));
+//
+//			    xmlComparisonDetails.add(xmlDetail);
+//			}
 
 			List<Map<String, Object>> xmlComparisonDetails = new ArrayList<>();
-			Set<String> usedFeatures = executedScenarios.stream().map(s -> (String) s.get("featureFileName"))
-					.collect(Collectors.toSet());
 
-			Set<String> allScenarioNames = testCase.getFeatureScenarios().stream()
-					.flatMap(fs -> fs.getScenarios().stream()).collect(Collectors.toSet());
-			Set<String> executedNamesSet = executedScenarios.stream().map(s -> s.get("scenarioName").toString())
-					.collect(Collectors.toSet());
-			Set<String> unexecuted = new HashSet<>(allScenarioNames);
-			unexecuted.removeAll(executedNamesSet);
+			for (Map<String, Object> scenario : executedScenarios) {
+				String featureName = (String) scenario.get("featureFileName");
+				if (featureName == null)
+					continue;
 
-			List<Map<String, Object>> unexecutedList = new ArrayList<>();
-			if (!unexecuted.isEmpty()) {
-				for (String scenarioName : unexecuted) {
-					Map<String, Object> detail = new LinkedHashMap<>();
-					detail.put("scenarioName", scenarioName);
+				Map<String, Object> xmlDetail = buildXmlComparisonDetails(inputPath, outputPath,
+						Paths.get(featureName).getFileName().toString(), // Just filename
+						Collections.singleton(scenario), objectMapper);
 
-					try {
-						Optional<String> featureOpt = testCase.getFeatureScenarios().stream()
-								.filter(fs -> fs.getScenarios().contains(scenarioName))
-								.map(TestCaseDTO.FeatureScenario::getFeature).findFirst();
+				// Add scenarioName
+				xmlDetail.put("scenarioName", scenario.get("scenarioName"));
 
-						String feature = featureOpt.orElse(null);
+				// Add scenarioType
+				String scenarioType = (scenario.containsKey("exampleHeader") && scenario.containsKey("exampleValues"))
+						? "Scenario Outline"
+						: "Scenario";
+				xmlDetail.put("scenarioType", scenarioType);
 
-						if (feature == null) {
-							detail.put("reason", "Scenario declared but not linked to any feature in test case JSON");
-						} else if (missingFeatures.contains(feature)) {
-							detail.put("reason", "Feature file not found: " + feature);
-						} else if (!scenarioToFeatureMap.containsKey(scenarioName)) {
-							detail.put("reason", "Scenario block not found in feature file: " + feature);
-						} else {
-							detail.put("reason", "Unknown reason – check logs for full trace");
-						}
-					} catch (Exception e) {
-						detail.put("reason", "Exception during reason detection");
-						detail.put("exception", e.getClass().getSimpleName());
-						detail.put("message", e.getMessage());
-					}
-
-					unexecutedList.add(detail);
+				// Add exampleHeader and exampleValues if available
+				if (scenario.containsKey("exampleHeader")) {
+					xmlDetail.put("exampleHeader", scenario.get("exampleHeader"));
 				}
-			}
-
-			if (executedScenarios.isEmpty() && !missingFeatures.isEmpty()) {
-				Map<String, Object> missingDetail = new HashMap<>();
-				missingDetail.put("message", "No scenarios executed (feature file(s) missing)");
-				missingDetail.put("errorType", "MissingFeatureFile");
-				missingDetail.put("missingFiles", missingFeatures);
-
-				// Group unexecuted reasons per feature
-				List<Map<String, Object>> perMissingUnexecuted = unexecutedList.stream().filter(e -> {
-					String name = (String) e.get("scenarioName");
-					return missingFeatures.stream().anyMatch(f -> testCase.getFeatureScenarios().stream()
-							.anyMatch(fs -> fs.getFeature().equals(f) && fs.getScenarios().contains(name)));
-				}).collect(Collectors.toList());
-
-				if (!perMissingUnexecuted.isEmpty()) {
-					missingDetail.put("unexecutedScenarios", perMissingUnexecuted);
+				if (scenario.containsKey("exampleValues")) {
+					xmlDetail.put("exampleValues", scenario.get("exampleValues"));
 				}
 
-				xmlComparisonDetails.add(missingDetail);
-			}
+				// Add diffCount
+				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
+						.orElse(0);
+				xmlDetail.put("diffCount", diffCount);
 
-			for (String featureName : usedFeatures) {
-				Set<Map<String, Object>> relatedScenarios = executedScenarios.stream()
-						.filter(s -> featureName.equals(s.get("featureFileName"))).collect(Collectors.toSet());
-
-				Map<String, Object> xmlDetail = buildXmlComparisonDetails(inputPath, outputPath, featureName,
-						relatedScenarios, objectMapper);
-
+				// Add unexecuted scenarios if applicable
 				List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
 					String name = (String) e.get("scenarioName");
 					return testCase.getFeatureScenarios().stream().filter(fs -> fs.getScenarios().contains(name))
-							.map(TestCaseDTO.FeatureScenario::getFeature).anyMatch(f -> f.equals(featureName));
+							.map(TestCaseDTO.FeatureScenario::getFeature)
+							.anyMatch(f -> f.equals(Paths.get(featureName).getFileName().toString()));
 				}).collect(Collectors.toList());
 
 				if (!unexecutedForFeature.isEmpty()) {
 					xmlDetail.put("unexecutedScenarios", unexecutedForFeature);
 				}
-
-				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
-						.orElse(0);
-				xmlDetail.put("diffCount", diffCount);
-				xmlDetail.put("scenarioName", relatedScenarios.stream().map(s -> (String) s.get("scenarioName"))
-						.findFirst().orElse("XML Comparison"));
 
 				xmlComparisonDetails.add(xmlDetail);
 			}
@@ -310,7 +340,24 @@ public class TestCaseRunService {
 
 			Map<String, Object> runSummary = new LinkedHashMap<>();
 			runSummary.put("totalExecutedScenarios", executedScenarios.size());
-			runSummary.put("passedScenarioNames", passedNames);
+//			runSummary.put("passedScenarioNames", passedNames);
+			List<Map<String, Object>> passedScenariosDetailed = new ArrayList<>();
+			for (Map<String, Object> exec : executedScenarios) {
+			    if ("Passed".equals(exec.get("status"))) {
+			        Map<String, Object> passedEntry = new LinkedHashMap<>();
+			        passedEntry.put("scenarioName", exec.get("scenarioName"));
+			        passedEntry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
+
+			        if ("Scenario Outline".equals(exec.get("scenarioType"))) {
+			            passedEntry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
+			            passedEntry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
+			        }
+
+			        passedScenariosDetailed.add(passedEntry);
+			    }
+			}
+			runSummary.put("passedScenarioDetails", passedScenariosDetailed);
+
 			runSummary.put("totalFailedScenarios", failedNames.size());
 			runSummary.put("totalPassedScenarios", passedNames.size());
 			runSummary.put("durationMillis", System.currentTimeMillis() - durationStart);
@@ -318,18 +365,31 @@ public class TestCaseRunService {
 
 			Map<String, Object> outputLogMap = new LinkedHashMap<>();
 			outputLogMap.put("runSummary", runSummary);
-			outputLogMap.put("unexecutedScenarioReasons", unexecutedList);
+			outputLogMap.put("unexecutedScenarioDetails", unexecutedList);
 
 			List<Map<String, Object>> failedReasons = new ArrayList<>();
 			for (Map<String, Object> exec : executedScenarios) {
-				if ("Failed".equals(exec.get("status"))) {
-					Map<String, Object> entry = new LinkedHashMap<>();
-					entry.put("scenarioName", exec.get("scenarioName"));
-					entry.put("parsedDifferences", exec.getOrDefault("parsedDifferences", List.of()));
-					failedReasons.add(entry);
-				}
+			    if ("Failed".equals(exec.get("status"))) {
+			        Map<String, Object> entry = new LinkedHashMap<>();
+			        List<String> parsedDiffs = (List<String>) exec.getOrDefault("parsedDifferences", List.of());
+
+			        entry.put("scenarioName", exec.get("scenarioName"));
+			        entry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
+			        
+			        // ✅ Optional: Add example header and values for Scenario Outline
+			        if ("Scenario Outline".equals(exec.get("scenarioType"))) {
+			            entry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
+			            entry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
+			        }
+
+			        entry.put("errors", exec.getOrDefault("errors", List.of()));        
+			        entry.put("parsedDifferences", parsedDiffs);
+			        entry.put("parsedDiffCount", parsedDiffs.size());
+			        failedReasons.add(entry);
+			    }
 			}
-			outputLogMap.put("failedScenarioReasons", failedReasons);
+			outputLogMap.put("failedScenarioDetails", failedReasons);
+
 
 			history.setOutputLog(prettyWriter.writeValueAsString(outputLogMap));
 			history.setRawCucumberLog(formatRawLog(fullOutput));
@@ -449,6 +509,268 @@ public class TestCaseRunService {
 		return diffs;
 	}
 
+	private List<String> extractParsedDifferences(JsonNode errorsNode) {
+		List<String> parsed = new ArrayList<>();
+		for (JsonNode error : errorsNode) {
+			// Dummy parser logic – you can improve it
+			parsed.add(error.asText().split("\n")[0]);
+		}
+		return parsed;
+	}
+
+	private List<String> extractParsedDifferences(List<String> errorMessages) {
+		List<String> parsedDifferences = new ArrayList<>();
+
+		for (String message : errorMessages) {
+			if (message.contains("java.lang.AssertionError")) {
+				int index = message.indexOf("expected");
+				if (index != -1) {
+					parsedDifferences.add(message.substring(index).trim());
+				} else {
+					parsedDifferences.add(message.trim());
+				}
+			}
+		}
+
+		return parsedDifferences;
+	}
+
+	public Set<Map<String, Object>> parseCucumberJson(File jsonFile,
+			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleLookup,
+			Map<String, String> featureFilePathMap) throws IOException {
+		Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
+		List<Map<String, Object>> features = objectMapper.readValue(jsonFile, List.class);
+
+		for (Map<String, Object> feature : features) {
+			String featureUri = (String) feature.get("uri");
+			String featureFileName = new File(featureUri).getName();
+			List<Map<String, Object>> elements = (List<Map<String, Object>>) feature.get("elements");
+
+			if (elements == null)
+				continue;
+
+			for (Map<String, Object> element : elements) {
+				String scenarioName = (String) element.get("name");
+//				String id = (String) element.get("id");
+				String originalId = (String) element.get("id");
+				String id = originalId;
+
+				if (originalId != null && originalId.contains(";;")) {
+					int splitIndex = originalId.lastIndexOf(";;");
+					String scenarioNamePart = originalId.substring(0, splitIndex); // e.g.,
+																					// "compare-two-xml-files-for-equality"
+					String exampleIndexPart = originalId.substring(splitIndex + 2); // e.g., "2"
+
+					try {
+						int index = Integer.parseInt(exampleIndexPart.trim());
+						int adjustedIndex = index - 1;
+						id = scenarioNamePart + ";;" + adjustedIndex;
+					} catch (NumberFormatException e) {
+						// Log or ignore; fallback to original id
+					}
+				}
+
+				String exampleIndex = "";
+
+				if (id != null && id.contains(";;")) {
+					String[] parts = id.split(";;");
+					if (parts.length > 1) {
+						exampleIndex = parts[1].trim();
+					}
+				}
+
+				String fullScenarioName = scenarioName;
+				if (!exampleIndex.isEmpty()) {
+					fullScenarioName += " [example #" + exampleIndex + "]";
+				}
+
+				List<Map<String, Object>> steps = (List<Map<String, Object>>) element.get("steps");
+				boolean hasFailed = false;
+
+				List<String> errors = new ArrayList<>();
+				List<String> parsedDifferences = new ArrayList<>();
+
+				for (Map<String, Object> step : steps) {
+					Map<String, Object> result = (Map<String, Object>) step.get("result");
+					if (result != null && "failed".equalsIgnoreCase((String) result.get("status"))) {
+						hasFailed = true;
+						String errorMessage = (String) result.get("error_message");
+						if (errorMessage != null) {
+							// Remove stack trace
+							String trimmedError;
+							int cutIndex = errorMessage.indexOf("\tat");
+							if (cutIndex != -1) {
+								trimmedError = errorMessage.substring(0, cutIndex).trim();
+							} else {
+								trimmedError = errorMessage.trim();
+							}
+
+							// Remove exception prefix
+							if (trimmedError.startsWith("java.lang.AssertionError:")) {
+								trimmedError = trimmedError.replaceFirst("java\\.lang\\.AssertionError:\\s*", "");
+							}
+
+							// Normalize newlines
+							trimmedError = trimmedError.replaceAll("[\\r\\n]+", " ").trim();
+
+							// Split by "Differences:"
+							String[] parts = trimmedError.split("Differences:", 2);
+
+							// Add main error
+							String mainError = parts[0].trim();
+							errors.add(mainError);
+
+							// Parse differences if present
+//							if (parts.length > 1) {
+//								String[] diffParts = parts[1].trim().split("\\)\\s*"); // each diff ends with `)`
+//								for (String diff : diffParts) {
+//									diff = diff.trim();
+//									if (!diff.isEmpty()) {
+//										parsedDifferences.add(diff + ")");
+//									}
+//								}
+//							}
+							// Parse differences if present
+							if (parts.length > 1) {
+								String differencesSection = parts[1].trim();
+
+								// Split the section by regex pattern that identifies the start of each
+								// difference
+								// Most differences start with "Expected ..." so we use that as delimiter
+								Pattern pattern = Pattern.compile("(?=\\b[Ee]xpected )");
+								Matcher matcher = pattern.matcher(differencesSection);
+
+								int lastIndex = 0;
+								while (matcher.find()) {
+									if (lastIndex != matcher.start()) {
+										String diff = differencesSection.substring(lastIndex, matcher.start()).trim();
+										if (!diff.isEmpty()
+												&& !diff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
+											parsedDifferences.add(diff);
+										}
+									}
+									lastIndex = matcher.start();
+								}
+
+								// Add the last segment after the final match
+								// Add the last segment after the final match
+								String lastDiff = differencesSection.substring(lastIndex).trim();
+								if (!lastDiff.isEmpty()
+										&& !lastDiff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
+									parsedDifferences.add(lastDiff);
+								}
+							}
+
+						}
+					}
+				}
+
+				Map<String, Object> scenarioMap = new LinkedHashMap<>();
+				// For Adding Temp feature File Name in response
+//				scenarioMap.put("tempfeatureFileName", featureFileName);
+
+				// For Adding actual feature File Name and path in response
+				for (Map.Entry<String, String> entry : featureFilePathMap.entrySet()) {
+					String actulFileName = entry.getKey(); // e.g., compareXmlLocalSrc.feature
+					// String actulFilePath = entry.getValue(); // e.g.,
+					// src\test\resources\features\Compare\compareXmlLocalSrc.feature
+					scenarioMap.put("featureFileName", actulFileName);
+					String fullFeaturePath = featureFilePathMap.get(actulFileName);
+					if (fullFeaturePath != null) {
+						scenarioMap.put("featureFilePath", fullFeaturePath);
+					}
+				}
+
+				scenarioMap.put("scenarioName", fullScenarioName);
+
+				// ✅ Inject example header/values
+				if (id != null && exampleLookup.containsKey(featureFileName)) {
+					Map<String, Pair<List<String>, List<String>>> examples = exampleLookup.get(featureFileName);
+
+					// Fix: Extract scenario ID from Cucumber JSON id to match our map keys
+					String lookupId;
+					if (id.contains(";;")) {
+						// If the string contains ";;", get the substring after the first ';'
+						lookupId = id.substring(id.indexOf(';') + 1);
+					} else {
+						// Otherwise, just use the original string
+						lookupId = id;
+					}
+
+					if (examples.containsKey(lookupId)) {
+						Pair<List<String>, List<String>> example = examples.get(lookupId);
+						scenarioMap.put("scenarioType", "Scenario Outline");
+						scenarioMap.put("exampleHeader", example.getKey());
+						scenarioMap.put("exampleValues", example.getValue()); // ✅ add scenarioType
+					} else {
+						logger.warn("No matching example found for ID: {} in feature: {}", lookupId, featureFileName);
+						scenarioMap.put("scenarioType", "Scenario"); // fallback in case no match
+					}
+				} else {
+					scenarioMap.put("scenarioType", "Scenario"); // ✅ for scenarios without examples
+				}
+				scenarioMap.put("status", hasFailed ? "Failed" : "Passed");
+
+				if (!errors.isEmpty()) {
+					scenarioMap.put("errors", errors);
+					if (!parsedDifferences.isEmpty()) {
+						scenarioMap.put("parsedDifferences", parsedDifferences); // keeps the list
+						scenarioMap.put("parsedDiffCount", parsedDifferences.size()); // adds a count under a different
+																						// key
+					}
+				}
+				executedScenarios.add(scenarioMap);
+			}
+		}
+		return executedScenarios;
+	}
+
+	public Map<String, Map<String, Pair<List<String>, List<String>>>> extractExamplesFromFeature(File featureFile)
+			throws IOException {
+		Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap = new HashMap<>();
+		List<String> lines = Files.readAllLines(featureFile.toPath());
+
+		String currentScenarioId = null;
+		List<String> headers = new ArrayList<>();
+		List<List<String>> valuesList = new ArrayList<>();
+
+		for (String line : lines) {
+			line = line.trim();
+
+			if (line.startsWith("Scenario Outline:")) {
+				currentScenarioId = slugify(line.substring("Scenario Outline:".length()).trim());
+				headers.clear();
+				valuesList.clear();
+			}
+
+			if (line.startsWith("|")) {
+				List<String> cells = Arrays.stream(line.split("\\|")).map(String::trim).filter(s -> !s.isEmpty())
+						.collect(Collectors.toList());
+
+				if (headers.isEmpty()) {
+					headers.addAll(cells);
+				} else {
+					valuesList.add(cells);
+				}
+			}
+
+			if (currentScenarioId != null && !headers.isEmpty() && !valuesList.isEmpty()) {
+				Map<String, Pair<List<String>, List<String>>> scenarioExamples = new HashMap<>();
+				for (int i = 0; i < valuesList.size(); i++) {
+					String key = currentScenarioId + ";;" + (i + 1);
+					scenarioExamples.put(key, ImmutablePair.of(headers, valuesList.get(i)));
+				}
+				exampleMap.put(featureFile.getName(), scenarioExamples);
+			}
+		}
+
+		return exampleMap;
+	}
+
+	private String slugify(String input) {
+		return input.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("-{2,}", "-").replaceAll("^-|-$", "");
+	}
+
 	private String cleanStackAndFooterLines(String raw) {
 		StringBuilder cleaned = new StringBuilder();
 		for (String line : raw.split("\r?\n")) {
@@ -560,11 +882,17 @@ public class TestCaseRunService {
 
 	private Map<String, Object> computeDiffSummary(List<Map<String, Object>> xmlComparisonDetails,
 			Set<Map<String, Object>> executedScenarios) {
+
 		int xmlDiffCount = xmlComparisonDetails.stream()
 				.mapToInt(detail -> ((List<?>) detail.getOrDefault("differences", List.of())).size()).sum();
 
+		// Count only real XML diff lines
 		int cucumberDiffCount = executedScenarios.stream()
-				.mapToInt(s -> ((List<?>) s.getOrDefault("parsedDifferences", List.of())).size()).sum();
+				.flatMap(s -> ((List<?>) s.getOrDefault("parsedDifferences", List.of())).stream())
+				.filter(Objects::nonNull).map(Object::toString).map(String::trim).filter(s -> !s.isEmpty())
+				.filter(line -> line.contains("comparing")) // Real XML diff lines include 'comparing'
+				.collect(Collectors.toSet()) // Remove duplicates
+				.size();
 
 		Map<String, Object> summary = new LinkedHashMap<>();
 		summary.put("xmlComparatorDiffCount", xmlDiffCount);

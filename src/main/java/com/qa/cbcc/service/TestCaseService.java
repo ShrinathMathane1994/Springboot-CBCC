@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.TestCaseDTO;
@@ -34,6 +35,8 @@ public class TestCaseService {
 	public TestCaseService() {
 	    this.objectMapper = new ObjectMapper();
 	    this.objectMapper.registerModule(new JavaTimeModule());
+	    //To Not Include ScenarioBlock as null in test case
+	    objectMapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
 	}
 
 

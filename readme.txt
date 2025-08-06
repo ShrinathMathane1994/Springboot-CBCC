@@ -49,10 +49,11 @@ OR http://localhost:8080/api/scenarios?tags=US
 #Create Test Case API 
 POST - http://localhost:8080/api/test-cases/create 
 Body(Payload) as form-data 
-inputFile Key Type as File 
-outputFile Key Type as File 
-data Key Type as Text 
-(e.g. {"tcName": "XML Scenario-1",
+"inputFile" Key Type as File 
+"outputFile" Key Type as File 
+"data" Key Type as Text 
+(e.g. 
+{"tcName": "XML Scenario-1",
   "description": "XML Comparison-1",
   "featureScenarios": [
     {
@@ -63,7 +64,8 @@ data Key Type as Text
   "country": "USA",
   "region": "North America",
   "pod": "Pod-01"
-})
+}
+)
 
 #Get Test Case API 
 GET - http://localhost:8080/api/test-cases - For All Test Cases
@@ -74,10 +76,11 @@ GET - http://localhost:8080/api/test-cases?region=IN&pod=Pod-2 - - For Specific 
 #Update Test Case API 
 PUT - http://localhost:8080/api/test-cases/{id}
 Body(Payload) as form-data 
-inputFile Key Type as File 
-outputFile Key Type as File 
-data Key Type as Text 
-(e.g. {"tcName": "XML Scenario-1-Modified",
+"inputFile" Key Type as File 
+"outputFile" Key Type as File 
+"data" Key Type as Text 
+(e.g. 
+{"tcName": "XML Scenario-1-Modified",
   "description": "XML Comparison-1-Modified",
   "featureScenarios": [
     {
@@ -88,7 +91,8 @@ data Key Type as Text
   "country": "UK",
   "region": "South America",
   "pod": "Pod-02"
-})
+}
+)
 
 #Delete Test Case API 
 DELETE - http://localhost:8080/api/test-cases/{id}/delete
