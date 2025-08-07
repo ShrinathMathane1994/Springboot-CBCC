@@ -1,86 +1,101 @@
-#Prerequisites
-Ensure the following are installed and enviroment path set
-JDK 11+
-Maven 3.6+
-Postgres 17+
 
-#Update Postgres DB Details change under 
-src\main\resources\application.properties file
-spring.datasource.url=jdbc:postgresql://localhost:5432/cbcc_db - Here cbcc_db is DB Name 
-spring.datasource.username=postgres - DB Username
-spring.datasource.password=admin - DB Pass
+📘 CBCC Spring Boot Project – README
 
-#Execute MigrationQuery_CBCC.txt file query in cbcc_db via PgAdmin4 GUI
+🛠️ Prerequisites
+Make sure the following tools are installed and available in your system's environment PATH:
 
-#For Make Server Live do this on Project root folder
-Open CMD and then execute below command
-mvn clean install 
-mvn spring-boot: run
+- JDK 11+
+- Maven 3.6+
+- PostgreSQL 17+
 
-#Get Git Config
-GET - http://localhost:8080/api/git-config
+🗂️ Database Configuration
+Edit the following file:
 
-#Update Git Config
-POST - http://localhost:8080/api/git-config
-Body as JSON
+src/main/resources/application.properties
+
+Update these PostgreSQL DB settings as per your local environment:
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/cbcc_db  # cbcc_db is your DB name
+spring.datasource.username=postgres                             # Your DB username
+spring.datasource.password=admin                                # Your DB password
+
+🔄 Run Migration Script
+Execute the SQL file MigrationQuery_CBCC.txt in your cbcc_db using PgAdmin4 or any PostgreSQL GUI.
+
+🚀 Run the Application
+From the project root folder, run the following commands:
+
+mvn clean install
+mvn spring-boot:run
+
+🔗 API Endpoints Overview
+
+🧬 Git Configuration
+- GET  /api/git-config
+- POST /api/git-config
+
+Body (JSON):
 {
-    "sourceType": "local",
-    "repoUrl": "https://github.com/ShrinathMathane1994/Springboot-CBCC.git",
-    "cloneDir": "features-repo",
-    "featurePath": "src/test/resources/features",
-    "branch": "testingv2",
-    "username": "",
-    "password": "",
-    "localPath": "src/test/resources/features",
-    "refreshInterval": 300000
+  "sourceType": "local",
+  "repoUrl": "https://github.com/ShrinathMathane1994/Springboot-CBCC.git",
+  "cloneDir": "features-repo",
+  "featurePath": "src/test/resources/features",
+  "branch": "testingv2",
+  "username": "",
+  "password": "",
+  "localPath": "src/test/resources/features",
+  "refreshInterval": 300000
 }
 
-#Sync Features Scenarios
-GET - http://localhost:8080/api/sync-features
+🔄 Sync Feature Files
+GET /api/sync-features
 
-#Get Methods API 
-GET - http://localhost:8080/api/tests/methods
+📑 Scenarios
+GET /api/scenarios?tags=
+GET /api/scenarios?tags=US,A2
 
-#Get Scenarios API 
-GET - http://localhost:8080/api/scenarios?tags= - For All Scenarios
-GET - http://localhost:8080/api/scenarios?tags=US,A2 - For Tag Specific Scenarios
-OR http://localhost:8080/api/scenarios?tags=US
+🔧 Methods
+GET /api/tests/methods
 
-#Create Test Case API 
-POST - http://localhost:8080/api/test-cases/create 
-Body(Payload) as form-data 
-"inputFile" Key Type as File 
-"outputFile" Key Type as File 
-"data" Key Type as Text 
-(e.g. 
-{"tcName": "XML Scenario-1",
+🧪 Test Case Management
+
+➕ Create Test Case
+POST /api/test-cases/create
+
+Payload: multipart/form-data
+- inputFile   → File
+- outputFile  → File
+- data        → Text
+
+Example data (Text):
+{
+  "tcName": "XML Scenario-1",
   "description": "XML Comparison-1",
   "featureScenarios": [
     {
       "feature": "compareXml.feature",
-      "scenarios": ["XML files have differences","XML files are identical"]
+      "scenarios": ["XML files have differences", "XML files are identical"]
     }
   ],
   "country": "USA",
   "region": "North America",
   "pod": "Pod-01"
 }
-)
 
-#Get Test Case API 
-GET - http://localhost:8080/api/test-cases - For All Test Cases
-GET - http://localhost:8080/api/test-cases/{id} - For Specific Test Case ID
-GET - http://localhost:8080/api/test-cases?country=US - For Specific Country
-GET - http://localhost:8080/api/test-cases?region=IN&pod=Pod-2 - - For Specific Region & Pod
+📥 Get Test Cases
+GET /api/test-cases
+GET /api/test-cases/{id}
+GET /api/test-cases?country=US
+GET /api/test-cases?region=IN&pod=Pod-2
 
-#Update Test Case API 
-PUT - http://localhost:8080/api/test-cases/{id}
-Body(Payload) as form-data 
-"inputFile" Key Type as File 
-"outputFile" Key Type as File 
-"data" Key Type as Text 
-(e.g. 
-{"tcName": "XML Scenario-1-Modified",
+✏️ Update Test Case
+PUT /api/test-cases/{id}
+
+Payload: multipart/form-data
+
+Example data (Text):
+{
+  "tcName": "XML Scenario-1-Modified",
   "description": "XML Comparison-1-Modified",
   "featureScenarios": [
     {
@@ -92,17 +107,66 @@ Body(Payload) as form-data
   "region": "South America",
   "pod": "Pod-02"
 }
-)
 
-#Delete Test Case API 
-DELETE - http://localhost:8080/api/test-cases/{id}/delete
+❌ Delete Test Case
+DELETE /api/test-cases/{id}/delete
 
-#Run Test Case API
-POST - http://localhost:8080/api/test-cases/run
-Body(Payload) as JSON
+▶️ Run Test Case
+POST /api/test-cases/run
+
+Payload:
 {
   "testCaseIds": [1]
-} 
+}
 
-#Get Test Case History API 
-GET - http://localhost:8080/api/test-cases/{id}/history
+🕓 Test Case History
+GET /api/test-cases/{id}/history
+
+🕓 Test Case History
+GET /api/test-cases/{id}/run-history
+GET /api/test-cases/{id}/run-history/latest - Latest Record Only
+
+📁 Download Input/Output Files
+GET /api/test-cases/{id}/download?fileType=input
+GET /api/test-cases/{id}/download?fileType=output
+
+💡 Tips for Frontend Developers
+
+1. File Uploads:
+   - Use `multipart/form-data` when sending inputFile, outputFile, and data fields.
+   - Ensure 'data' field is sent as a plain text string containing JSON.
+
+2. File Downloads:
+   - Trigger a file download by calling:
+     GET /api/test-cases/{id}/download?fileType=input
+     GET /api/test-cases/{id}/download?fileType=output
+
+3. Dynamic Filters:
+   - Use dropdowns or chips for country, region, pod filters.
+   - Combine query parameters like:
+     /api/test-cases?country=US&region=North&pod=Pod-01
+
+4. History Display:
+   - Call /api/test-cases/{id}/history to get full execution history.
+   - Call /api/test-cases/{id}/run-history/latest for the latest record.
+   - Sort histories by execution timestamp on the frontend if needed.
+
+5. Git Configuration UI:
+   - Provide input fields for repoUrl, branch, cloneDir, etc.
+   - Allow optional fields like username/password for private repos.
+
+6. JSON Editor:
+   - Use a JSON editor for complex "data" field inputs like featureScenarios.
+   - Validate JSON before sending.
+
+7. Error Handling:
+   - Most API errors return in the structure:
+     {
+       "error": "error title",
+       "details": "detailed error message"
+     }
+   - Handle gracefully and show detailed messages to users where appropriate.
+
+8. Response Display:
+   - Test case response contains metadata (id, tcName, description, timestamps).
+   - Show these in lists or detail views.

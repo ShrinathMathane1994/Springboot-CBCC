@@ -343,18 +343,18 @@ public class TestCaseRunService {
 //			runSummary.put("passedScenarioNames", passedNames);
 			List<Map<String, Object>> passedScenariosDetailed = new ArrayList<>();
 			for (Map<String, Object> exec : executedScenarios) {
-			    if ("Passed".equals(exec.get("status"))) {
-			        Map<String, Object> passedEntry = new LinkedHashMap<>();
-			        passedEntry.put("scenarioName", exec.get("scenarioName"));
-			        passedEntry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
+				if ("Passed".equals(exec.get("status"))) {
+					Map<String, Object> passedEntry = new LinkedHashMap<>();
+					passedEntry.put("scenarioName", exec.get("scenarioName"));
+					passedEntry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
 
-			        if ("Scenario Outline".equals(exec.get("scenarioType"))) {
-			            passedEntry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
-			            passedEntry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
-			        }
+					if ("Scenario Outline".equals(exec.get("scenarioType"))) {
+						passedEntry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
+						passedEntry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
+					}
 
-			        passedScenariosDetailed.add(passedEntry);
-			    }
+					passedScenariosDetailed.add(passedEntry);
+				}
 			}
 			runSummary.put("passedScenarioDetails", passedScenariosDetailed);
 
@@ -369,30 +369,67 @@ public class TestCaseRunService {
 
 			List<Map<String, Object>> failedReasons = new ArrayList<>();
 			for (Map<String, Object> exec : executedScenarios) {
-			    if ("Failed".equals(exec.get("status"))) {
-			        Map<String, Object> entry = new LinkedHashMap<>();
-			        List<String> parsedDiffs = (List<String>) exec.getOrDefault("parsedDifferences", List.of());
+				if ("Failed".equals(exec.get("status"))) {
+					Map<String, Object> entry = new LinkedHashMap<>();
+					List<String> parsedDiffs = (List<String>) exec.getOrDefault("parsedDifferences", List.of());
 
-			        entry.put("scenarioName", exec.get("scenarioName"));
-			        entry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
-			        
-			        // ✅ Optional: Add example header and values for Scenario Outline
-			        if ("Scenario Outline".equals(exec.get("scenarioType"))) {
-			            entry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
-			            entry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
-			        }
+					entry.put("scenarioName", exec.get("scenarioName"));
+					entry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
 
-			        entry.put("errors", exec.getOrDefault("errors", List.of()));        
-			        entry.put("parsedDifferences", parsedDiffs);
-			        entry.put("parsedDiffCount", parsedDiffs.size());
-			        failedReasons.add(entry);
-			    }
+					// ✅ Optional: Add example header and values for Scenario Outline
+					if ("Scenario Outline".equals(exec.get("scenarioType"))) {
+						entry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
+						entry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
+					}
+
+					entry.put("errors", exec.getOrDefault("errors", List.of()));
+					entry.put("parsedDifferences", parsedDiffs);
+					entry.put("parsedDiffCount", parsedDiffs.size());
+					failedReasons.add(entry);
+				}
 			}
 			outputLogMap.put("failedScenarioDetails", failedReasons);
 
-
 			history.setOutputLog(prettyWriter.writeValueAsString(outputLogMap));
-			history.setRawCucumberLog(formatRawLog(fullOutput));
+//			history.setRawCucumberLog(formatRawLog(fullOutput));
+			
+			List<String> fullOutputLines = Arrays.asList(fullOutput.split("\\R")); // split fullOutput into lines
+			List<String> trimmedLines = new ArrayList<>();
+
+			for (String line : fullOutputLines) {
+			    trimmedLines.add(line);
+			    if (line.matches("^\\d+m\\d+\\.\\d+s$")) {
+			        break; // Stop once time summary appears
+			    }
+			}
+
+			List<String> cleanedLines = cleanRawCucumberLog(trimmedLines);
+
+			// Remove trailing empty lines
+			while (!cleanedLines.isEmpty() && cleanedLines.get(cleanedLines.size() - 1).trim().isEmpty()) {
+			    cleanedLines.remove(cleanedLines.size() - 1);
+			}
+
+			// Reduce consecutive blank lines to max 1
+			List<String> finalLines = new ArrayList<>();
+			boolean previousBlank = false;
+			for (String line : cleanedLines) {
+			    if (line.trim().isEmpty()) {
+			        if (!previousBlank) {
+			            finalLines.add("");
+			            previousBlank = true;
+			        }
+			    } else {
+			        finalLines.add(line);
+			        previousBlank = false;
+			    }
+			}
+
+			String cleanedLog = String.join("\n", finalLines);
+			history.setRawCucumberLog(cleanedLog);
+
+
+
 			history.setUnexecutedScenarios(unexecuted.isEmpty() ? null : String.join(", ", unexecuted));
 			historyRepository.save(history);
 
@@ -993,6 +1030,7 @@ public class TestCaseRunService {
 	}
 
 	private Set<String> extractFailedScenariosFromFooter(String output) {
+
 		Set<String> failedScenarios = new HashSet<>();
 		boolean insideFailedBlock = false;
 
@@ -1020,6 +1058,75 @@ public class TestCaseRunService {
 		}
 
 		return failedScenarios;
+	}
+
+	private List<String> cleanRawCucumberLog(List<String> rawLines) {
+		List<String> cleanedLog = new ArrayList<>();
+		Set<String> seenBlocks = new HashSet<>();
+
+		List<String> currentBlock = new ArrayList<>();
+		boolean insideScenarioBlock = false;
+		boolean insideSummaryBlock = false;
+		List<String> summaryBlock = new ArrayList<>();
+
+		for (String rawLine : rawLines) {
+			// Remove ANSI codes
+			String line = rawLine.replaceAll("\u001B\\[[;\\d]*m", "");
+
+			// Start of a new scenario
+			if (line.trim().startsWith("Scenario") || line.trim().startsWith("Scenario Outline")) {
+				addBlockIfUnique(currentBlock, seenBlocks, cleanedLog);
+				currentBlock.clear();
+				insideScenarioBlock = true;
+			}
+
+			// Failed scenarios summary starts
+			if (line.trim().startsWith("Failed scenarios:")) {
+				addBlockIfUnique(currentBlock, seenBlocks, cleanedLog);
+				currentBlock.clear();
+				insideScenarioBlock = false;
+				insideSummaryBlock = true;
+			}
+
+			// Collect lines into summary block
+			if (insideSummaryBlock) {
+				if (line.trim().isEmpty()) {
+					insideSummaryBlock = false;
+					addBlockIfUnique(summaryBlock, seenBlocks, cleanedLog);
+					summaryBlock.clear();
+				} else {
+					summaryBlock.add(line);
+				}
+				continue;
+			}
+
+			// Capture scenario-related lines
+			if (insideScenarioBlock || line.trim().startsWith("Given ") || line.trim().startsWith("When ")
+					|| line.trim().startsWith("Then ") || line.trim().startsWith("And ")
+					|| line.contains("java.lang.AssertionError") || line.contains("at org.testng")
+					|| line.contains("at ✽.") || line.startsWith("file:///")) {
+				currentBlock.add(line);
+			} else if (!line.trim().isEmpty()) {
+				// Treat as independent non-scenario line
+				addBlockIfUnique(Collections.singletonList(line), seenBlocks, cleanedLog);
+			}
+		}
+
+		// Final flush
+		addBlockIfUnique(currentBlock, seenBlocks, cleanedLog);
+		addBlockIfUnique(summaryBlock, seenBlocks, cleanedLog);
+
+		return cleanedLog;
+	}
+
+	private void addBlockIfUnique(List<String> block, Set<String> seenBlocks, List<String> cleanedLog) {
+	    if (block == null || block.isEmpty()) return;
+
+	    String blockString = String.join("\n", block).trim();
+	    if (!blockString.isEmpty() && seenBlocks.add(blockString)) {
+	        cleanedLog.addAll(block);
+	        cleanedLog.add(""); // Add spacing between blocks for readability
+	    }
 	}
 
 }

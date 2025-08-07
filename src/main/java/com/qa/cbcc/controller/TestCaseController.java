@@ -1,5 +1,6 @@
 package com.qa.cbcc.controller;
 
+import java.io.File;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -7,18 +8,30 @@ import java.util.stream.Collectors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.TestCaseDTO;
+import com.qa.cbcc.dto.TestCaseHistoryDTO;
 import com.qa.cbcc.dto.TestCaseResponseDTO;
 import com.qa.cbcc.model.TestCase;
-import com.qa.cbcc.model.TestCaseHistory;
 import com.qa.cbcc.service.TestCaseService;
 
 @RestController
@@ -81,32 +94,29 @@ public class TestCaseController {
 
 	@GetMapping("/{id}")
 	public ResponseEntity<?> getTestCaseById(@PathVariable Long id) {
-	    logger.info("Fetching test case ID: {}", id);
-	    TestCase testCase = testCaseService.getTestCaseById(id);
-	    if (testCase == null) {
-	        logger.warn("Test case ID {} not found.", id);
-	        return ResponseEntity.status(404).body(Map.of("message", "Test case not found."));
-	    }
-	    return ResponseEntity.ok(testCaseService.toResponseDTO(testCase));
+		logger.info("Fetching test case ID: {}", id);
+		TestCase testCase = testCaseService.getTestCaseById(id);
+		if (testCase == null) {
+			logger.warn("Test case ID {} not found.", id);
+			return ResponseEntity.status(404).body(Map.of("message", "Test case not found."));
+		}
+		return ResponseEntity.ok(testCaseService.toResponseDTO(testCase));
 	}
-
 
 	// ✅ UPDATED: filter by country, region, pod
 	@GetMapping
-	public ResponseEntity<?> getAllTestCases(
-	        @RequestParam(required = false) String country,
-	        @RequestParam(required = false) String region,
-	        @RequestParam(required = false) String pod) {
+	public ResponseEntity<?> getAllTestCases(@RequestParam(required = false) String country,
+			@RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
 
-	    logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
-	    List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
+		logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
+		List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
 
-	    if (result.isEmpty()) {
-	        logger.warn("No test cases found with given filters.");
-	        return ResponseEntity.ok(Map.of("message", "No test cases found."));
-	    }
+		if (result.isEmpty()) {
+			logger.warn("No test cases found with given filters.");
+			return ResponseEntity.ok(Map.of("message", "No test cases found."));
+		}
 
-	    return ResponseEntity.ok(result);
+		return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/deleted")
@@ -142,21 +152,39 @@ public class TestCaseController {
 		}
 	}
 
+	//Old Method
+//	@GetMapping("/{id}/history")
+//	public ResponseEntity<?> getTestCaseHistory(@PathVariable Long id) {
+//		logger.info("Fetching history for test case ID: {}", id);
+//		List<TestCaseHistory> historyList = testCaseService.getTestCaseHistory(id);
+//
+//		try {
+//			ObjectMapper mapper = new ObjectMapper();
+//			mapper.registerModule(new JavaTimeModule());
+//			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+//			logger.info("History for test case ID {}: {}", id, mapper.writeValueAsString(historyList));
+//		} catch (Exception e) {
+//			logger.error("Failed to serialize history for logging: {}", e.getMessage(), e);
+//		}
+//		return ResponseEntity.ok(historyList);
+//	}
+
 	@GetMapping("/{id}/history")
 	public ResponseEntity<?> getTestCaseHistory(@PathVariable Long id) {
 		logger.info("Fetching history for test case ID: {}", id);
-		List<TestCaseHistory> historyList = testCaseService.getTestCaseHistory(id);
+
+		List<TestCaseHistoryDTO> dtoList = testCaseService.getTestCaseHistoryDTOs(id);
 
 		try {
 			ObjectMapper mapper = new ObjectMapper();
 			mapper.registerModule(new JavaTimeModule());
 			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-			logger.info("History for test case ID {}: {}", id, mapper.writeValueAsString(historyList));
+			logger.info("History DTO for test case ID {}: {}", id, mapper.writeValueAsString(dtoList));
 		} catch (Exception e) {
-			logger.error("Failed to serialize history for logging: {}", e.getMessage(), e);
+			logger.error("Failed to serialize history DTO for logging: {}", e.getMessage(), e);
 		}
 
-		return ResponseEntity.ok(historyList);
+		return ResponseEntity.ok(dtoList);
 	}
 
 	@PutMapping("/{id}/executed")
@@ -165,5 +193,51 @@ public class TestCaseController {
 		testCaseService.updateExecutionTime(id);
 		TestCase updated = testCaseService.getTestCaseById(id);
 		return ResponseEntity.ok(testCaseService.toResponseDTO(updated));
+	}
+	
+	@GetMapping("/{id}/download")
+	public ResponseEntity<?> downloadFile(
+	        @PathVariable Long id,
+	        @RequestParam String fileType // "input" or "output"
+	) {
+	    try {
+	        TestCase testCase = testCaseService.getTestCaseByIdIncludingInactive(id);
+	        if (testCase == null) {
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                    .body(Map.of("error", "Test case not found"));
+	        }
+
+	        String relativePath = fileType.equalsIgnoreCase("input")
+	                ? testCase.getInputFile()
+	                : testCase.getOutputFile();
+
+	        if (relativePath == null) {
+	            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                    .body(Map.of("error", fileType + " file not found for this test case"));
+	        }
+
+	        String baseDir = System.getProperty("user.dir") +
+	                File.separator + "src" + File.separator + "main" +
+	                File.separator + "resources" + File.separator;
+
+	        File file = new File(baseDir + relativePath);
+	        if (!file.exists()) {
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+	                    .body(Map.of("error", "File does not exist on server"));
+	        }
+
+	        Resource resource = new FileSystemResource(file);
+	        String contentDisposition = "attachment; filename=\"" + file.getName() + "\"";
+
+	        return ResponseEntity.ok()
+	                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+	                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+	                .body(resource);
+
+	    } catch (Exception e) {
+	        logger.error("Failed to download {} file for test case {}: {}", fileType, id, e.getMessage(), e);
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(Map.of("error", "Download failed", "details", e.getMessage()));
+	    }
 	}
 }

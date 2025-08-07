@@ -15,6 +15,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.TestCaseDTO;
+import com.qa.cbcc.dto.TestCaseHistoryDTO;
 import com.qa.cbcc.dto.TestCaseResponseDTO;
 import com.qa.cbcc.model.TestCase;
 import com.qa.cbcc.model.TestCaseHistory;
@@ -38,7 +39,6 @@ public class TestCaseService {
 	    //To Not Include ScenarioBlock as null in test case
 	    objectMapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
 	}
-
 
 	@Transactional
 	public TestCase saveTestCase(TestCaseDTO dto, MultipartFile inputFile, MultipartFile outputFile) {
@@ -83,11 +83,9 @@ public class TestCaseService {
 		}
 	}
 
-
 	public TestCase getTestCaseById(Long id) {
 	    return repository.findByIdTCAndIsActiveTrue(id).orElse(null);
 	}
-
 
 	public List<TestCase> getAllTestCases() {
 		return repository.findByIsActiveTrue();
@@ -127,8 +125,6 @@ public class TestCaseService {
 	    inputFile.transferTo(inputDest);
 	    outputFile.transferTo(outputDest);
 	}
-
-
 
 	@Transactional
 	public TestCase updateTestCase(Long id, TestCaseDTO dto, MultipartFile inputFile, MultipartFile outputFile) {
@@ -201,6 +197,30 @@ public class TestCaseService {
 		return historyRepository.save(history); // ✅ make sure you are saving it
 	}
 
+	public TestCaseHistoryDTO toHistoryDTO(TestCaseHistory history) {
+	    TestCaseHistoryDTO dto = new TestCaseHistoryDTO();
+	    dto.setId(history.getId());
+	    dto.setTcName(history.getTcName());
+	    dto.setDescription(history.getDescription());
+	    dto.setFeatureScenarioJson(history.getFeatureScenarioJson());
+	    dto.setInputFile(history.getInputFile());
+	    dto.setOutputFile(history.getOutputFile());
+	    dto.setModifiedOn(history.getModifiedOn());
+	    dto.setChangeType(history.getChangeType());
+	    dto.setCountry(history.getCountry());
+	    dto.setRegion(history.getRegion());
+	    dto.setPod(history.getPod());
+	    return dto;
+	}
+
+	public List<TestCaseHistoryDTO> getTestCaseHistoryDTOs(Long testCaseId) {
+	    List<TestCaseHistory> historyList = historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
+	    return historyList.stream()
+	            .map(this::toHistoryDTO)
+	            .collect(Collectors.toList());
+	}
+	
+	//Old Way to get History
 	public List<TestCaseHistory> getTestCaseHistory(Long testCaseId) {
 	    return historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
 	}
@@ -212,7 +232,6 @@ public class TestCaseService {
 	public TestCase getTestCaseByIdIncludingInactive(Long idTC) {
 	    return repository.findByIdTC(idTC).orElse(null);
 	}
-
 
 	public TestCaseResponseDTO toResponseDTO(TestCase testCase) {
 	    TestCaseResponseDTO dto = new TestCaseResponseDTO();

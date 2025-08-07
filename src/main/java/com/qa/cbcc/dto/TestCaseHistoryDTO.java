@@ -1,65 +1,25 @@
-package com.qa.cbcc.model;
+package com.qa.cbcc.dto;
 
 import java.time.LocalDateTime;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
+public class TestCaseHistoryDTO {
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
-@Entity
-@Table(name = "test_case_history")
-public class TestCaseHistory {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "test_case_id", nullable = false)
-    @JsonIgnore
-    private TestCase testCase;
-
     private String tcName;
     private String description;
-    
-    @Column(name = "feature_scenario_json", columnDefinition = "TEXT")
     private String featureScenarioJson;
-    
     private String inputFile;
     private String outputFile;
     private LocalDateTime modifiedOn;
     private String changeType;
-
     private String country;
     private String region;
     private String pod;
 
-    public TestCaseHistory() {}
-
-    public TestCaseHistory(TestCase testCase, String tcName, String description,
-                           String featureScenarioJson, String inputFile,
-                           String outputFile, LocalDateTime modifiedOn,
-                           String changeType, String country, String region, String pod) {
-        this.testCase = testCase;
-        this.tcName = tcName;
-        this.description = description;
-        this.featureScenarioJson = featureScenarioJson;
-        this.inputFile = inputFile;
-        this.outputFile = outputFile;
-        this.modifiedOn = modifiedOn;
-        this.changeType = changeType;
-        this.country = country;
-        this.region = region;
-        this.pod = pod;
+    public TestCaseHistoryDTO() {
     }
+
+    // Getters and Setters
 
     public Long getId() {
         return id;
@@ -67,14 +27,6 @@ public class TestCaseHistory {
 
     public void setId(Long id) {
         this.id = id;
-    }
-
-    public TestCase getTestCase() {
-        return testCase;
-    }
-
-    public void setTestCase(TestCase testCase) {
-        this.testCase = testCase;
     }
 
     public String getTcName() {
@@ -156,4 +108,4 @@ public class TestCaseHistory {
     public void setPod(String pod) {
         this.pod = pod;
     }
-} 
+}
