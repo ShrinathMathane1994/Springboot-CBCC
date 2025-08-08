@@ -125,7 +125,7 @@ Payload:
 🕓 Test Case History
 GET /api/test-cases/{id}/history
 
-🕓 Test Case History
+🕓 Test Run Case History
 GET /api/test-cases/{id}/run-history
 GET /api/test-cases/{id}/run-history/latest - Latest Record Only
 
