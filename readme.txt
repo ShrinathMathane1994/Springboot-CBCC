@@ -53,6 +53,9 @@ GET /api/sync-features
 📑 Scenarios
 GET /api/scenarios?tags=
 GET /api/scenarios?tags=US,A2
+OR
+GET http://localhost:8080/api/scenarios/filter - For All Scenarios
+GET http://localhost:8080/api/scenarios/filter?country=UK&region=North-America&pod=Pod-01 - For Filtering
 
 🔧 Methods
 GET /api/tests/methods

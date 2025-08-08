@@ -1,3 +1,4 @@
+@UK @North-America @Pod-01
 Feature: Compare two XML files for structural and content equality using Scenario Outline
 
   Scenario Outline: Compare two XML files for equality

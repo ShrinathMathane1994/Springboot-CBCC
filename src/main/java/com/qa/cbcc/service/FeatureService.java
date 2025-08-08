@@ -112,14 +112,21 @@ public class FeatureService {
 						for (int i = 0; i < lines.size(); i++) {
 							String line = lines.get(i).trim();
 
+//							if (line.startsWith("@")) {
+//								List<String> tags = Arrays.asList(line.split("\\s+"));
+//								tagBuffer.addAll(tags);
+//								if (currentFeature == null) {
+//									featureLevelTags.addAll(tags);
+//								}
+//							} else if (line.startsWith("Feature:")) {
+//								currentFeature = line.substring("Feature:".length()).trim();}
 							if (line.startsWith("@")) {
 								List<String> tags = Arrays.asList(line.split("\\s+"));
 								tagBuffer.addAll(tags);
-								if (currentFeature == null) {
-									featureLevelTags.addAll(tags);
-								}
 							} else if (line.startsWith("Feature:")) {
 								currentFeature = line.substring("Feature:".length()).trim();
+								featureLevelTags = new LinkedHashSet<>(tagBuffer); // ← capture tags above the Feature
+								tagBuffer.clear(); // ← reset tagBuffer to only capture scenario-level tags
 							} else if (line.startsWith("Scenario") && line.contains(":")) {
 								String scenarioName = line.substring(line.indexOf(":") + 1).trim();
 								String scenarioType = line.startsWith("Scenario Outline") ? "Scenario Outline"
@@ -223,6 +230,28 @@ public class FeatureService {
 				.filter(dto -> tagsToMatch.stream()
 						.allMatch(tag -> dto.getTags().stream().anyMatch(t -> t.equalsIgnoreCase("@" + tag))))
 				.collect(Collectors.toList());
+	}
+
+	public List<ScenarioDTO> getScenariosByTags(Map<String, String> tagFilters) throws IOException {
+		if (cachedScenarios.isEmpty()) {
+			syncGitAndParseFeatures();
+		}
+
+		return cachedScenarios.stream().filter(dto -> {
+			List<String> tags = dto.getTags().stream().map(String::toLowerCase).collect(Collectors.toList());
+
+			// Allow both key:value and raw tag matching
+			return tagFilters.entrySet().stream().allMatch(entry -> {
+				String key = entry.getKey().toLowerCase();
+				String value = entry.getValue().toLowerCase();
+
+				// Check both @key:value and raw @value
+				String formatted1 = "@" + key + ":" + value;
+				String formatted2 = "@" + value;
+
+				return tags.contains(formatted1) || tags.contains(formatted2);
+			});
+		}).collect(Collectors.toList());
 	}
 
 	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex) {

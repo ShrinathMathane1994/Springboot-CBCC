@@ -1,6 +1,7 @@
 package com.qa.cbcc.controller;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,13 +27,13 @@ import com.qa.cbcc.service.FeatureService;
 @RequestMapping("/api")
 public class FeatureController {
 
-    private static final Logger logger = LogManager.getLogger(FeatureController.class);
-    private final FeatureService featureService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+	private static final Logger logger = LogManager.getLogger(FeatureController.class);
+	private final FeatureService featureService;
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public FeatureController(FeatureService featureService) {
-        this.featureService = featureService;
-    }
+	public FeatureController(FeatureService featureService) {
+		this.featureService = featureService;
+	}
 
     @GetMapping("/scenarios")
     public ResponseEntity<?> getScenarios(@RequestParam List<String> tags) {
@@ -74,38 +75,75 @@ public class FeatureController {
         }
     }
 
-    @GetMapping("/sync-features")
-    public ResponseEntity<Map<String, Object>> syncFeatures() {
-        try {
-            featureService.syncGitAndParseFeatures();
+	@GetMapping("/scenarios/filter")
+	public ResponseEntity<?> getScenariosByMultiTags(@RequestParam(required = false) String country,
+			@RequestParam(required = false) String region, @RequestParam(required = false) String pod,
+			@RequestParam(required = false) String team, @RequestParam(required = false) String env) {
+		Map<String, String> tagFilters = new HashMap<>();
+		if (country != null)
+			tagFilters.put("country", country.toLowerCase());
+		if (region != null)
+			tagFilters.put("region", region.toLowerCase());
+		if (pod != null)
+			tagFilters.put("pod", pod.toLowerCase());
+		if (env != null)	
+			tagFilters.put("env", env.toLowerCase());
+		if (team != null)
+			tagFilters.put("team", team.toLowerCase());
 
-            Map<String, Object> response = new LinkedHashMap<>();
-            response.put("status", 200);
-            response.put("message", "Features synced and parsed successfully");
-            response.put("totalScenarios", featureService.getCachedScenarios().size());
-            response.put("source", featureService.getFeatureSource()); // ✅ included
+		logger.info("Fetching scenarios with tag filters: {}", tagFilters);
+		try {
+			List<ScenarioDTO> scenarios = featureService.getScenariosByTags(tagFilters); // ✅ Now correct
 
-            return ResponseEntity.ok(response);
+			if (scenarios.isEmpty()) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND)
+						.body(Map.of("status", 404, "message", "No scenarios found for provided filters"));
+			}
 
-        } catch (IOException e) {
-            logger.error("Error during feature sync: {}", e.getMessage(), e);
-            Map<String, Object> error = new LinkedHashMap<>();
-            error.put("status", 500);
-            error.put("message", "Failed to sync features: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
-    }
-    
-    @GetMapping("/git-config")
-    public ResponseEntity<GitConfigDTO> getGitConfig() {
-        return ResponseEntity.ok(featureService.getGitConfig());
-    }
-    
-    @PostMapping("/git-config")
-    public ResponseEntity<Map<String, Object>> updateGitConfig(@RequestBody GitConfigDTO configDTO) {
-        Map<String, Object> response = featureService.updateGitConfig(configDTO);
-        int status = (int) response.getOrDefault("status", 500);
-        return ResponseEntity.status(status).body(response);
-    }
+			return ResponseEntity.ok(scenarios);
+		} catch (IOException e) {
+			logger.error("IO error fetching scenarios: {}", e.getMessage());
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(Map.of("status", 500, "message", "Error processing feature files"));
+		} catch (Exception e) {
+			logger.error("Unexpected error: {}", e.getMessage());
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(Map.of("status", 500, "message", "Internal server error"));
+		}
+	}
+
+	@GetMapping("/sync-features")
+	public ResponseEntity<Map<String, Object>> syncFeatures() {
+		try {
+			featureService.syncGitAndParseFeatures();
+
+			Map<String, Object> response = new LinkedHashMap<>();
+			response.put("status", 200);
+			response.put("message", "Features synced and parsed successfully");
+			response.put("totalScenarios", featureService.getCachedScenarios().size());
+			response.put("source", featureService.getFeatureSource()); // ✅ included
+
+			return ResponseEntity.ok(response);
+
+		} catch (IOException e) {
+			logger.error("Error during feature sync: {}", e.getMessage(), e);
+			Map<String, Object> error = new LinkedHashMap<>();
+			error.put("status", 500);
+			error.put("message", "Failed to sync features: " + e.getMessage());
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+		}
+	}
+
+	@GetMapping("/git-config")
+	public ResponseEntity<GitConfigDTO> getGitConfig() {
+		return ResponseEntity.ok(featureService.getGitConfig());
+	}
+
+	@PostMapping("/git-config")
+	public ResponseEntity<Map<String, Object>> updateGitConfig(@RequestBody GitConfigDTO configDTO) {
+		Map<String, Object> response = featureService.updateGitConfig(configDTO);
+		int status = (int) response.getOrDefault("status", 500);
+		return ResponseEntity.status(status).body(response);
+	}
 
 }
