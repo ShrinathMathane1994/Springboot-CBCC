@@ -1,0 +1,457 @@
+{
+	"info": {
+		"_postman_id": "45846184-c7509352-c4b2-4599-a4f1-1ceabb69309f",
+		"name": "CBCC",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Test Case",
+			"id": "45846184-fd4e79b9-5332-4242-88a9-43a647df347d",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {},
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "inputFile",
+							"type": "file",
+							"uuid": "03d4a419-a485-4e99-b54d-18e7e67960b2",
+							"src": "/D:/AUtomation/Eclipse2/CBCC/src/main/resources/testData/input.json"
+						},
+						{
+							"key": "outputFile",
+							"type": "file",
+							"uuid": "7f0c3950-60f5-4535-86c6-8010e9b55dd2",
+							"src": "/D:/AUtomation/Eclipse2/CBCC/src/main/resources/testData/output.json"
+						},
+						{
+							"key": "data",
+							"value": "{\"tcName\": \"My Multi Scenario Test3\",\n  \"description\": \"Covers login/logout scenarios2\",\n  \"featureScenarios\": [\n    {\n      \"feature\": \"login.feature\",\n      \"scenarios\": [\"Valid Login\", \"Invalid Login\"]\n    },\n    {\n      \"feature\": \"logout.feature\",\n      \"scenarios\": [\"Successful Logout\"]\n    }\n  ]\n}",
+							"type": "text",
+							"uuid": "30e348ff-1cfd-49cc-b22d-b6267a5dc9b8"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/create",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"create"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Run Test Cases",
+			"id": "45846184-b5dbfac2-5f0b-404b-85e0-af998d327320",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"testCaseIds\": [1,2]\r\n}\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/run",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"run"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Scenarios",
+			"id": "45846184-b741435d-be71-4233-b0c6-14ba5790e3eb",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/scenarios?tags=APAC",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"scenarios"
+					],
+					"query": [
+						{
+							"key": "tags",
+							"value": "APAC"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Scenarios Using Parameters",
+			"id": "45846184-2c5bde0e-039e-4cda-a702-7487b8d0156d",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/scenarios/filter?pod=Pod-01",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"scenarios",
+						"filter"
+					],
+					"query": [
+						{
+							"key": "pod",
+							"value": "Pod-01"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Test Cases",
+			"id": "45846184-7f8d0fd8-9178-457d-8d68-7e444eb30852",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Methods",
+			"id": "45846184-df954a00-7274-4638-87a1-4cfe1d079e23",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/tests/methods",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"tests",
+						"methods"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Test Case",
+			"id": "45846184-605ed6c0-a26e-4ddc-9e84-0ca22a47105e",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/3/delete",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"3",
+						"delete"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Test Case History",
+			"id": "45846184-518b2ded-871d-4b7c-8126-59b632a87387",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/5/history",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"5",
+						"history"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Test Case",
+			"id": "45846184-b82cf98b-2c97-462e-a2bb-ce25ee76c546",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "inputFile",
+							"type": "file",
+							"uuid": "6d6737f4-5564-48e4-acc1-2ea23229d65b",
+							"src": "/D:/AUtomation/Eclipse2/CBCC/src/main/resources/testData/input.xml"
+						},
+						{
+							"key": "outputFile",
+							"type": "file",
+							"uuid": "a053b609-7e40-4d8e-b088-596e8f7bfadf",
+							"src": "/D:/AUtomation/Eclipse2/CBCC/src/main/resources/testData/output.xml"
+						},
+						{
+							"key": "data",
+							"value": "{\"tcName\": \"XML Scenario_Modified\",\n  \"description\": \"XML Comparison_Modified\",\n  \"featureScenarios\": [\n    {\n      \"feature\": \"compareXml.feature\",\n      \"scenarios\": [\"XML files are identical\", \"XML files have differences\"]\n    }\n  ]\n}",
+							"type": "text",
+							"uuid": "15e35f07-dd10-4212-bd90-5d8224a9aca2"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/2",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"2"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "SyncGitFeatures",
+			"id": "45846184-fcd2517a-9bf1-4292-a50c-656613dd898c",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/sync-features",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"sync-features"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Git Config",
+			"id": "45846184-b2b2581c-c82c-4345-9444-7a30a6e845c5",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/git-config",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"git-config"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Git Config",
+			"id": "45846184-9e49d2a8-4c6a-403d-a088-15fae99b7a50",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"sourceType\": \"local\",\r\n    \"repoUrl\": \"https://github.com/ShrinathMathane1994/Springboot-CBCC.git\",\r\n    \"cloneDir\": \"features-repo\",\r\n    \"featurePath\": \"src/test/resources/features\",\r\n    \"branch\": \"testingv2\",\r\n    \"username\": \"\",\r\n    \"password\": \"\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/git-config",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"git-config"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Test Case Run History",
+			"id": "45846184-989ecdf0-691b-4a20-9827-bc4e93a972e3",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/5/run-history",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"5",
+						"run-history"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Last Test Run History",
+			"id": "45846184-30107594-fb59-4832-bbcb-36ac874faeee",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/5/run-history/latest",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"5",
+						"run-history",
+						"latest"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
