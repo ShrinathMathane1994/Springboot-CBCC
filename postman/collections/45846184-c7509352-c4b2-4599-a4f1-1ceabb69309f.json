@@ -92,7 +92,7 @@
 			"response": []
 		},
 		{
-			"name": "Get Scenarios",
+			"name": "Get Scenarios Using Filter",
 			"id": "45846184-b741435d-be71-4233-b0c6-14ba5790e3eb",
 			"protocolProfileBehavior": {
 				"disableBodyPruning": true
