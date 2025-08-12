@@ -452,6 +452,39 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Last Execution Report",
+			"id": "45846184-4544f6ba-0811-465c-9e9f-8827ee8b194e",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"testCaseIds\": [1,2]\r\n}\r\n"
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/test-cases/5/html-latest",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"test-cases",
+						"5",
+						"html-latest"
+					]
+				}
+			},
+			"response": []
 		}
 	]
 }
