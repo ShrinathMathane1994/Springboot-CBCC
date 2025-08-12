@@ -35,6 +35,7 @@ public class CucumberLogUtils {
 		        currentGroup.setScenario(trimmedLine);
 		        currentGroup.setLog(new ArrayList<>());
 		        groupedLogs.add(currentGroup);
+		        continue;
 		    }
 
 		    if (currentGroup != null) {

@@ -7,6 +7,7 @@ import lombok.Data;
 
 @Data
 public class ScenarioDTO {
+	private int indextNo;
     private String feature;
     private String scenario;
     private String type;
@@ -15,6 +16,12 @@ public class ScenarioDTO {
     private List<String> tags;
     private List<ExampleDTO> examples = new ArrayList<>();
     
+	public int getIndextNo() {
+		return indextNo;
+	}
+	public void setIndextNo(int indextNo) {
+		this.indextNo = indextNo;
+	}
 	public String getFeature() {
 		return feature;
 	}

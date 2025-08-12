@@ -160,6 +160,10 @@ public class FeatureService {
 						throw new RuntimeException("Failed to read file: " + path + ", reason: " + e.getMessage());
 					}
 				});
+		
+//		for (int j = 0; j < scenarios.size(); j++) {
+//			scenarios.get(j).setIndextNo(j+1);
+//		}
 
 		this.cachedScenarios = scenarios;
 		this.tagIndex.clear();
@@ -226,33 +230,52 @@ public class FeatureService {
 			syncGitAndParseFeatures();
 		}
 
-		return cachedScenarios.stream()
+		List<ScenarioDTO> filtered = cachedScenarios.stream()
 				.filter(dto -> tagsToMatch.stream()
 						.allMatch(tag -> dto.getTags().stream().anyMatch(t -> t.equalsIgnoreCase("@" + tag))))
 				.collect(Collectors.toList());
+		
+		for (int i = 0; i < filtered.size(); i++) {
+	        filtered.get(i).setIndextNo(i + 1);
+	    }
+
+	    return filtered;
 	}
 
 	public List<ScenarioDTO> getScenariosByTags(Map<String, String> tagFilters) throws IOException {
-		if (cachedScenarios.isEmpty()) {
-			syncGitAndParseFeatures();
-		}
+	    if (cachedScenarios.isEmpty()) {
+	        syncGitAndParseFeatures();
+	    }
 
-		return cachedScenarios.stream().filter(dto -> {
-			List<String> tags = dto.getTags().stream().map(String::toLowerCase).collect(Collectors.toList());
+	    // Filter first
+	    List<ScenarioDTO> filtered = cachedScenarios.stream()
+	            .filter(dto -> {
+	                List<String> tags = dto.getTags().stream()
+	                        .map(String::toLowerCase)
+	                        .collect(Collectors.toList());
 
-			// Allow both key:value and raw tag matching
-			return tagFilters.entrySet().stream().allMatch(entry -> {
-				String key = entry.getKey().toLowerCase();
-				String value = entry.getValue().toLowerCase();
+	                // Allow both key:value and raw tag matching
+	                return tagFilters.entrySet().stream().allMatch(entry -> {
+	                    String key = entry.getKey().toLowerCase();
+	                    String value = entry.getValue().toLowerCase();
 
-				// Check both @key:value and raw @value
-				String formatted1 = "@" + key + ":" + value;
-				String formatted2 = "@" + value;
+	                    // Check both @key:value and raw @value
+	                    String formatted1 = "@" + key + ":" + value;
+	                    String formatted2 = "@" + value;
 
-				return tags.contains(formatted1) || tags.contains(formatted2);
-			});
-		}).collect(Collectors.toList());
+	                    return tags.contains(formatted1) || tags.contains(formatted2);
+	                });
+	            })
+	            .collect(Collectors.toList());
+
+	    // Re-index for the filtered list
+	    for (int i = 0; i < filtered.size(); i++) {
+	        filtered.get(i).setIndextNo(i + 1);
+	    }
+
+	    return filtered;
 	}
+
 
 	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex) {
 		List<ExampleDTO> examples = new ArrayList<>();
