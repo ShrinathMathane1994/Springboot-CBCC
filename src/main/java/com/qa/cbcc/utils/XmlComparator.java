@@ -1,16 +1,17 @@
 package com.qa.cbcc.utils;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xmlunit.builder.DiffBuilder;
 import org.xmlunit.builder.Input;
 import org.xmlunit.diff.Diff;
 import org.xmlunit.diff.Difference;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class XmlComparator {
 
@@ -45,7 +46,25 @@ public class XmlComparator {
             }
 
         } catch (Exception e) {
-            result.append("❌ Error comparing XML files: ").append(e.getMessage());
+        	// Convert paths to relative for display
+            String relativeFile1 = toRelativePath(filePath1);
+            String relativeFile2 = toRelativePath(filePath2);
+
+            // Extract only the reason from the exception message (remove absolute paths & file names)
+            String cleanedMessage = e.getMessage();
+            int idx = cleanedMessage.indexOf('(');
+            if (idx != -1 && cleanedMessage.endsWith(")")) {
+                // If message is like: "D:\path\file.xml (reason)"
+                cleanedMessage = cleanedMessage.substring(idx + 1, cleanedMessage.length() - 1);
+            }
+
+            result.append("❌ Error comparing XML files: ")
+                  .append(relativeFile1)
+                  .append(" vs ")
+                  .append(relativeFile2)
+                  .append(" (")
+                  .append(cleanedMessage)
+                  .append(")");
         }
 
         // 🔐 Only log once per thread to avoid duplication
@@ -55,5 +74,10 @@ public class XmlComparator {
         }
 
         return result.toString();
+    }
+    
+    private static String toRelativePath(String absolutePath) {
+        String base = Paths.get("src", "main", "resources").toAbsolutePath().toString();
+        return absolutePath.replace(base + File.separator, "").replace("\\", "/");
     }
 }
