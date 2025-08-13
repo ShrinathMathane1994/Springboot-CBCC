@@ -311,20 +311,20 @@ public class TestCaseReportService {
 	    List<Map<String, Object>> unexec = extractScenarioList(dto.getOutputLog(), "unexecutedScenarioDetails");
 
 	    // If not found, check for "unexecutedScenarioReasons"
-	    if (unexec.isEmpty() && dto.getOutputLog() instanceof Map<?, ?> map) {
+	    if (unexec.isEmpty() && dto.getOutputLog() instanceof Map) {
+	        Map<?, ?> map = (Map<?, ?>) dto.getOutputLog();
 	        Object reasonsList = map.get("unexecutedScenarioReasons");
-	        if (reasonsList instanceof List<?>) {
+	        if (reasonsList instanceof List) {
 	            unexec = (List<Map<String, Object>>) reasonsList;
 	        }
 	    }
-
 	    if (unexec.isEmpty()) {
-	        return noScenarioAligned("No unexecuted scenarios", 2);
+	        return noScenarioAligned("No unexecuted scenarios", 5);
 	    }
 
 	    StringBuilder sb = new StringBuilder(
 	        "<table class='scenario-table'><colgroup>" +
-	        "<col style='width:60%'><col style='width:40%'>" +
+	        "<col style='width:75%'><col style='width:40%'>" +
 	        "</colgroup>")
 	        .append("<tr><th>Scenario</th><th>Errors</th></tr>");
 
@@ -441,23 +441,28 @@ public class TestCaseReportService {
 
 	@SuppressWarnings("unchecked")
 	private List<Map<String, Object>> extractScenarioList(Object outputLog, String key) {
-		if (outputLog instanceof Map<?, ?> map) {
-			// Check top-level key
-			Object list = map.get(key);
-			if (list instanceof List<?>) {
-				return (List<Map<String, Object>>) list;
-			}
-			// ✅ Check inside runSummary
-			Object runSummary = map.get("runSummary");
-			if (runSummary instanceof Map<?, ?> summary) {
-				Object innerList = summary.get(key);
-				if (innerList instanceof List<?>) {
-					return (List<Map<String, Object>>) innerList;
-				}
-			}
-		}
-		return Collections.emptyList();
+	    if (outputLog instanceof Map) {
+	        Map<?, ?> map = (Map<?, ?>) outputLog;
+
+	        // Check top-level key
+	        Object list = map.get(key);
+	        if (list instanceof List) {
+	            return (List<Map<String, Object>>) list;
+	        }
+
+	        // ✅ Check inside runSummary
+	        Object runSummary = map.get("runSummary");
+	        if (runSummary instanceof Map) {
+	            Map<?, ?> summary = (Map<?, ?>) runSummary;
+	            Object innerList = summary.get(key);
+	            if (innerList instanceof List) {
+	                return (List<Map<String, Object>>) innerList;
+	            }
+	        }
+	    }
+	    return Collections.emptyList();
 	}
+
 
 	private String filenameFromPath(String p) {
 		if (p == null)
