@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,15 +29,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -58,6 +59,9 @@ public class TestCaseRunService {
 	@Autowired
 	private FeatureService featureService;
 
+	@Value("${cleanup.temp.feature:true}")
+	private boolean cleanupTempFeature;
+
 	private final TestCaseRepository testCaseRepository;
 	private final TestCaseRunHistoryRepository historyRepository;
 	private final ObjectMapper objectMapper;
@@ -78,6 +82,14 @@ public class TestCaseRunService {
 			logger.error("Error walking feature directory", e);
 			return Optional.empty();
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private List<String> safeList(Object obj) {
+		if (obj instanceof List<?>) {
+			return ((List<?>) obj).stream().map(String::valueOf).collect(Collectors.toList());
+		}
+		return new ArrayList<>();
 	}
 
 	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) throws Exception {
@@ -120,7 +132,7 @@ public class TestCaseRunService {
 							if (!block.isBlank()) {
 								blocks.add(block);
 								scenarioToFeatureMap.put(scenarioName,
-										Paths.get(featureFilePath).getFileName().toString()); // `featurePathOpt`
+										Paths.get(featureFilePath).getFileName().toString());
 							}
 						} catch (IOException e) {
 							logger.error("Error reading feature file: {}", featureFilePath, e);
@@ -134,8 +146,28 @@ public class TestCaseRunService {
 			Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
 
 			// 1. Generate temporary feature file from TestCaseDTO
-			File featureFile = generateTempFeatureFile(testCase);
-			File jsonReportFile = File.createTempFile("cucumber-report", ".json");
+	        File featureFile = generateTempFeatureFile(testCase);
+	        File jsonReportFile = File.createTempFile("cucumber-report", ".json");
+
+			// Create a temp folder inside project directory if not exists
+//			Path tempDir = Paths.get(System.getProperty("user.dir"), "temp");
+//			if (!Files.exists(tempDir)) {
+//				Files.createDirectories(tempDir);
+//			}
+//			String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+//			File featureFile = tempDir.resolve("testcase_" + testCase.getTcId() + "_" + timestamp + ".feature")
+//					.toFile();
+//			try (FileWriter writer = new FileWriter(featureFile)) {
+//				writer.write(generateTempFeatureContent(testCase));
+//			}
+//
+//			File jsonReportFile = Paths.get(tempDir.toString(), "cucumber-report_" + testCase.getTcId() + ".json")
+//					.toFile();
+
+			// Keep mapping for replacement
+			Map<String, String> tempPathMapping = new HashMap<>();
+			tempPathMapping.put(featureFile.getAbsolutePath(),
+					featureToPathMap.values().stream().findFirst().orElse(featureFile.getAbsolutePath()));
 
 			// 2. Setup Cucumber command-line arguments
 			String[] argv = new String[] { "--glue", "com.qa.cbcc.stepdefinitions", featureFile.getAbsolutePath(),
@@ -155,16 +187,29 @@ public class TestCaseRunService {
 			} finally {
 				System.out.flush();
 				System.setOut(originalOut);
-				if (featureFile.exists())
-					featureFile.delete();
+				if (cleanupTempFeature && featureFile.exists()) {
+					if (!featureFile.delete()) {
+						logger.warn("Could not delete temp feature file: {}", featureFile.getAbsolutePath());
+					} else {
+						logger.info("Deleted temp feature file: {}", featureFile.getAbsolutePath());
+					}
+				}
+
 			}
 
 			String fullOutput = baos.toString();
+
+			// ✅ Replace temp paths with actual feature paths in output
+			for (Map.Entry<String, String> entry : tempPathMapping.entrySet()) {
+				String tempPath = entry.getKey().replace("\\", "/");
+				String realPath = entry.getValue().replace("\\", "/");
+				fullOutput = fullOutput.replace(tempPath, realPath);
+			}
+
 			logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
 
 			// 5. Parse the generated JSON report
 			executedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
-//			Set<Map<String, Object>> executedScenarios = parseCucumberJson(jsonFile, exampleLookup, featureToPathMap);
 
 			if (jsonReportFile.exists())
 				jsonReportFile.delete();
@@ -172,10 +217,8 @@ public class TestCaseRunService {
 			// 6. Extract scenario names from executedScenarios
 			Set<String> executedScenarioNames = executedScenarios.stream()
 					.map(s -> s.get("scenarioName").toString().trim())
-					.map(name -> name.replaceAll("\\s*\\[example #[0-9]+\\]$", "")) // strip example suffix
-					.collect(Collectors.toSet());
+					.map(name -> name.replaceAll("\\s*\\[example #[0-9]+\\]$", "")).collect(Collectors.toSet());
 
-			// Ensure declared names match example format: "[example #1]", "[example #2]"
 			Set<String> declaredScenarioNames = testCase.getFeatureScenarios().stream()
 					.flatMap(fs -> fs.getScenarios().stream()).map(String::trim).collect(Collectors.toSet());
 
@@ -183,10 +226,6 @@ public class TestCaseRunService {
 					.filter(declared -> executedScenarioNames.stream().noneMatch(
 							executed -> executed.equals(declared) || executed.startsWith(declared + " [example")))
 					.collect(Collectors.toSet());
-
-			if (!unexecuted.isEmpty()) {
-				logger.warn("The following scenarios were not executed: {}", unexecuted);
-			}
 
 			List<Map<String, Object>> unexecutedList = new ArrayList<>();
 			for (String scenarioName : unexecuted) {
@@ -226,43 +265,6 @@ public class TestCaseRunService {
 			TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
 			String inputPath = entity != null ? entity.getInputFile() : null;
 			String outputPath = entity != null ? entity.getOutputFile() : null;
-			// Old Code
-//			List<Map<String, Object>> xmlComparisonDetails = new ArrayList<>();
-//
-//			for (Map<String, Object> scenario : executedScenarios) {
-//			    String featureName = (String) scenario.get("featureFileName");
-//			    if (featureName == null) continue;
-//
-//			    Map<String, Object> xmlDetail = buildXmlComparisonDetails(
-//			        inputPath,
-//			        outputPath,
-//			        Paths.get(featureName).getFileName().toString(), // Just filename
-//			        Collections.singleton(scenario), // Single scenario at a time
-//			        objectMapper
-//			    );
-//
-//			    // Unexecuted logic per scenario (optional, or move outside this loop)
-//			    List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
-//			        String name = (String) e.get("scenarioName");
-//			        return testCase.getFeatureScenarios().stream()
-//			                .filter(fs -> fs.getScenarios().contains(name))
-//			                .map(TestCaseDTO.FeatureScenario::getFeature)
-//			                .anyMatch(f -> f.equals(Paths.get(featureName).getFileName().toString()));
-//			    }).collect(Collectors.toList());
-//
-//			    if (!unexecutedForFeature.isEmpty()) {
-//			        xmlDetail.put("unexecutedScenarios", unexecutedForFeature);
-//			    }
-//
-//			    int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences"))
-//			            .map(d -> ((List<?>) d).size())
-//			            .orElse(0);
-//
-//			    xmlDetail.put("diffCount", diffCount);
-//			    xmlDetail.put("scenarioName", scenario.get("scenarioName"));
-//
-//			    xmlComparisonDetails.add(xmlDetail);
-//			}
 
 			List<Map<String, Object>> xmlComparisonDetails = new ArrayList<>();
 
@@ -272,19 +274,15 @@ public class TestCaseRunService {
 					continue;
 
 				Map<String, Object> xmlDetail = buildXmlComparisonDetails(inputPath, outputPath,
-						Paths.get(featureName).getFileName().toString(), // Just filename
-						Collections.singleton(scenario), objectMapper);
+						Paths.get(featureName).getFileName().toString(), Collections.singleton(scenario), objectMapper);
 
-				// Add scenarioName
 				xmlDetail.put("scenarioName", scenario.get("scenarioName"));
 
-				// Add scenarioType
 				String scenarioType = (scenario.containsKey("exampleHeader") && scenario.containsKey("exampleValues"))
 						? "Scenario Outline"
 						: "Scenario";
 				xmlDetail.put("scenarioType", scenarioType);
 
-				// Add exampleHeader and exampleValues if available
 				if (scenario.containsKey("exampleHeader")) {
 					xmlDetail.put("exampleHeader", scenario.get("exampleHeader"));
 				}
@@ -292,12 +290,10 @@ public class TestCaseRunService {
 					xmlDetail.put("exampleValues", scenario.get("exampleValues"));
 				}
 
-				// Add diffCount
 				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
 						.orElse(0);
 				xmlDetail.put("diffCount", diffCount);
 
-				// Add unexecuted scenarios if applicable
 				List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
 					String name = (String) e.get("scenarioName");
 					return testCase.getFeatureScenarios().stream().filter(fs -> fs.getScenarios().contains(name))
@@ -340,7 +336,6 @@ public class TestCaseRunService {
 
 			Map<String, Object> runSummary = new LinkedHashMap<>();
 			runSummary.put("totalExecutedScenarios", executedScenarios.size());
-//			runSummary.put("passedScenarioNames", passedNames);
 			List<Map<String, Object>> passedScenariosDetailed = new ArrayList<>();
 			for (Map<String, Object> exec : executedScenarios) {
 				if ("Passed".equals(exec.get("status"))) {
@@ -376,13 +371,19 @@ public class TestCaseRunService {
 					entry.put("scenarioName", exec.get("scenarioName"));
 					entry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
 
-					// ✅ Optional: Add example header and values for Scenario Outline
 					if ("Scenario Outline".equals(exec.get("scenarioType"))) {
 						entry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
 						entry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
 					}
 
-					entry.put("errors", exec.getOrDefault("errors", List.of()));
+					List<String> errors = safeList(exec.get("errors")).stream().map(err -> {
+						for (Map.Entry<String, String> e : tempPathMapping.entrySet()) {
+							err = err.replace(e.getKey().replace("\\", "/"), e.getValue().replace("\\", "/"));
+						}
+						return err;
+					}).collect(Collectors.toList());
+
+					entry.put("errors", errors);
 					entry.put("parsedDifferences", parsedDiffs);
 					entry.put("parsedDiffCount", parsedDiffs.size());
 					failedReasons.add(entry);
@@ -391,44 +392,39 @@ public class TestCaseRunService {
 			outputLogMap.put("failedScenarioDetails", failedReasons);
 
 			history.setOutputLog(prettyWriter.writeValueAsString(outputLogMap));
-//			history.setRawCucumberLog(formatRawLog(fullOutput));
-			
-			List<String> fullOutputLines = Arrays.asList(fullOutput.split("\\R")); // split fullOutput into lines
+
+			List<String> fullOutputLines = Arrays.asList(fullOutput.split("\\R"));
 			List<String> trimmedLines = new ArrayList<>();
 
 			for (String line : fullOutputLines) {
-			    trimmedLines.add(line);
-			    if (line.matches("^\\d+m\\d+\\.\\d+s$")) {
-			        break; // Stop once time summary appears
-			    }
+				trimmedLines.add(line);
+				if (line.matches("^\\d+m\\d+\\.\\d+s$")) {
+					break;
+				}
 			}
 
 			List<String> cleanedLines = cleanRawCucumberLog(trimmedLines);
 
-			// Remove trailing empty lines
 			while (!cleanedLines.isEmpty() && cleanedLines.get(cleanedLines.size() - 1).trim().isEmpty()) {
-			    cleanedLines.remove(cleanedLines.size() - 1);
+				cleanedLines.remove(cleanedLines.size() - 1);
 			}
 
-			// Reduce consecutive blank lines to max 1
 			List<String> finalLines = new ArrayList<>();
 			boolean previousBlank = false;
 			for (String line : cleanedLines) {
-			    if (line.trim().isEmpty()) {
-			        if (!previousBlank) {
-			            finalLines.add("");
-			            previousBlank = true;
-			        }
-			    } else {
-			        finalLines.add(line);
-			        previousBlank = false;
-			    }
+				if (line.trim().isEmpty()) {
+					if (!previousBlank) {
+						finalLines.add("");
+						previousBlank = true;
+					}
+				} else {
+					finalLines.add(line);
+					previousBlank = false;
+				}
 			}
 
 			String cleanedLog = String.join("\n", finalLines);
 			history.setRawCucumberLog(cleanedLog);
-
-
 
 			history.setUnexecutedScenarios(unexecuted.isEmpty() ? null : String.join(", ", unexecuted));
 			historyRepository.save(history);
@@ -461,29 +457,6 @@ public class TestCaseRunService {
 		}
 
 		return results;
-	}
-
-	private Map<String, Object> createScenarioResult(String scenarioName, String differences, boolean passed,
-			Set<String> executedScenarioNames, String featureFileName, Set<String> failedScenariosFromFooter) {
-		executedScenarioNames.add(scenarioName);
-		Map<String, Object> result = new LinkedHashMap<>();
-		result.put("scenarioName", scenarioName);
-		result.put("featureFileName", featureFileName);
-
-		List<Map<String, Object>> parsedDiffs = extractXmlDifferences(differences);
-		boolean shouldFail = parsedDiffs.stream().anyMatch(diff -> {
-			Object type = diff.get("differenceType");
-			return type != null && !type.equals("Assertion Result") && !type.equals("False Positive Equality");
-		});
-
-		boolean scenarioPass = passed && !shouldFail && !failedScenariosFromFooter.contains(scenarioName);
-
-		result.put("status", scenarioPass ? "Passed" : "Failed");
-		if (!scenarioPass) {
-			result.put("parsedDifferences", parsedDiffs);
-			result.put("diffCount", parsedDiffs.size());
-		}
-		return result;
 	}
 
 	private String extractScenarioBlock(String featureFilePath, String scenarioName) throws IOException {
@@ -544,32 +517,6 @@ public class TestCaseRunService {
 		}
 
 		return diffs;
-	}
-
-	private List<String> extractParsedDifferences(JsonNode errorsNode) {
-		List<String> parsed = new ArrayList<>();
-		for (JsonNode error : errorsNode) {
-			// Dummy parser logic – you can improve it
-			parsed.add(error.asText().split("\n")[0]);
-		}
-		return parsed;
-	}
-
-	private List<String> extractParsedDifferences(List<String> errorMessages) {
-		List<String> parsedDifferences = new ArrayList<>();
-
-		for (String message : errorMessages) {
-			if (message.contains("java.lang.AssertionError")) {
-				int index = message.indexOf("expected");
-				if (index != -1) {
-					parsedDifferences.add(message.substring(index).trim());
-				} else {
-					parsedDifferences.add(message.trim());
-				}
-			}
-		}
-
-		return parsedDifferences;
 	}
 
 	public Set<Map<String, Object>> parseCucumberJson(File jsonFile,
@@ -829,6 +776,16 @@ public class TestCaseRunService {
 		return cleaned.toString().trim().replaceAll("\n{2,}", "\n");
 	}
 
+	private String generateTempFeatureContent(TestCaseDTO testCase) {
+		StringBuilder content = new StringBuilder("Feature: ").append(testCase.getTcName()).append("\n\n");
+		for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
+			for (String block : fs.getScenarioBlocks()) {
+				content.append(block).append("\n\n");
+			}
+		}
+		return content.toString();
+	}
+
 	private static final List<DiffPattern> DIFF_PATTERNS = List.of(
 			new DiffPattern("Text Mismatch", Pattern.compile("Expected text value '(.*?)' but was '(.*?)' - comparing"),
 					(m, raw) -> Map.of("expected", m.group(1), "actual", m.group(2))),
@@ -960,7 +917,6 @@ public class TestCaseRunService {
 		}
 		return tempFile;
 	}
-
 	public List<Map<String, Object>> runByIds(List<Long> testCaseIds) {
 		List<TestCaseDTO> dtos = testCaseRepository.findByIdTCIn(testCaseIds).stream().map(this::convertToDTO)
 				.collect(Collectors.toList());
@@ -1029,37 +985,6 @@ public class TestCaseRunService {
 		return fileName != null && fileName.toLowerCase().endsWith(".xml");
 	}
 
-	private Set<String> extractFailedScenariosFromFooter(String output) {
-
-		Set<String> failedScenarios = new HashSet<>();
-		boolean insideFailedBlock = false;
-
-		for (String line : output.split("\n")) {
-			String cleanLine = removeAnsiCodes(line).trim();
-
-			if (cleanLine.equalsIgnoreCase("Failed scenarios:")) {
-				insideFailedBlock = true;
-				continue;
-			}
-
-			if (insideFailedBlock) {
-				if (cleanLine.isBlank() || cleanLine.matches("^\\d+ Scenarios.*")) {
-					insideFailedBlock = false;
-					continue;
-				}
-
-				// Match line like: "file:///.../testcase_123.feature:3 # Scenario Name"
-				Matcher matcher = Pattern.compile(".*feature:\\d+\\s+#\\s+(.*)").matcher(cleanLine);
-				if (matcher.find()) {
-					String scenarioName = matcher.group(1).trim();
-					failedScenarios.add(scenarioName);
-				}
-			}
-		}
-
-		return failedScenarios;
-	}
-
 	private List<String> cleanRawCucumberLog(List<String> rawLines) {
 		List<String> cleanedLog = new ArrayList<>();
 		Set<String> seenBlocks = new HashSet<>();
@@ -1120,13 +1045,14 @@ public class TestCaseRunService {
 	}
 
 	private void addBlockIfUnique(List<String> block, Set<String> seenBlocks, List<String> cleanedLog) {
-	    if (block == null || block.isEmpty()) return;
+		if (block == null || block.isEmpty())
+			return;
 
-	    String blockString = String.join("\n", block).trim();
-	    if (!blockString.isEmpty() && seenBlocks.add(blockString)) {
-	        cleanedLog.addAll(block);
-	        cleanedLog.add(""); // Add spacing between blocks for readability
-	    }
+		String blockString = String.join("\n", block).trim();
+		if (!blockString.isEmpty() && seenBlocks.add(blockString)) {
+			cleanedLog.addAll(block);
+			cleanedLog.add(""); // Add spacing between blocks for readability
+		}
 	}
 
 }

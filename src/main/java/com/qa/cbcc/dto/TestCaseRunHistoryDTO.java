@@ -2,6 +2,7 @@ package com.qa.cbcc.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -17,7 +18,7 @@ public class TestCaseRunHistoryDTO {
     private List<String> rawCucumberLog;
     private GroupedCucumberLogDTO rawCucumberLogGrouped;
  // ✅ NEW field
-    private Object xmlParsedDifferencesJson;
+    private List<Map<String, Object>> xmlParsedDifferencesJson;
     private String xmlDiffStatus;
 
     public Long getId() {
@@ -91,11 +92,12 @@ public class TestCaseRunHistoryDTO {
     public void setRawCucumberLogGrouped(GroupedCucumberLogDTO rawCucumberLogGrouped) {
         this.rawCucumberLogGrouped = rawCucumberLogGrouped;
     }
-    public Object getXmlParsedDifferencesJson() {
+    
+    public List<Map<String, Object>> getXmlParsedDifferencesJson() {
         return xmlParsedDifferencesJson;
     }
 
-    public void setXmlParsedDifferencesJson(Object xmlParsedDifferencesJson) {
+    public void setXmlParsedDifferencesJson(List<Map<String, Object>> xmlParsedDifferencesJson) {
         this.xmlParsedDifferencesJson = xmlParsedDifferencesJson;
     }
 
