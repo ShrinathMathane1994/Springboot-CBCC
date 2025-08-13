@@ -107,27 +107,31 @@ public class TestCaseController {
 	// ✅ UPDATED: filter by country, region, pod
 	@GetMapping
 	public ResponseEntity<?> getAllTestCases(@RequestParam(required = false) String country,
-	        @RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
+			@RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
 
-	    logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
-	    List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
+		logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
+		List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
 
-	    // Sort in ascending order by id
-	    result.sort(Comparator.comparing(TestCaseResponseDTO::getId));
+		// Sort in ascending order by id
+		result.sort(Comparator.comparing(TestCaseResponseDTO::getId));
 
-	    if (result.isEmpty()) {
-	        logger.warn("No test cases found with given filters.");
-	        return ResponseEntity.ok(Map.of("message", "No test cases found."));
-	    }
+		if (result.isEmpty()) {
+			logger.warn("No test cases found with given filters.");
+			return ResponseEntity.ok(Map.of("message", "No test cases found."));
+		}
 
-	    return ResponseEntity.ok(result);
+		return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/deleted")
 	public ResponseEntity<List<TestCaseResponseDTO>> getDeletedTestCases() {
 		logger.info("Fetching deleted test cases.");
-		List<TestCase> deleted = testCaseService.getDeletedTestCases();
-		return ResponseEntity.ok(deleted.stream().map(testCaseService::toResponseDTO).collect(Collectors.toList()));
+
+		List<TestCaseResponseDTO> deletedDtos = testCaseService.getDeletedTestCases().stream()
+				.map(testCaseService::toResponseDTO).sorted(Comparator.comparing(TestCaseResponseDTO::getId))// ascending
+				.collect(Collectors.toList());
+
+		return ResponseEntity.ok(deletedDtos);
 	}
 
 	@DeleteMapping("/{id}/delete")
@@ -178,6 +182,9 @@ public class TestCaseController {
 		logger.info("Fetching history for test case ID: {}", id);
 
 		List<TestCaseHistoryDTO> dtoList = testCaseService.getTestCaseHistoryDTOs(id);
+
+		// Sort by id ascending
+		dtoList.sort(Comparator.comparing(TestCaseHistoryDTO::getId));
 
 		try {
 			ObjectMapper mapper = new ObjectMapper();
