@@ -1,6 +1,7 @@
 package com.qa.cbcc.controller;
 
 import java.io.File;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -106,17 +107,20 @@ public class TestCaseController {
 	// ✅ UPDATED: filter by country, region, pod
 	@GetMapping
 	public ResponseEntity<?> getAllTestCases(@RequestParam(required = false) String country,
-			@RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
+	        @RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
 
-		logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
-		List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
+	    logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
+	    List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
 
-		if (result.isEmpty()) {
-			logger.warn("No test cases found with given filters.");
-			return ResponseEntity.ok(Map.of("message", "No test cases found."));
-		}
+	    // Sort in ascending order by id
+	    result.sort(Comparator.comparing(TestCaseResponseDTO::getId));
 
-		return ResponseEntity.ok(result);
+	    if (result.isEmpty()) {
+	        logger.warn("No test cases found with given filters.");
+	        return ResponseEntity.ok(Map.of("message", "No test cases found."));
+	    }
+
+	    return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/deleted")
@@ -152,7 +156,7 @@ public class TestCaseController {
 		}
 	}
 
-	//Old Method
+	// Old Method/
 //	@GetMapping("/{id}/history")
 //	public ResponseEntity<?> getTestCaseHistory(@PathVariable Long id) {
 //		logger.info("Fetching history for test case ID: {}", id);
@@ -194,50 +198,43 @@ public class TestCaseController {
 		TestCase updated = testCaseService.getTestCaseById(id);
 		return ResponseEntity.ok(testCaseService.toResponseDTO(updated));
 	}
-	
+
 	@GetMapping("/{id}/download")
-	public ResponseEntity<?> downloadFile(
-	        @PathVariable Long id,
-	        @RequestParam String fileType // "input" or "output"
+	public ResponseEntity<?> downloadFile(@PathVariable Long id, @RequestParam String fileType // "input" or "output"
 	) {
-	    try {
-	        TestCase testCase = testCaseService.getTestCaseByIdIncludingInactive(id);
-	        if (testCase == null) {
-	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	                    .body(Map.of("error", "Test case not found"));
-	        }
+		try {
+			TestCase testCase = testCaseService.getTestCaseByIdIncludingInactive(id);
+			if (testCase == null) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Test case not found"));
+			}
 
-	        String relativePath = fileType.equalsIgnoreCase("input")
-	                ? testCase.getInputFile()
-	                : testCase.getOutputFile();
+			String relativePath = fileType.equalsIgnoreCase("input") ? testCase.getInputFile()
+					: testCase.getOutputFile();
 
-	        if (relativePath == null) {
-	            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                    .body(Map.of("error", fileType + " file not found for this test case"));
-	        }
+			if (relativePath == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+						.body(Map.of("error", fileType + " file not found for this test case"));
+			}
 
-	        String baseDir = System.getProperty("user.dir") +
-	                File.separator + "src" + File.separator + "main" +
-	                File.separator + "resources" + File.separator;
+			String baseDir = System.getProperty("user.dir") + File.separator + "src" + File.separator + "main"
+					+ File.separator + "resources" + File.separator;
 
-	        File file = new File(baseDir + relativePath);
-	        if (!file.exists()) {
-	            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-	                    .body(Map.of("error", "File does not exist on server"));
-	        }
+			File file = new File(baseDir + relativePath);
+			if (!file.exists()) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND)
+						.body(Map.of("error", "File does not exist on server"));
+			}
 
-	        Resource resource = new FileSystemResource(file);
-	        String contentDisposition = "attachment; filename=\"" + file.getName() + "\"";
+			Resource resource = new FileSystemResource(file);
+			String contentDisposition = "attachment; filename=\"" + file.getName() + "\"";
 
-	        return ResponseEntity.ok()
-	                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-	                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-	                .body(resource);
+			return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM).body(resource);
 
-	    } catch (Exception e) {
-	        logger.error("Failed to download {} file for test case {}: {}", fileType, id, e.getMessage(), e);
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-	                .body(Map.of("error", "Download failed", "details", e.getMessage()));
-	    }
+		} catch (Exception e) {
+			logger.error("Failed to download {} file for test case {}: {}", fileType, id, e.getMessage(), e);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(Map.of("error", "Download failed", "details", e.getMessage()));
+		}
 	}
 }

@@ -1,0 +1,16 @@
+2025-08-13 14:39:13.924 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 16.0.1 on Shree with PID 29848 (D:\AUtomation\Eclipse2\New folder\Springboot-CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\New folder\Springboot-CBCC)
+2025-08-13 14:39:13.965 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-08-13 14:39:19.362 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 16.0.1 on Shree with PID 34756 (D:\AUtomation\Eclipse2\New folder\Springboot-CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\New folder\Springboot-CBCC)
+2025-08-13 14:39:19.388 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-08-13 14:39:28.682 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 16.1 seconds (JVM running for 18.738)
+2025-08-13 15:15:15.517 [http-nio-8080-exec-2] INFO  com.qa.cbcc.controller.TestCaseController - Fetching test cases with filters -> country: null, region: null, pod: null
+2025-08-13 15:17:13.122 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 16.0.1 on Shree with PID 29848 (D:\AUtomation\Eclipse2\New folder\Springboot-CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\New folder\Springboot-CBCC)
+2025-08-13 15:17:13.124 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-08-13 15:17:15.531 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 2.495 seconds (JVM running for 2285.607)
+2025-08-13 15:17:20.500 [http-nio-8080-exec-2] INFO  com.qa.cbcc.controller.TestCaseController - Fetching test cases with filters -> country: null, region: null, pod: null
+2025-08-13 15:17:56.455 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 16.0.1 on Shree with PID 29848 (D:\AUtomation\Eclipse2\New folder\Springboot-CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\New folder\Springboot-CBCC)
+2025-08-13 15:17:56.457 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-08-13 15:17:57.934 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 1.572 seconds (JVM running for 2328.01)
+2025-08-13 15:18:26.294 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Starting CbccApplication using Java 16.0.1 on Shree with PID 29848 (D:\AUtomation\Eclipse2\New folder\Springboot-CBCC\target\classes started by shree in D:\AUtomation\Eclipse2\New folder\Springboot-CBCC)
+2025-08-13 15:18:26.296 [restartedMain] INFO  com.qa.cbcc.CbccApplication - No active profile set, falling back to 1 default profile: "default"
+2025-08-13 15:18:27.697 [restartedMain] INFO  com.qa.cbcc.CbccApplication - Started CbccApplication in 1.505 seconds (JVM running for 2357.773)
