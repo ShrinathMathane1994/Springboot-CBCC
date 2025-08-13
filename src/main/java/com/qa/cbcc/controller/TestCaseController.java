@@ -184,7 +184,7 @@ public class TestCaseController {
 		List<TestCaseHistoryDTO> dtoList = testCaseService.getTestCaseHistoryDTOs(id);
 
 		// Sort by id ascending
-		dtoList.sort(Comparator.comparing(TestCaseHistoryDTO::getId));
+		dtoList.sort(Comparator.comparing(TestCaseHistoryDTO::getModifiedOn).reversed());
 
 		try {
 			ObjectMapper mapper = new ObjectMapper();
