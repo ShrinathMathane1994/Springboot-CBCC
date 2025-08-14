@@ -20,7 +20,9 @@ public class TestCaseRunHistoryDTO {
  // ✅ NEW field
     private List<Map<String, Object>> xmlParsedDifferencesJson;
     private String xmlDiffStatus;
-
+    private String inputXmlContent;
+    private String outputXmlContent;
+    
     public Long getId() {
         return id;
     }
@@ -108,4 +110,20 @@ public class TestCaseRunHistoryDTO {
     public void setXmlDiffStatus(String xmlDiffStatus) {
         this.xmlDiffStatus = xmlDiffStatus;
     }
+
+	public String getInputXmlContent() {
+		return inputXmlContent;
+	}
+
+	public void setInputXmlContent(String inputXmlContent) {
+		this.inputXmlContent = inputXmlContent;
+	}
+
+	public String getOutputXmlContent() {
+		return outputXmlContent;
+	}
+
+	public void setOutputXmlContent(String outputXmlContent) {
+		this.outputXmlContent = outputXmlContent;
+	}
 }

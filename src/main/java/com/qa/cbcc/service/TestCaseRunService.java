@@ -146,8 +146,8 @@ public class TestCaseRunService {
 			Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
 
 			// 1. Generate temporary feature file from TestCaseDTO
-	        File featureFile = generateTempFeatureFile(testCase);
-	        File jsonReportFile = File.createTempFile("cucumber-report", ".json");
+			File featureFile = generateTempFeatureFile(testCase);
+			File jsonReportFile = File.createTempFile("cucumber-report", ".json");
 
 			// Create a temp folder inside project directory if not exists
 //			Path tempDir = Paths.get(System.getProperty("user.dir"), "temp");
@@ -427,6 +427,9 @@ public class TestCaseRunService {
 			history.setRawCucumberLog(cleanedLog);
 
 			history.setUnexecutedScenarios(unexecuted.isEmpty() ? null : String.join(", ", unexecuted));
+			history.setInputXmlContent((String) TestContext.get("inputXmlContent"));
+			history.setOutputXmlContent((String) TestContext.get("outputXmlContent"));
+
 			historyRepository.save(history);
 
 			Map<String, Object> result = new LinkedHashMap<>();
@@ -452,6 +455,8 @@ public class TestCaseRunService {
 				entity.setLastRunStatus(finalStatus);
 				testCaseRepository.save(entity);
 			}
+			TestContext.remove("inputXmlContent");
+			TestContext.remove("outputXmlContent");
 
 			TestContext.clear();
 		}
@@ -917,6 +922,7 @@ public class TestCaseRunService {
 		}
 		return tempFile;
 	}
+
 	public List<Map<String, Object>> runByIds(List<Long> testCaseIds) {
 		List<TestCaseDTO> dtos = testCaseRepository.findByIdTCIn(testCaseIds).stream().map(this::convertToDTO)
 				.collect(Collectors.toList());
@@ -945,8 +951,8 @@ public class TestCaseRunService {
 
 	private Map<String, Object> buildXmlComparisonDetails(String inputFile, String outputFile, String featureFileName,
 			Set<Map<String, Object>> executedScenarios, ObjectMapper objectMapper) {
-		Map<String, Object> xmlDetail = new LinkedHashMap<>();
 
+		Map<String, Object> xmlDetail = new LinkedHashMap<>();
 		xmlDetail.put("inputFile", inputFile);
 		xmlDetail.put("outputFile", outputFile);
 		xmlDetail.put("featureFileName", featureFileName);
@@ -964,6 +970,29 @@ public class TestCaseRunService {
 		String fullInputPath = Paths.get("src/main/resources", inputFile).toString();
 		String fullOutputPath = Paths.get("src/main/resources", outputFile).toString();
 
+		// 👇 NEW: read & cache exact XML content for this run (only once)
+		try {
+			if (TestContext.get("inputXmlContent") == null) {
+				String inputContent = Files.readString(Paths.get(fullInputPath));
+				TestContext.set("inputXmlContent", inputContent);
+			}
+		} catch (IOException e) {
+			logger.warn("Unable to read input XML: {}", fullInputPath, e);
+			TestContext.set("inputXmlContent",
+					"❌ Unable to read input XML: " + fullInputPath + " (" + e.getMessage() + ")");
+		}
+		try {
+			if (TestContext.get("outputXmlContent") == null) {
+				String outputContent = Files.readString(Paths.get(fullOutputPath));
+				TestContext.set("outputXmlContent", outputContent);
+			}
+		} catch (IOException e) {
+			logger.warn("Unable to read output XML: {}", fullOutputPath, e);
+			TestContext.set("outputXmlContent",
+					"❌ Unable to read output XML: " + fullOutputPath + " (" + e.getMessage() + ")");
+		}
+
+		// Existing compare call
 		String xmlComparisonResult = com.qa.cbcc.utils.XmlComparator.compareXmlFiles(fullInputPath, fullOutputPath);
 
 		if (xmlComparisonResult.contains("✅ XML files are equal.")) {

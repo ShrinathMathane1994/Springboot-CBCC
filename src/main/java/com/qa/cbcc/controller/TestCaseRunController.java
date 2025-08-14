@@ -156,6 +156,8 @@ public class TestCaseRunController {
 		}
 
 		dto.setXmlDiffStatus(h.getXmlDiffStatus());
+		dto.setInputXmlContent(h.getInputXmlContent());
+		dto.setOutputXmlContent(h.getOutputXmlContent());
 
 		try {
 			if (h.getOutputLog() != null) {

@@ -2,6 +2,8 @@ package com.qa.cbcc.utils;
 
 import java.io.File;
 import java.nio.file.Paths;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -10,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xmlunit.builder.DiffBuilder;
 import org.xmlunit.builder.Input;
+import org.xmlunit.diff.Comparison;
 import org.xmlunit.diff.Diff;
 import org.xmlunit.diff.Difference;
 
@@ -38,7 +41,26 @@ public class XmlComparator {
             } else {
                 result.append("❌ XML files are NOT equal.\nDifferences:\n");
 
+                // Track unique namespace changes
+                Set<String> seenNamespaces = new HashSet<>();
+
                 String differences = StreamSupport.stream(diff.getDifferences().spliterator(), false)
+                        .filter(d -> {
+                            Comparison c = d.getComparison();
+                            String type = c.getType().name();
+
+                            // If it's a namespace change, skip if already seen
+                            if ("NAMESPACE_URI".equals(type)) {
+                                String control = String.valueOf(c.getControlDetails().getValue());
+                                String test = String.valueOf(c.getTestDetails().getValue());
+                                String key = control + "→" + test;
+                                if (seenNamespaces.contains(key)) {
+                                    return false;
+                                }
+                                seenNamespaces.add(key);
+                            }
+                            return true;
+                        })
                         .map(Difference::toString)
                         .collect(Collectors.joining("\n"));
 
@@ -46,7 +68,7 @@ public class XmlComparator {
             }
 
         } catch (Exception e) {
-        	// Convert paths to relative for display
+            // Convert paths to relative for display
             String relativeFile1 = toRelativePath(filePath1);
             String relativeFile2 = toRelativePath(filePath2);
 

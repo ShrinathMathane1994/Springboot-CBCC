@@ -2,9 +2,21 @@ package com.qa.cbcc.service;
 
 import java.text.SimpleDateFormat;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+
 import org.springframework.stereotype.Service;
+import org.xmlunit.builder.DiffBuilder;
+import org.xmlunit.builder.Input;
+import org.xmlunit.diff.Comparison;
+import org.xmlunit.diff.Diff;
+import org.xmlunit.diff.Difference;
+
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 
 @Service
@@ -15,7 +27,25 @@ public class TestCaseReportService {
 
 		StringBuilder html = new StringBuilder();
 		html.append("<html><head><meta charset='UTF-8'><style>")
-				// Light & dark mode
+				// layout
+				.append(".xml-ssb-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;}")
+				.append(".xml-pane{border:1px solid #e6e6e6;border-radius:8px;overflow:auto;max-height:520px;background:#fff;}")
+				.append("body.dark .xml-pane{background:#2c2c2c;border-color:#444;}")
+				.append(".xml-header{padding:6px 10px;font-weight:600;background:#f2f4f7;border-bottom:1px solid #e6e6e6;position:sticky;top:0;}")
+				.append("body.dark .xml-header{background:#333;border-color:#444;}")
+				.append(".xml-code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", monospace;font-size:12px;line-height:1.45;padding:10px;white-space:pre;}")
+				.append(".xml-line{display:flex;}")
+				.append(".ln{min-width:48px;text-align:right;padding-right:8px;opacity:.6;user-select:none;}")
+				.append(".lc{flex:1;overflow:hidden;}")
+
+				/* FULL-line backgrounds */
+				.append(".diff-removed-line{background:#ffdddd;}").append(".diff-added-line{background:#ddffdd;}")
+				.append(".same-line{background:transparent;}")
+
+				/* Inline word-level highlights */
+				.append(".diff-removed{background:#ffaaaa;border-radius:2px;padding:0 1px;}")
+				.append(".diff-added{background:#aaffaa;border-radius:2px;padding:0 1px;}")
+
 				.append("body { font-family: Arial, sans-serif; margin: 20px; background: #f6f8fa; color:#222; }")
 				.append("body.dark { background: #1e1e1e; color: #ddd; }")
 				.append("h1 { text-align:center; font-size:28px; margin-bottom:6px; position: relative; }")
@@ -84,7 +114,10 @@ public class TestCaseReportService {
 				.append("var tag=(el.tagName||'').toLowerCase();")
 				.append("if(tag==='tr'||el.classList.contains('inner-row')){el.style.display=isHidden?'table-row':'none';}")
 				.append("else{el.style.display=isHidden?'block':'none';}}")
-				.append("function toggleDark(){document.body.classList.toggle('dark');}")
+				.append("function toggleDark(){\r\n" + "    document.body.classList.toggle('dark');\r\n"
+						+ "    if (window.monaco) {\r\n"
+						+ "        monaco.editor.setTheme(document.body.classList.contains('dark') ? 'vs-dark' : 'vs');\r\n"
+						+ "    }\r\n" + "}")
 				.append("</script></head><body>");
 
 		// Header
@@ -128,11 +161,185 @@ public class TestCaseReportService {
 		html.append(buildSection("Unexecuted Scenarios", unexecutedCount, "unexecutedScenarios",
 				buildUnexecutedScenarios(dto), unexecutedCount == 0));
 		html.append(buildSection("XML Differences", -1, "xmlDiff", buildXmlDifferencesFixed(dto), false));
+
+		html.append(buildSection("Input vs Output (DOM-Aware Diff)", -1, "xmlDomDiff", buildXmlSideBySide(dto), false));
+		html.append(buildSection("Semantic XML Differences", -1, "xmlSemantic", buildSemanticXmlDiff(dto), true));
+
 		html.append(buildSection("Raw Cucumber Logs", -1, "rawLogs", buildRawLogs(dto), false));
 		html.append(buildSection("Raw Cucumber Summary", -1, "rawSummary", buildRawSummary(dto), false));
 
 		html.append("</body></html>");
 		return html.toString();
+	}
+
+	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
+		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent().trim();
+		String modified = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent().trim();
+
+		String o = jsEscapeForJsLiteral(original);
+		String m = jsEscapeForJsLiteral(modified);
+
+		StringBuilder sb = new StringBuilder();
+		sb.append(
+				"<div id='container' style='border:1px solid var(--border-color,#555); border-radius:6px; overflow:hidden;'>")
+				.append("<div id='diffEditor' style='width:100%; height:auto;'></div>")
+				.append("<script src='https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js'></script>")
+				.append("<script>")
+				.append("require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});")
+				.append("require(['vs/editor/editor.main'], function() {")
+				.append("  function isDarkMode() { return document.body.classList.contains('dark'); }")
+				.append("  function applyDiffColors() {")
+				.append("    var style = document.getElementById('diffColorStyles');")
+				.append("    if(style) style.remove();")
+				.append("    style = document.createElement('style'); style.id = 'diffColorStyles';")
+				.append("    if(isDarkMode()) {")
+				// Dark mode colors
+				.append("      style.innerHTML = `")
+				.append("        .monaco-editor .line-insert, .monaco-editor .line-insert td { background-color: rgba(50, 205, 50, 0.20) !important; }")
+				.append("        .monaco-editor .line-delete, .monaco-editor .line-delete td { background-color: rgba(255, 69, 0, 0.20) !important; }")
+				.append("        .monaco-editor .char-insert { background-color: rgba(50, 205, 50, 0.40) !important; }")
+				.append("        .monaco-editor .char-delete { background-color: rgba(255, 69, 0, 0.40) !important; }")
+				.append("      `;").append("    } else {")
+				// Light mode colors
+				.append("      style.innerHTML = `")
+				.append("        .monaco-editor .line-insert, .monaco-editor .line-insert td { background-color: rgba(144, 238, 144, 0.35) !important; }")
+				.append("        .monaco-editor .line-delete, .monaco-editor .line-delete td { background-color: rgba(255, 160, 122, 0.35) !important; }")
+				.append("        .monaco-editor .char-insert { background-color: rgba(144, 238, 144, 0.60) !important; }")
+				.append("        .monaco-editor .char-delete { background-color: rgba(255, 160, 122, 0.60) !important; }")
+				.append("      `;").append("    }").append("    document.head.appendChild(style);").append("  }")
+				.append("  var theme = isDarkMode() ? 'vs-dark' : 'vs';")
+				.append("  var originalModel = monaco.editor.createModel(\"").append(o).append("\", 'xml');")
+				.append("  var modifiedModel = monaco.editor.createModel(\"").append(m).append("\", 'xml');")
+				.append("  window.diffEditor = monaco.editor.createDiffEditor(document.getElementById('diffEditor'), {")
+				.append("      readOnly: true,").append("      renderSideBySide: true,")
+				.append("      automaticLayout: true,").append("      scrollBeyondLastLine: false,")
+				.append("      renderFinalNewline: false,").append("      minimap: { enabled: false },")
+				.append("      renderIndicators: false").append("  });")
+				.append("  diffEditor.setModel({ original: originalModel, modified: modifiedModel });")
+				.append("  monaco.editor.setTheme(theme);").append("  applyDiffColors();")
+				// Handle dynamic theme changes
+				.append("  var observer = new MutationObserver(applyDiffColors);")
+				.append("  observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });")
+				// Resize height based on content
+				.append("  setTimeout(function(){")
+				.append("      var lineCount = diffEditor.getModifiedEditor().getModel().getLineCount();")
+				.append("      var h = (lineCount * 19) + 20;")
+				.append("      document.getElementById('diffEditor').style.height = h + 'px';")
+				.append("      diffEditor.layout();")
+				.append("      document.querySelectorAll('.decorationsOverviewRuler').forEach(function(r){ r.style.display = 'none'; });")
+				.append("      document.querySelectorAll('.monaco-editor .margin, .monaco-editor .glyph-margin').forEach(function(m) { m.style.background = 'transparent'; });")
+				.append("  }, 250);").append("});").append("</script>").append("<style>")
+				.append(".monaco-diff-editor .monaco-sash.vertical { background-color:#666 !important; opacity:1 !important; width:4px !important; }")
+				.append(".monaco-diff-editor .monaco-sash.vertical:hover { background-color:#999 !important; }")
+				.append(".monaco-diff-editor .monaco-sash.horizontal { background-color:#666 !important; opacity:1 !important; height:4px !important; }")
+				.append(".monaco-diff-editor .scroll-decoration { display:none !important; }").append("</style>")
+				.append("</div>");
+
+		return sb.toString();
+	}
+
+	private static String jsEscapeForJsLiteral(String s) {
+		if (s == null)
+			return "";
+		return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "").replace("\n", "\\n").replace("</script>",
+				"<\\/script>");
+	}
+
+	public String buildSemanticXmlDiff(TestCaseRunHistoryDTO dto) {
+		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent().trim();
+		String modified = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent().trim();
+
+		Diff diff = DiffBuilder.compare(Input.fromString(original)).withTest(Input.fromString(modified))
+				.ignoreWhitespace().checkForSimilar().build();
+
+		StringBuilder html = new StringBuilder();
+
+		// Styles
+		html.append("<style>")
+				.append(":root { --bg-added: #dfd; --bg-removed: #fdd; --text-color: #000; --bg-header: #eee; }")
+				.append("body.dark { --bg-added: #264d26; --bg-removed: #4d2626; --text-color: #ddd; --bg-header: #333; }")
+				.append("table.xml-diff { border-collapse: collapse; width: 100%; font-family: monospace; color: var(--text-color); }")
+				.append("table.xml-diff th, table.xml-diff td { border: 1px solid #888; padding: 4px 6px; vertical-align: top; }")
+				.append("th.group-header { background: var(--bg-header); text-align: left; font-weight: bold; cursor: pointer; }")
+				.append(".xml-diff-added { background: var(--bg-added); padding: 2px 4px; border-radius: 3px; }")
+				.append(".xml-diff-removed { background: var(--bg-removed); padding: 2px 4px; border-radius: 3px; }")
+				.append(".hidden-row { display: none; }").append("</style>");
+
+		// JS for toggling
+		html.append("<script>").append("function toggleGroup(id){")
+				.append("var rows=document.querySelectorAll('.group-'+id);")
+				.append("for(var r of rows){ r.style.display=(r.style.display==='none'||r.style.display==='')?'table-row':'none'; }")
+				.append("var icon=document.getElementById('icon-'+id);")
+				.append("icon.textContent = icon.textContent==='▶' ? '▼' : '▶';").append("}").append("</script>");
+
+		html.append("<table class='xml-diff'>").append(
+				"<tr><th style='width:20%'>Type</th><th style='width:40%'>Old Value</th><th style='width:40%'>New Value</th></tr>");
+
+		Set<String> seenNamespaces = new HashSet<>();
+		String lastTopGroup = null;
+		String lastSubGroup = null;
+		int groupIdCounter = 0;
+		int subGroupIdCounter = 0;
+
+		for (Difference d : diff.getDifferences()) {
+			Comparison c = d.getComparison();
+			String type = c.getType().name();
+			String control = escapeHtml(String.valueOf(c.getControlDetails().getValue()));
+			String test = escapeHtml(String.valueOf(c.getTestDetails().getValue()));
+			String xpath = escapeHtml(c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
+					: c.getTestDetails().getXPath());
+
+			// Skip duplicate namespace diffs
+			if ("NAMESPACE_URI".equals(type)) {
+				String nsChangeKey = control + "→" + test;
+				if (seenNamespaces.contains(nsChangeKey))
+					continue;
+				seenNamespaces.add(nsChangeKey);
+			}
+
+			String[] parts = xpath.split("(?=\\/[^\\/]+\\[\\d+\\])");
+			String topGroup = parts.length > 1 ? parts[0] + parts[1] : parts[0];
+			String subGroup = xpath;
+
+			// Top group header
+			if (!topGroup.equals(lastTopGroup)) {
+				groupIdCounter++;
+				html.append("<tr>").append("<th class='group-header' colspan='3' onclick='toggleGroup(\"top")
+						.append(groupIdCounter).append("\")'>").append("<span id='icon-top").append(groupIdCounter)
+						.append("'>▶</span> Element: ").append(topGroup).append("</th></tr>");
+				lastTopGroup = topGroup;
+				lastSubGroup = null;
+			}
+
+			// Subgroup header
+			if (!subGroup.equals(lastSubGroup) && !subGroup.equals(topGroup)) {
+				subGroupIdCounter++;
+				html.append("<tr class='group-top").append(groupIdCounter).append(" hidden-row'>").append(
+						"<th class='group-header' colspan='3' style='padding-left:20px;' onclick='toggleGroup(\"sub")
+						.append(subGroupIdCounter).append("\")'>").append("<span id='icon-sub")
+						.append(subGroupIdCounter).append("'>▶</span> ↳ Element: ").append(subGroup)
+						.append("</th></tr>");
+				lastSubGroup = subGroup;
+			}
+
+			// Diff row
+			html.append("<tr class='group-top").append(groupIdCounter);
+			if (!subGroup.equals(topGroup)) {
+				html.append(" group-sub").append(subGroupIdCounter);
+			}
+			html.append(" hidden-row'>").append("<td>").append(type).append("</td>")
+					.append("<td><span class='xml-diff-removed'>").append(control).append("</span></td>")
+					.append("<td><span class='xml-diff-added'>").append(test).append("</span></td>").append("</tr>");
+		}
+
+		html.append("</table>");
+		return html.toString();
+	}
+
+	private String escapeHtml(String s) {
+		if (s == null)
+			return "";
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
 	}
 
 	private String buildSection(String title, int count, String id, String content, boolean collapsed) {
@@ -308,48 +515,45 @@ public class TestCaseReportService {
 	}
 
 	private String buildUnexecutedScenarios(TestCaseRunHistoryDTO dto) {
-	    List<Map<String, Object>> unexec = extractScenarioList(dto.getOutputLog(), "unexecutedScenarioDetails");
+		List<Map<String, Object>> unexec = extractScenarioList(dto.getOutputLog(), "unexecutedScenarioDetails");
 
-	    // If not found, check for "unexecutedScenarioReasons"
-	    if (unexec.isEmpty() && dto.getOutputLog() instanceof Map) {
-	        Map<?, ?> map = (Map<?, ?>) dto.getOutputLog();
-	        Object reasonsList = map.get("unexecutedScenarioReasons");
-	        if (reasonsList instanceof List) {
-	            unexec = (List<Map<String, Object>>) reasonsList;
-	        }
-	    }
-	    if (unexec.isEmpty()) {
-	        return noScenarioAligned("No unexecuted scenarios", 5);
-	    }
+		// If not found, check for "unexecutedScenarioReasons"
+		if (unexec.isEmpty() && dto.getOutputLog() instanceof Map) {
+			Map<?, ?> map = (Map<?, ?>) dto.getOutputLog();
+			Object reasonsList = map.get("unexecutedScenarioReasons");
+			if (reasonsList instanceof List) {
+				unexec = (List<Map<String, Object>>) reasonsList;
+			}
+		}
+		if (unexec.isEmpty()) {
+			return noScenarioAligned("No unexecuted scenarios", 5);
+		}
 
-	    StringBuilder sb = new StringBuilder(
-	        "<table class='scenario-table'><colgroup>" +
-	        "<col style='width:75%'><col style='width:40%'>" +
-	        "</colgroup>")
-	        .append("<tr><th>Scenario</th><th>Errors</th></tr>");
+		StringBuilder sb = new StringBuilder("<table class='scenario-table'><colgroup>"
+				+ "<col style='width:75%'><col style='width:40%'>" + "</colgroup>")
+						.append("<tr><th>Scenario</th><th>Errors</th></tr>");
 
-	    int ui = 0;
-	    for (Map<String, Object> s : unexec) {
-	        String scenario = escapeHtml(String.valueOf(s.getOrDefault("scenarioName", "N/A")));
-	        List<String> errors = safeList(s.get("errors"));
+		int ui = 0;
+		for (Map<String, Object> s : unexec) {
+			String scenario = escapeHtml(String.valueOf(s.getOrDefault("scenarioName", "N/A")));
+			List<String> errors = safeList(s.get("errors"));
 
-	        // Fallback to "reason" if errors list is empty
-	        if (errors.isEmpty() && s.containsKey("reason")) {
-	            errors = List.of(String.valueOf(s.get("reason")));
-	        }
+			// Fallback to "reason" if errors list is empty
+			if (errors.isEmpty() && s.containsKey("reason")) {
+				errors = List.of(String.valueOf(s.get("reason")));
+			}
 
-	        String errHtml = errors.isEmpty() ? "-"
-	            : "<button class='toggle-btn' onclick=\"toggle('unexecErr" + ui + "')\">View</button>" +
-	              "<div id='unexecErr" + ui + "' style='display:none;margin-top:8px'>" +
-	              String.join("<br>", errors) + "</div>";
+			String errHtml = errors.isEmpty() ? "-"
+					: "<button class='toggle-btn' onclick=\"toggle('unexecErr" + ui + "')\">View</button>"
+							+ "<div id='unexecErr" + ui + "' style='display:none;margin-top:8px'>"
+							+ String.join("<br>", errors) + "</div>";
 
-	        sb.append("<tr><td>").append(scenario).append("</td>")
-	          .append("<td>").append(errHtml).append("</td></tr>");
-	        ui++;
-	    }
+			sb.append("<tr><td>").append(scenario).append("</td>").append("<td>").append(errHtml).append("</td></tr>");
+			ui++;
+		}
 
-	    sb.append("</table>");
-	    return sb.toString();
+		sb.append("</table>");
+		return sb.toString();
 	}
 
 	private String buildRawSummary(TestCaseRunHistoryDTO dto) {
@@ -441,28 +645,27 @@ public class TestCaseReportService {
 
 	@SuppressWarnings("unchecked")
 	private List<Map<String, Object>> extractScenarioList(Object outputLog, String key) {
-	    if (outputLog instanceof Map) {
-	        Map<?, ?> map = (Map<?, ?>) outputLog;
+		if (outputLog instanceof Map) {
+			Map<?, ?> map = (Map<?, ?>) outputLog;
 
-	        // Check top-level key
-	        Object list = map.get(key);
-	        if (list instanceof List) {
-	            return (List<Map<String, Object>>) list;
-	        }
+			// Check top-level key
+			Object list = map.get(key);
+			if (list instanceof List) {
+				return (List<Map<String, Object>>) list;
+			}
 
-	        // ✅ Check inside runSummary
-	        Object runSummary = map.get("runSummary");
-	        if (runSummary instanceof Map) {
-	            Map<?, ?> summary = (Map<?, ?>) runSummary;
-	            Object innerList = summary.get(key);
-	            if (innerList instanceof List) {
-	                return (List<Map<String, Object>>) innerList;
-	            }
-	        }
-	    }
-	    return Collections.emptyList();
+			// ✅ Check inside runSummary
+			Object runSummary = map.get("runSummary");
+			if (runSummary instanceof Map) {
+				Map<?, ?> summary = (Map<?, ?>) runSummary;
+				Object innerList = summary.get(key);
+				if (innerList instanceof List) {
+					return (List<Map<String, Object>>) innerList;
+				}
+			}
+		}
+		return Collections.emptyList();
 	}
-
 
 	private String filenameFromPath(String p) {
 		if (p == null)
@@ -472,9 +675,4 @@ public class TestCaseReportService {
 		return idx >= 0 ? s.substring(idx + 1) : s;
 	}
 
-	private String escapeHtml(String s) {
-		if (s == null)
-			return "";
-		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-	}
 }

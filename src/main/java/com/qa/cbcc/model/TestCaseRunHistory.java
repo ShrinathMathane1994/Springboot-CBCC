@@ -7,116 +7,137 @@ import java.time.LocalDateTime;
 @Table(name = "test_case_run_history")
 public class TestCaseRunHistory {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "test_case_id", nullable = false)
-    private TestCase testCase;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "test_case_id", nullable = false)
+	private TestCase testCase;
 
-    @Column(name = "run_on")
-    private LocalDateTime runTime;
+	@Column(name = "run_on")
+	private LocalDateTime runTime;
 
-    @Column(name = "run_status")
-    private String runStatus;
+	@Column(name = "run_status")
+	private String runStatus;
 
-    @Column(name = "output_log", columnDefinition = "TEXT")
-    private String outputLog;
+	@Column(name = "output_log", columnDefinition = "TEXT")
+	private String outputLog;
 
-    @Column(name = "executed_scenarios", columnDefinition = "TEXT")
-    private String executedScenarios;
+	@Column(name = "executed_scenarios", columnDefinition = "TEXT")
+	private String executedScenarios;
 
-    @Column(name = "unexecuted_scenarios", columnDefinition = "TEXT")
-    private String unexecutedScenarios;
+	@Column(name = "unexecuted_scenarios", columnDefinition = "TEXT")
+	private String unexecutedScenarios;
 
-    @Column(name = "raw_log", columnDefinition = "TEXT")
-    private String rawCucumberLog;
+	@Column(name = "raw_log", columnDefinition = "TEXT")
+	private String rawCucumberLog;
 
-    @Column(name = "xmlparsed_differences_json", columnDefinition = "TEXT")
-    private String xmlParsedDifferencesJson;
+	@Column(name = "xmlparsed_differences_json", columnDefinition = "TEXT")
+	private String xmlParsedDifferencesJson;
 
-    @Column(name = "xml_diff_status")
-    private String xmlDiffStatus;
+	@Column(name = "xml_diff_status")
+	private String xmlDiffStatus;
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
+	@Column(name = "input_xml_content", columnDefinition = "TEXT")
+	private String inputXmlContent;
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+	@Column(name = "output_xml_content", columnDefinition = "TEXT")
+	private String outputXmlContent;
 
-    public TestCase getTestCase() {
-        return testCase;
-    }
+	public Long getId() {
+		return id;
+	}
 
-    public void setTestCase(TestCase testCase) {
-        this.testCase = testCase;
-    }
+	public void setId(Long id) {
+		this.id = id;
+	}
 
-    public LocalDateTime getRunTime() {
-        return runTime;
-    }
+	public TestCase getTestCase() {
+		return testCase;
+	}
 
-    public void setRunTime(LocalDateTime runTime) {
-        this.runTime = runTime;
-    }
+	public void setTestCase(TestCase testCase) {
+		this.testCase = testCase;
+	}
 
-    public String getRunStatus() {
-        return runStatus;
-    }
+	public LocalDateTime getRunTime() {
+		return runTime;
+	}
 
-    public void setRunStatus(String runStatus) {
-        this.runStatus = runStatus;
-    }
+	public void setRunTime(LocalDateTime runTime) {
+		this.runTime = runTime;
+	}
 
-    public String getOutputLog() {
-        return outputLog;
-    }
+	public String getRunStatus() {
+		return runStatus;
+	}
 
-    public void setOutputLog(String outputLog) {
-        this.outputLog = outputLog;
-    }
+	public void setRunStatus(String runStatus) {
+		this.runStatus = runStatus;
+	}
 
-    public String getExecutedScenarios() {
-        return executedScenarios;
-    }
+	public String getOutputLog() {
+		return outputLog;
+	}
 
-    public void setExecutedScenarios(String executedScenarios) {
-        this.executedScenarios = executedScenarios;
-    }
+	public void setOutputLog(String outputLog) {
+		this.outputLog = outputLog;
+	}
 
-    public String getUnexecutedScenarios() {
-        return unexecutedScenarios;
-    }
+	public String getExecutedScenarios() {
+		return executedScenarios;
+	}
 
-    public void setUnexecutedScenarios(String unexecutedScenarios) {
-        this.unexecutedScenarios = unexecutedScenarios;
-    }
+	public void setExecutedScenarios(String executedScenarios) {
+		this.executedScenarios = executedScenarios;
+	}
 
-    public String getRawCucumberLog() {
-        return rawCucumberLog;
-    }
+	public String getUnexecutedScenarios() {
+		return unexecutedScenarios;
+	}
 
-    public void setRawCucumberLog(String rawCucumberLog) {
-        this.rawCucumberLog = rawCucumberLog;
-    }
+	public void setUnexecutedScenarios(String unexecutedScenarios) {
+		this.unexecutedScenarios = unexecutedScenarios;
+	}
 
-    public String getXmlParsedDifferencesJson() {
-        return xmlParsedDifferencesJson;
-    }
+	public String getRawCucumberLog() {
+		return rawCucumberLog;
+	}
 
-    public void setXmlParsedDifferencesJson(String xmlParsedDifferencesJson) {
-        this.xmlParsedDifferencesJson = xmlParsedDifferencesJson;
-    }
+	public void setRawCucumberLog(String rawCucumberLog) {
+		this.rawCucumberLog = rawCucumberLog;
+	}
 
-    public String getXmlDiffStatus() {
-        return xmlDiffStatus;
-    }
+	public String getXmlParsedDifferencesJson() {
+		return xmlParsedDifferencesJson;
+	}
 
-    public void setXmlDiffStatus(String xmlDiffStatus) {
-        this.xmlDiffStatus = xmlDiffStatus;
-    }
+	public void setXmlParsedDifferencesJson(String xmlParsedDifferencesJson) {
+		this.xmlParsedDifferencesJson = xmlParsedDifferencesJson;
+	}
+
+	public String getXmlDiffStatus() {
+		return xmlDiffStatus;
+	}
+
+	public void setXmlDiffStatus(String xmlDiffStatus) {
+		this.xmlDiffStatus = xmlDiffStatus;
+	}
+	
+	public String getInputXmlContent() {
+		return inputXmlContent;
+	}
+
+	public void setInputXmlContent(String inputXmlContent) {
+		this.inputXmlContent = inputXmlContent;
+	}
+
+	public String getOutputXmlContent() {
+		return outputXmlContent;
+	}
+
+	public void setOutputXmlContent(String outputXmlContent) {
+		this.outputXmlContent = outputXmlContent;
+	}
 }

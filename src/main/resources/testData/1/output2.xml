@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library xmlns="http://example.org/library" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <?processing changed="yes"?>
+    <!-- Updated library info -->
+    <books>
+        <book id="B001" category="classic-fiction" available="false">
+            <title>The Great Gatsby (Illustrated Edition)</title>
+            <author>F. Scott Fitzgerald</author>
+            <year>1926</year>
+            <price currency="EUR">12.99</price>
+        </book>
+        <book id="B004" category="science">
+            <title>The Universe in a Nutshell</title>
+            <author>Stephen Hawking</author>
+            <year>2001</year>
+            <price currency="USD">20.00</price>
+        </book>
+        <book id="B003">
+            <title><![CDATA[Special <Characters> & Changed Content]]></title>
+            <author>John Doe</author>
+            <year>2001</year>
+            <price currency="USD">6.49</price>
+        </book>
+    </books>
+    <magazines>
+        <magazine id="M002">
+            <title>National Geographic</title>
+            <issue>April 2020</issue>
+        </magazine>
+        <magazine id="M001">
+            <title>National Geographic Updated</title>
+            <issue>March 2020</issue>
+        </magazine>
+    </magazines>
+</library>

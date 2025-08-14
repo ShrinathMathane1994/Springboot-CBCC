@@ -1,18 +1,39 @@
 package com.qa.cbcc.utils;
 
+import java.util.HashMap;
+import java.util.Map;
 
 public class TestContext {
- private static final ThreadLocal<Long> testCaseId = new ThreadLocal<>();
 
- public static void setTestCaseId(Long id) {
-     testCaseId.set(id);
- }
+    // Store generic key/value pairs per thread
+    private static final ThreadLocal<Map<String, Object>> CONTEXT =
+            ThreadLocal.withInitial(HashMap::new);
 
- public static Long getTestCaseId() {
-     return testCaseId.get();
- }
+    // Existing behavior for testCaseId
+    public static void setTestCaseId(Long id) {
+        CONTEXT.get().put("testCaseId", id);
+    }
 
- public static void clear() {
-     testCaseId.remove();
- }
+    public static Long getTestCaseId() {
+        Object val = CONTEXT.get().get("testCaseId");
+        return (val instanceof Long) ? (Long) val : null;
+    }
+
+    // New generic setters/getters
+    public static void set(String key, Object value) {
+        CONTEXT.get().put(key, value);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T get(String key) {
+        return (T) CONTEXT.get().get(key);
+    }
+
+    public static void remove(String key) {
+        CONTEXT.get().remove(key);
+    }
+
+    public static void clear() {
+        CONTEXT.remove();
+    }
 }
