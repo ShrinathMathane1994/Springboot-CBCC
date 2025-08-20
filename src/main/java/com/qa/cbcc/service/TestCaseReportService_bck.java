@@ -2,10 +2,8 @@ package com.qa.cbcc.service;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -17,326 +15,25 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.bitbucket.cowwoc.diffmatchpatch.DiffMatchPatch;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.xmlunit.builder.DiffBuilder;
 import org.xmlunit.builder.Input;
 import org.xmlunit.diff.Comparison;
-import org.xmlunit.diff.ComparisonType;
 import org.xmlunit.diff.Diff;
 import org.xmlunit.diff.Difference;
 
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 
 @Service
-public class TestCaseReportService {
+public class TestCaseReportService_bck {
 
-	private static final Logger logger = LoggerFactory.getLogger(TestCaseReportService.class);
-	// Central config for tags to skip
-	private static final Set<String> SKIPPED_TAGS = new LinkedHashSet<>(
-			Arrays.asList("CreDtTm", "TmStmpDetls", "EndToEndId"));
-	private static final String SKIPPED_TAGS_REGEX = buildSkippedTagsRegex(SKIPPED_TAGS);
+	// Tags to be skipped in expected XML
+	private static final Set<String> SKIPPED_TAGS = Set.of("CreDtTm", "TmStmpDetls", "EndToEndId");
 
-	private static String buildSkippedTagsRegex(Set<String> tags) {
-		String joined = String.join("|", tags);
-		return ".*<(?:/?(?:" + joined + "))(?:\\s[^>]*)?>.*";
-	}
+	// Regex to identify skipped tags in lines
+	private static final String SKIPPED_TAGS_REGEX = ".*<(?:/?(?:CreDtTm|TmStmpDetls|EndToEndId)).*>";
 
-	// Configurable placeholders
-	private static final Set<String> SKIPPED_PLACEHOLDERS = new LinkedHashSet<>(Arrays.asList("UETR"));
-
-	private static String buildSkippedPlaceholderRegex(Set<String> keys) {
-		if (keys.isEmpty())
-			return "(?!x)x";
-		return "\\$\\{(?:" + String.join("|", keys) + ")\\}";
-	}
-
-	private static final String SKIPPED_PLACEHOLDER_REGEX = buildSkippedPlaceholderRegex(SKIPPED_PLACEHOLDERS);
-//	private static final Pattern PLACEHOLDER_TOKEN = Pattern.compile(SKIPPED_PLACEHOLDER_REGEX);
-	private static final Pattern PLACEHOLDER_ONLY_LINE = Pattern.compile("^\\s*" + SKIPPED_PLACEHOLDER_REGEX + "\\s*$");
-
-	private static boolean isPlaceholderOnlyLine(String s) {
-		return s != null && PLACEHOLDER_ONLY_LINE.matcher(s).matches();
-	}
-
-	private static String maskSkippedPlaceholdersInCData(String text) {
-		if (text == null)
-			return "";
-
-		Matcher m = PLACEHOLDER_TOKEN.matcher(text);
-		StringBuffer sb = new StringBuffer();
-		while (m.find()) {
-			// Allow placeholder to consume anything, including newlines
-			m.appendReplacement(sb, "[\\\\s\\\\S]*?");
-		}
-		m.appendTail(sb);
-		return sb.toString();
-	}
-
-//	private static boolean linesEqualWithPlaceholders(String expected, String actual) {
-//		if (expected == null)
-//			expected = "";
-//		if (actual == null)
-//			actual = "";
-//
-//		if (isPlaceholderOnlyLine(expected))
-//			return true;
-//
-//		Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
-//		if (!m.find())
-//			return expected.equals(actual);
-//
-//		StringBuilder regex = new StringBuilder();
-//		int last = 0;
-//		m.reset();
-//		while (m.find()) {
-//			// Normalize the text before placeholder
-//			appendWithWhitespaceNormalized(regex, expected.substring(last, m.start()));
-//			// Insert correct replacement for ${...}
-//			if ("${UETR}".equals(m.group())) {
-//			    // Match either 32-char SWIFT-style or UUID style
-//			    regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
-//			} else {
-//			    regex.append("[\\s\\S]*?");
-//			}
-//
-//			last = m.end();
-//		}
-//		// Remaining tail after last placeholder
-//		appendWithWhitespaceNormalized(regex, expected.substring(last));
-//
-//		String expRegex = "^" + regex + "$";
-//		logger.info("Final Built Regex = " + expRegex);
-//
-//		return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
-//	}
-
-	private static final Pattern PLACEHOLDER_TOKEN = Pattern.compile("\\$\\{UETR\\}");
-
-	public static boolean linesEqualWithPlaceholders(String expected, String actual) {
-	    Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
-
-	    if (!m.find()) {
-	        // no placeholder → strict equality
-	        return expected.equals(actual);
-	    }
-
-	    StringBuilder regex = new StringBuilder();
-	    int last = 0;
-	    m.reset();
-
-	    while (m.find()) {
-	        // quote everything before placeholder (preserve spaces & text strictly)
-	        regex.append(Pattern.quote(expected.substring(last, m.start())));
-
-	        // placeholder: accept either UUID (36 chars with dashes) or 32-char UETR
-	        regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
-
-	        last = m.end();
-	    }
-
-	    // append the rest after last placeholder
-	    regex.append(Pattern.quote(expected.substring(last)));
-
-	    String expRegex = "^" + regex + "$";
-//	    logger.info("Final Built Regex = " + expRegex);
-
-	    return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
-	}
-
-	// Helper: turns spaces into \s+
-	private static void appendWithWhitespaceNormalized(StringBuilder regex, String literal) {
-		for (int i = 0; i < literal.length();) {
-			if (Character.isWhitespace(literal.charAt(i))) {
-				// collapse consecutive whitespace into one regex
-				while (i < literal.length() && Character.isWhitespace(literal.charAt(i))) {
-					i++;
-				}
-				regex.append("\\s+");
-			} else {
-				int j = i;
-				while (j < literal.length() && !Character.isWhitespace(literal.charAt(j))) {
-					j++;
-				}
-				regex.append(Pattern.quote(literal.substring(i, j)));
-				i = j;
-			}
-		}
-	}
-
-	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
-		if (expectedXml == null)
-			expectedXml = "";
-		if (actualXml == null)
-			actualXml = "";
-
-		// keep trailing empty lines if any
-		String[] expectedLines = expectedXml.split("\\r?\\n", -1);
-		String[] actualLines = actualXml.split("\\r?\\n", -1);
-
-		List<String> alignedExpected = new ArrayList<>();
-		List<String> alignedActual = new ArrayList<>();
-
-		int ei = 0; // cursor over expected
-
-		for (int ai = 0; ai < actualLines.length; ai++) {
-			String actLine = actualLines[ai];
-			String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
-
-			String ta = actLine.trim();
-			String te = expLine.trim();
-
-			// --- Case 0: skip-tag handling based on Actual line ---
-			Optional<String> skippedTag = SKIPPED_TAGS.stream()
-					.filter(tag -> ta.startsWith("<" + tag) || ta.startsWith("</" + tag)).findFirst();
-
-			if (skippedTag.isPresent()) {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
-				alignedActual.add(actLine);
-				continue; // do NOT consume expected
-			}
-
-			// --- placeholder-only expected line handling with look-ahead (zero-width
-			// aware) ---
-			if (ei < expectedLines.length && isPlaceholderOnlyLine(expLine)) {
-
-				// Case A: zero-width match — current actual already matches the *next* expected
-				// line.
-				if (ei + 1 < expectedLines.length && linesEqualWithPlaceholders(expectedLines[ei + 1], actLine)) {
-					// Consume expected placeholder ONLY; keep the same actual line for the next
-					// iteration.
-					alignedExpected.add(expLine);
-					alignedActual.add(leadingWhitespace(expLine)); // empty cell keeps columns aligned
-					ei++;
-					ai--; // reprocess the same actual line next loop
-					continue;
-				}
-
-				// Case B: placeholder consumes this actual line (value line)
-				alignedExpected.add(expLine);
-				alignedActual.add(actLine);
-				ei++;
-				continue;
-			}
-
-			// --- Case 1: lines are equal (with placeholders) -> consume both
-			if (ei < expectedLines.length && linesEqualWithPlaceholders(expLine, actLine)) {
-				alignedExpected.add(expLine);
-				alignedActual.add(actLine);
-				ei++;
-				continue;
-			}
-
-			// --- Case 2: Actual has extra content BEFORE Expected's closing tag
-			if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- missing in expected -->");
-				alignedActual.add(actLine);
-				continue;
-			}
-
-			// --- Case 3: Actual has extra content after Expected ended
-			if (ei >= expectedLines.length && !ta.isEmpty()) {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- missing in expected -->");
-				alignedActual.add(actLine);
-				continue;
-			}
-
-			// --- Case 4: Extra in Expected (Actual is empty here)
-			if (!te.isEmpty() && ta.isEmpty()) {
-				String indent = leadingWhitespace(expLine);
-				alignedExpected.add(expLine);
-				alignedActual.add(indent + "<!-- missing in actual -->");
-				ei++;
-				continue;
-			}
-
-			// --- Case 5: Fallback mismatch
-			if (ei < expectedLines.length) {
-				alignedExpected.add(expLine);
-				alignedActual.add(actLine);
-				ei++;
-			} else {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- missing in expected -->");
-				alignedActual.add(actLine);
-			}
-		}
-
-		// Any remaining Expected lines after Actual ends → mark missing in actual
-		while (ei < expectedLines.length) {
-			String expLine = expectedLines[ei++];
-			String indent = leadingWhitespace(expLine);
-			alignedExpected.add(expLine);
-			alignedActual.add(indent + "<!-- missing in actual -->");
-		}
-
-		return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
-	}
-
-	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
-		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent();
-		String modified = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent();
-
-		// normalize CDATA for both
-		original = normalizeLargeCDataForDiff(original);
-		modified = normalizeLargeCDataForDiff(modified);
-
-		// align both Expected & Actual
-		Pair<String, String> aligned = alignExpectedWithSkippedTags(original, modified);
-		String[] expectedLines = aligned.getLeft().split("\\r?\\n");
-		String[] actualLines = aligned.getRight().split("\\r?\\n");
-
-		int maxLines = Math.max(expectedLines.length, actualLines.length);
-
-		StringBuilder sb = new StringBuilder();
-		sb.append("<div class='xml-ssb-wrap'>");
-
-		for (int i = 0; i < maxLines; i++) {
-			sb.append("<div class='xml-row'>");
-
-			String leftLine = i < expectedLines.length ? expectedLines[i] : "";
-			String rightLine = i < actualLines.length ? actualLines[i] : "";
-
-			boolean leftSkipped = leftLine.trim().startsWith("<!-- skipped");
-			boolean rightSkipped = rightLine.trim().matches(SKIPPED_TAGS_REGEX)
-					|| rightLine.trim().startsWith("<!-- skipped");
-
-			// ---- Line number (Expected) ----
-			sb.append("<div class='").append(leftSkipped ? "line-num skipped" : "line-num").append("'>").append(i + 1)
-					.append("</div>");
-
-			// ---- Expected column ----
-			if (leftSkipped) {
-				sb.append("<div class='expected skipped'>").append(escapeHtml(leftLine)).append("</div>");
-			} else if (!linesEqualWithPlaceholders(leftLine, rightLine)) {
-				sb.append("<div class='expected'>").append(highlightExpected(leftLine, rightLine)).append("</div>");
-			} else {
-				sb.append("<div class='expected'>").append(escapeHtml(leftLine)).append("</div>");
-			}
-
-			// ---- Line number (Actual) ----
-			sb.append("<div class='").append(rightSkipped ? "line-num skipped" : "line-num").append("'>").append(i + 1)
-					.append("</div>");
-
-			// ---- Actual column ----
-			if (rightSkipped) {
-				sb.append("<div class='actual skipped'>").append(escapeHtml(rightLine)).append("</div>");
-			} else if (!linesEqualWithPlaceholders(leftLine, rightLine)) {
-				sb.append("<div class='actual'>").append(highlightActual(leftLine, rightLine)).append("</div>");
-			} else {
-				sb.append("<div class='actual'>").append(escapeHtml(rightLine)).append("</div>");
-			}
-
-			sb.append("</div>");
-		}
-
-		sb.append("</div>");
-		return sb.toString();
-	}
+	private static final Pattern SIMPLE_TAG_PATTERN = Pattern.compile("^(\\s*<[^>]+>)(.*?)(</[^>]+>\\s*)$");
 
 	public String generateHtmlReport(TestCaseRunHistoryDTO dto) {
 		SimpleDateFormat sdf = new SimpleDateFormat("EEEE, dd MMMM yyyy hh:mm a");
@@ -360,8 +57,10 @@ public class TestCaseReportService {
 				.append("color:#888;").append("background:#f8f8f8;").append("border-right:1px solid #ddd;")
 				.append("user-select:none;").append("}")
 				.append(".xml-ssb-wrap .expected.skipped, .xml-ssb-wrap .actual.skipped, .xml-ssb-wrap .line-num.skipped {")
-				.append("color: gray !important;").append("font-style: italic;")
-				.append("background-color: #f2f4f7 !important;").append("}")
+				.append("color: gray !important;")
+				.append("font-style: italic;")
+				.append("background-color: #f2f4f7 !important;")
+				.append("}")
 
 				// skipped tags styling
 				.append(".xml-ssb-wrap .expected.skipped, .xml-ssb-wrap .actual.skipped {")
@@ -394,8 +93,10 @@ public class TestCaseReportService {
 				.append("body.dark .expected.skipped, body.dark .actual.skipped {").append("color:#aaaaaa !important;")
 				.append("background-color:#3a3a3a !important;").append("}")
 				.append("body.dark .xml-ssb-wrap .expected.skipped, body.dark .xml-ssb-wrap .actual.skipped, body.dark .xml-ssb-wrap .line-num.skipped {")
-				.append("color:#aaaaaa !important;").append("background-color:#3a3a3a !important;").append("}")
-
+				.append("color:#aaaaaa !important;")
+				.append("background-color:#3a3a3a !important;")
+				.append("}")
+				
 				.append(".xml-pane{border:1px solid #e6e6e6;border-radius:8px;overflow:auto;max-height:520px;background:#fff;}")
 				.append("body.dark .xml-pane{background:#2c2c2c;border-color:#444;}")
 				.append(".xml-header{padding:6px 10px;font-weight:600;background:#f2f4f7;border-bottom:1px solid #e6e6e6;position:sticky;top:0;}")
@@ -546,6 +247,148 @@ public class TestCaseReportService {
 		return xml.replaceAll("(?m)^[ \\t]*<(CreDtTm|TmStmpDetls|EndToEndId)[^>]*>.*?</\\1>[ \\t]*\\r?\\n?", "");
 	}
 
+//	private String alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
+//		if (expectedXml == null)
+//			return "";
+//		if (actualXml == null)
+//			return expectedXml;
+//
+//		String[] expectedLines = expectedXml.split("\\r?\\n");
+//		String[] actualLines = actualXml.split("\\r?\\n");
+//
+//		List<String> result = new ArrayList<>();
+//		int eIndex = 0;
+//
+//		for (String actualLine : actualLines) {
+//			String trimmedActual = actualLine.trim();
+//
+//			// check if current line is a skipped tag
+//			Optional<String> skippedTag = SKIPPED_TAGS.stream()
+//					.filter(tag -> trimmedActual.startsWith("<" + tag) || trimmedActual.startsWith("</" + tag))
+//					.findFirst();
+//
+//			if (skippedTag.isPresent()) {
+//				// preserve leading indentation from actual XML
+//				String leadingSpaces = actualLine.substring(0, actualLine.indexOf(trimmedActual));
+//				result.add(leadingSpaces + "<!-- skipped " + skippedTag.get() + " -->");
+//				continue; // don’t consume expected line
+//			}
+//
+//			// otherwise take expected line
+//			if (eIndex < expectedLines.length) {
+//				result.add(expectedLines[eIndex]);
+//				eIndex++;
+//			} else {
+//				result.add(""); // pad if expected shorter
+//			}
+//		}
+//
+//		// add remaining expected lines (so UETR etc. are preserved)
+//		while (eIndex < expectedLines.length) {
+//			result.add(expectedLines[eIndex]);
+//			eIndex++;
+//		}
+//
+//		return String.join("\n", result);
+//	}
+
+	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
+		if (expectedXml == null)
+			expectedXml = "";
+		if (actualXml == null)
+			actualXml = "";
+
+		// keep trailing empty lines if any
+		String[] expectedLines = expectedXml.split("\\r?\\n", -1);
+		String[] actualLines = actualXml.split("\\r?\\n", -1);
+
+		List<String> alignedExpected = new ArrayList<>();
+		List<String> alignedActual = new ArrayList<>();
+
+		int ei = 0; // cursor over expected
+
+		for (int ai = 0; ai < actualLines.length; ai++) {
+			String actLine = actualLines[ai];
+			String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
+
+			String ta = actLine.trim();
+			String te = expLine.trim();
+
+			// --- Case 0: skip-tag handling based on Actual line ---
+			Optional<String> skippedTag = SKIPPED_TAGS.stream()
+					.filter(tag -> ta.startsWith("<" + tag) || ta.startsWith("</" + tag)).findFirst();
+
+			if (skippedTag.isPresent()) {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
+				alignedActual.add(actLine);
+				// do NOT consume expected; we only mirror the skipped marker on the left
+				continue;
+			}
+
+			// --- Case 1: lines are identical -> consume both
+			if (ei < expectedLines.length && expLine.equals(actLine)) {
+				alignedExpected.add(expLine);
+				alignedActual.add(actLine);
+				ei++;
+				continue;
+			}
+
+			// --- Case 2: Actual has extra content BEFORE Expected's closing tag
+			// If Expected cursor is at a closing tag (e.g., </magazines>) but Actual shows
+			// more content,
+			// insert "missing in expected" *now* (same indent as actual), DO NOT consume
+			// expected.
+			if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- missing in expected -->");
+				alignedActual.add(actLine);
+				// keep ei unchanged so the expected closing will align later
+				continue;
+			}
+
+			// --- Case 3: Actual has extra content after Expected ended
+			if (ei >= expectedLines.length && !ta.isEmpty()) {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- missing in expected -->");
+				alignedActual.add(actLine);
+				continue;
+			}
+
+			// --- Case 4: Extra in Expected (Actual is empty here)
+			if (!te.isEmpty() && ta.isEmpty()) {
+				String indent = leadingWhitespace(expLine);
+				alignedExpected.add(expLine);
+				alignedActual.add(indent + "<!-- missing in actual -->");
+				ei++;
+				continue;
+			}
+
+			// --- Case 5: Fallback mismatch (both non-empty but different)
+			// Align them as-is (your inline highlighters will show exact diffs).
+			if (ei < expectedLines.length) {
+				alignedExpected.add(expLine);
+				alignedActual.add(actLine);
+				ei++;
+			} else {
+				// no expected line left; mark missing
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- missing in expected -->");
+				alignedActual.add(actLine);
+			}
+		}
+
+		// Any remaining Expected lines after Actual ends → mark missing in actual
+		while (ei < expectedLines.length) {
+			String expLine = expectedLines[ei++];
+			String indent = leadingWhitespace(expLine);
+			alignedExpected.add(expLine);
+			alignedActual.add(indent + "<!-- missing in actual -->");
+		}
+
+		return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
+	}
+
 	private static String leadingWhitespace(String s) {
 		int i = 0;
 		while (i < s.length() && Character.isWhitespace(s.charAt(i)))
@@ -671,20 +514,88 @@ public class TestCaseReportService {
 		return line.substring(0, idx);
 	}
 
-	private String collapsePayloadCData(String xml) {
-		Pattern pattern = Pattern.compile("(?s)(<([A-Za-z0-9:_-]+)>\\s*<!\\[CDATA\\[)(.*?)(\\]\\]>\\s*</\\2>)");
-		Matcher matcher = pattern.matcher(xml);
-		StringBuffer sb = new StringBuffer();
+	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
+		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent();
+		String modified = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent();
 
-		while (matcher.find()) {
-			// Collapse newlines + trim spaces so CDATA stays inline
-			String collapsedContent = matcher.group(3).replaceAll("\\s*\\n\\s*", " ");
-			String collapsed = matcher.group(1) + collapsedContent + matcher.group(4);
-			matcher.appendReplacement(sb, Matcher.quoteReplacement(collapsed));
+		// normalize CDATA for both
+		original = normalizeLargeCDataForDiff(original);
+		modified = normalizeLargeCDataForDiff(modified);
+
+		// collapse Payload CDATA into one line (preserve formatting markers inside)
+		original = collapsePayloadCData(original);
+		modified = collapsePayloadCData(modified);
+
+		// align both Expected & Actual
+		Pair<String, String> aligned = alignExpectedWithSkippedTags(original, modified);
+		String[] expectedLines = aligned.getLeft().split("\\r?\\n");
+		String[] actualLines = aligned.getRight().split("\\r?\\n");
+
+		int maxLines = Math.max(expectedLines.length, actualLines.length);
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("<div class='xml-ssb-wrap'>");
+
+		for (int i = 0; i < maxLines; i++) {
+		    sb.append("<div class='xml-row'>");
+
+		    String leftLine  = i < expectedLines.length ? expectedLines[i] : "";
+		    String rightLine = i < actualLines.length   ? actualLines[i]   : "";
+
+		    boolean leftSkipped  = leftLine.trim().startsWith("<!-- skipped");
+		    boolean rightSkipped = rightLine.trim().matches(SKIPPED_TAGS_REGEX)
+		                        || rightLine.trim().startsWith("<!-- skipped");
+
+		    // ---- Line number (Expected) ----
+		    sb.append("<div class='")
+		      .append(leftSkipped ? "line-num skipped" : "line-num")
+		      .append("'>").append(i + 1).append("</div>");
+
+		    // ---- Expected column ----
+		    if (leftSkipped) {
+		        sb.append("<div class='expected skipped'>").append(escapeHtml(leftLine)).append("</div>");
+		    } else if (!leftLine.equals(rightLine)) {
+		        sb.append("<div class='expected'>").append(highlightExpected(leftLine, rightLine)).append("</div>");
+		    } else {
+		        sb.append("<div class='expected'>").append(escapeHtml(leftLine)).append("</div>");
+		    }
+
+		    // ---- Line number (Actual) ----
+		    sb.append("<div class='")
+		      .append(rightSkipped ? "line-num skipped" : "line-num")
+		      .append("'>").append(i + 1).append("</div>");
+
+		    // ---- Actual column ----
+		    if (rightSkipped) {
+		        sb.append("<div class='actual skipped'>").append(escapeHtml(rightLine)).append("</div>");
+		    } else if (!leftLine.equals(rightLine)) {
+		        sb.append("<div class='actual'>").append(highlightActual(leftLine, rightLine)).append("</div>");
+		    } else {
+		        sb.append("<div class='actual'>").append(escapeHtml(rightLine)).append("</div>");
+		    }
+
+		    sb.append("</div>");
 		}
-		matcher.appendTail(sb);
+		sb.append("</div>");
+
 
 		return sb.toString();
+	}
+	
+	private String collapsePayloadCData(String xml) {
+		 Pattern pattern = Pattern.compile("(?s)(<([A-Za-z0-9:_-]+)>\\s*<!\\[CDATA\\[)(.*?)(\\]\\]>\\s*</\\2>)");
+		    Matcher matcher = pattern.matcher(xml);
+		    StringBuffer sb = new StringBuffer();
+
+		    while (matcher.find()) {
+		        // Collapse newlines + trim spaces so CDATA stays inline
+		        String collapsedContent = matcher.group(3).replaceAll("\\s*\\n\\s*", " ");
+		        String collapsed = matcher.group(1) + collapsedContent + matcher.group(4);
+		        matcher.appendReplacement(sb, Matcher.quoteReplacement(collapsed));
+		    }
+		    matcher.appendTail(sb);
+
+		    return sb.toString();
 	}
 
 	private String buildXmlSideBySide2(TestCaseRunHistoryDTO dto) {
@@ -915,68 +826,14 @@ public class TestCaseReportService {
 		class Row {
 			String typeKey, typeFriendly, topGroup, subPath, left, right;
 		}
-
-		// --- Pass 1: collect all differences ---
-		List<Difference> all = new ArrayList<>();
-		for (Difference d : diff.getDifferences()) {
-			all.add(d);
-		}
-
-		// --- Pass 2: pick the shallowest XPath for each namespace change ---
-		Map<String, Difference> bestNamespaceDiffs = new LinkedHashMap<>();
-
-		for (Difference d : all) {
-			Comparison c = d.getComparison();
-			ComparisonType type = c.getType();
-
-			if (type == ComparisonType.NAMESPACE_URI || type == ComparisonType.NAMESPACE_PREFIX) {
-				String control = String.valueOf(c.getControlDetails().getValue());
-				String test = String.valueOf(c.getTestDetails().getValue());
-				String key = type.name() + ":" + control + "→" + test;
-
-				String xp = c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
-						: c.getTestDetails().getXPath();
-				int depth = (xp == null) ? Integer.MAX_VALUE : xp.split("/").length;
-
-				Difference currentBest = bestNamespaceDiffs.get(key);
-				if (currentBest == null) {
-					bestNamespaceDiffs.put(key, d);
-				} else {
-					String oldXp = currentBest.getComparison().getControlDetails().getXPath();
-					if (oldXp == null)
-						oldXp = currentBest.getComparison().getTestDetails().getXPath();
-					int oldDepth = (oldXp == null) ? Integer.MAX_VALUE : oldXp.split("/").length;
-
-					if (depth < oldDepth) {
-						bestNamespaceDiffs.put(key, d); // replace with shallower diff
-					}
-				}
-			}
-		}
-
-		// --- Pass 3: build rows, skipping duplicate/inherited namespace diffs ---
 		List<Row> rows = new ArrayList<>();
-		for (Difference d : all) {
+		for (Difference d : diff.getDifferences()) {
 			Comparison c = d.getComparison();
-			ComparisonType type = c.getType();
-
-			if (type == ComparisonType.NAMESPACE_URI || type == ComparisonType.NAMESPACE_PREFIX) {
-				String control = String.valueOf(c.getControlDetails().getValue());
-				String test = String.valueOf(c.getTestDetails().getValue());
-				String key = type.name() + ":" + control + "→" + test;
-
-				// keep only if this is the chosen shallowest difference
-				if (bestNamespaceDiffs.get(key) != d) {
-					continue;
-				}
-			}
-
 			Row r = new Row();
-			r.typeKey = type.name();
+			r.typeKey = c.getType().name();
 			r.typeFriendly = friendly.getOrDefault(r.typeKey, "Other change");
 			r.left = String.valueOf(c.getControlDetails().getValue());
 			r.right = String.valueOf(c.getTestDetails().getValue());
-
 			String xp = c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
 					: c.getTestDetails().getXPath();
 			if (xp == null)
@@ -984,7 +841,6 @@ public class TestCaseReportService {
 			String[] parts = xp.split("(?=\\/[^\\/]+\\[\\d+\\])");
 			r.topGroup = parts.length > 1 ? parts[0] + parts[1] : parts[0];
 			r.subPath = xp;
-
 			rows.add(r);
 		}
 

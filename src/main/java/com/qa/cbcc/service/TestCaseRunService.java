@@ -464,26 +464,81 @@ public class TestCaseRunService {
 		return results;
 	}
 
+//	private String extractScenarioBlock(String featureFilePath, String scenarioName) throws IOException {
+//		List<String> lines = Files.readAllLines(Paths.get(featureFilePath));
+//		StringBuilder block = new StringBuilder();
+//		boolean capture = false;
+//		for (String line : lines) {
+//			String trimmed = line.trim();
+//			if (trimmed.startsWith("Scenario:") || trimmed.startsWith("Scenario Outline:")) {
+//				String extractedName = trimmed.replace("Scenario:", "").replace("Scenario Outline:", "").split("#")[0]
+//						.trim();
+//				if (extractedName.equals(scenarioName)) {
+//					capture = true;
+//				} else if (capture) {
+//					break;
+//				}
+//			}
+//			if (capture) {
+//				block.append(line).append("\n");
+//			}
+//		}
+//		return block.toString().trim();
+//	}
+
 	private String extractScenarioBlock(String featureFilePath, String scenarioName) throws IOException {
-		List<String> lines = Files.readAllLines(Paths.get(featureFilePath));
-		StringBuilder block = new StringBuilder();
-		boolean capture = false;
-		for (String line : lines) {
-			String trimmed = line.trim();
-			if (trimmed.startsWith("Scenario:") || trimmed.startsWith("Scenario Outline:")) {
-				String extractedName = trimmed.replace("Scenario:", "").replace("Scenario Outline:", "").split("#")[0]
-						.trim();
-				if (extractedName.equals(scenarioName)) {
-					capture = true;
-				} else if (capture) {
-					break;
-				}
-			}
-			if (capture) {
-				block.append(line).append("\n");
-			}
-		}
-		return block.toString().trim();
+	    List<String> lines = Files.readAllLines(Paths.get(featureFilePath));
+	    StringBuilder block = new StringBuilder();
+	    boolean capture = false;
+	    boolean possibleTag = false;
+
+	    for (String line : lines) {
+	        String trimmed = line.trim();
+
+	        // potential tag before scenario
+	        if (trimmed.startsWith("@") && !capture) {
+	            block.setLength(0); // reset
+	            block.append(trimmed).append("\n");
+	            possibleTag = true;
+	            continue;
+	        }
+
+	        // if we are already capturing and encounter another tag => stop
+	        if (capture && trimmed.startsWith("@")) {
+	            break;
+	        }
+
+	        if (trimmed.startsWith("Scenario:") || trimmed.startsWith("Scenario Outline:")) {
+	            String extractedName = trimmed
+	                    .replace("Scenario:", "")
+	                    .replace("Scenario Outline:", "")
+	                    .split("#")[0]
+	                    .trim();
+
+	            if (extractedName.equals(scenarioName)) {
+	                // If no tag captured before, reset to start from scenario
+	                if (!possibleTag) {
+	                    block.setLength(0);
+	                }
+	                block.append(trimmed).append("\n");
+	                capture = true;
+	            } else if (capture) {
+	                break; // stop when another scenario starts
+	            } else {
+	                block.setLength(0); // discard unrelated tag
+	            }
+	            continue;
+	        }
+
+	        if (capture) {
+	            if (!trimmed.isEmpty()) {
+	                block.append("  ").append(trimmed).append("\n");
+	            } else {
+	                block.append("\n");
+	            }
+	        }
+	    }
+	    return block.toString().trim();
 	}
 
 	public List<Map<String, Object>> extractXmlDifferences(String diffOutput) {
@@ -909,19 +964,38 @@ public class TestCaseRunService {
 		return input.replaceAll("\\u001B\\[[;\\d]*m", "");
 	}
 
+//	private File generateTempFeatureFile(TestCaseDTO testCase) throws IOException {
+//		StringBuilder content = new StringBuilder("Feature: ").append(testCase.getTcName()).append("\n\n");
+//		for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios())
+//			for (String block : fs.getScenarioBlocks())
+//				content.append(block).append("\n\n");
+//		File tempFile = File.createTempFile("testcase_", ".feature");
+//		try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+//			writer.write(content.toString());
+//		} catch (IOException e) {
+//			e.printStackTrace(); // Or better: use a logger
+//		}
+//		return tempFile;
+//	}
+	
 	private File generateTempFeatureFile(TestCaseDTO testCase) throws IOException {
-		StringBuilder content = new StringBuilder("Feature: ").append(testCase.getTcName()).append("\n\n");
-		for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios())
-			for (String block : fs.getScenarioBlocks())
-				content.append(block).append("\n\n");
-		File tempFile = File.createTempFile("testcase_", ".feature");
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
-			writer.write(content.toString());
-		} catch (IOException e) {
-			e.printStackTrace(); // Or better: use a logger
-		}
-		return tempFile;
+	    StringBuilder content = new StringBuilder();
+	    content.append("Feature: ").append(testCase.getTcName()).append("\n\n");
+
+	    for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
+	        for (String block : fs.getScenarioBlocks()) {
+	            content.append(block.trim()).append("\n\n"); // ensure clean spacing
+	        }
+	    }
+
+	    File tempFile = File.createTempFile("testcase_", ".feature");
+	    try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+	        writer.write(content.toString().trim());
+	        writer.newLine();
+	    }
+	    return tempFile;
 	}
+
 
 	public List<Map<String, Object>> runByIds(List<Long> testCaseIds) {
 		List<TestCaseDTO> dtos = testCaseRepository.findByIdTCIn(testCaseIds).stream().map(this::convertToDTO)
