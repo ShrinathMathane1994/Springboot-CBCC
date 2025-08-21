@@ -485,6 +485,31 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Get Regions",
+			"id": "45846184-dbe378b4-f684-463e-8cb9-3d17bf8286cb",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/master/regions",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"master",
+						"regions"
+					]
+				}
+			},
+			"response": []
 		}
 	]
 }
