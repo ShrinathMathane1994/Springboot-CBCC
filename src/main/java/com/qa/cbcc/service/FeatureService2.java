@@ -2,15 +2,16 @@ package com.qa.cbcc.service;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,10 +27,6 @@ import org.apache.commons.io.FileUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
-import org.reflections.Reflections;
-import org.reflections.scanners.Scanners;
-import org.reflections.util.ClasspathHelper;
-import org.reflections.util.ConfigurationBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,16 +36,10 @@ import com.qa.cbcc.dto.ExampleDTO;
 import com.qa.cbcc.dto.GitConfigDTO;
 import com.qa.cbcc.dto.ScenarioDTO;
 
-import io.cucumber.java.en.And;
-import io.cucumber.java.en.But;
-import io.cucumber.java.en.Given;
-import io.cucumber.java.en.Then;
-import io.cucumber.java.en.When;
-
 @Service
-public class FeatureService {
+public class FeatureService2 {
 
-	private static final Logger logger = LoggerFactory.getLogger(FeatureService.class);
+	private static final Logger logger = LoggerFactory.getLogger(FeatureService2.class);
 	private static final String CONFIG_FILE = "src/main/resources/git-config.properties";
 
 	@Value("${feature.source:local}")
@@ -83,11 +74,6 @@ public class FeatureService {
 
 	@Value("${step.defs.glue:}")
 	private String gluePackageName;
-
-	private List<String> stepDefProjPaths = new ArrayList<>();
-	private List<String> gluePackageNames = new ArrayList<>();
-	// ✅ Cache for auto-scanned glue per project path
-	private static final Map<String, Set<String>> cachedGluePkgsPerPath = new ConcurrentHashMap<>();
 
 	private List<ScenarioDTO> cachedScenarios = new ArrayList<>();
 	private final Map<String, List<ScenarioDTO>> tagIndex = new ConcurrentHashMap<>();
@@ -468,29 +454,6 @@ public class FeatureService {
 		return response;
 	}
 
-//	@PostConstruct
-//	public void initializeGitPropertiesFromFile() {
-//		try {
-//			Properties props = loadConfig();
-//			this.featureSource = props.getProperty("feature.source", "local");
-//			this.gitRepoUrl = props.getProperty("feature.git.repo-url", "");
-//			this.localCloneDir = props.getProperty("feature.git.clone-dir", "features-repo");
-//			this.gitFeatureSubPath = props.getProperty("feature.git.feature-path", "");
-//			this.gitBranch = props.getProperty("feature.git.branch", "main");
-//			this.gitUsername = props.getProperty("feature.git.username", "");
-//			this.gitPassword = props.getProperty("feature.git.password", "");
-//			this.localFeatureDir = props.getProperty("feature.local.path", "src/test/resources/features");
-//			this.refreshInterval = Long.parseLong(props.getProperty("feature.refresh.interval.ms", "300000"));
-//			this.stepDefProjPath = props.getProperty("step.defs.project-path", "");
-//			this.gluePackageName = props.getProperty("step.defs.glue", "com.qa.cbcc.steps");
-//			// Optional: Log resolved paths for debugging
-////	        logger.info("Initialized Git Config: featureSource={}, featureDir={}, stepDefsPath={}, glue={}",
-////	                featureSource, localFeatureDir, stepDefProjPath, gluePackageName);
-//		} catch (IOException e) {
-//			logger.error("Failed to load git config: {}", e.getMessage());
-//		}
-//	}
-
 	@PostConstruct
 	public void initializeGitPropertiesFromFile() {
 		try {
@@ -504,98 +467,28 @@ public class FeatureService {
 			this.gitPassword = props.getProperty("feature.git.password", "");
 			this.localFeatureDir = props.getProperty("feature.local.path", "src/test/resources/features");
 			this.refreshInterval = Long.parseLong(props.getProperty("feature.refresh.interval.ms", "300000"));
-
 			this.stepDefProjPath = props.getProperty("step.defs.project-path", "");
 			this.gluePackageName = props.getProperty("step.defs.glue", "com.qa.cbcc.steps");
-
-			// 🔹 Support multiple paths (comma-separated)
-			this.stepDefProjPaths = Arrays.stream(stepDefProjPath.split(",")).map(String::trim)
-					.filter(s -> !s.isEmpty()).toList();
-
-			// 🔹 Support multiple glue packages (comma-separated)
-			this.gluePackageNames = Arrays.stream(gluePackageName.split(",")).map(String::trim)
-					.filter(s -> !s.isEmpty()).toList();
-
-			logger.info("✅ StepDef paths resolved: {}", stepDefProjPaths);
-			logger.info("✅ Glue packages resolved: {}", gluePackageNames);
-
+			// Optional: Log resolved paths for debugging
+//	        logger.info("Initialized Git Config: featureSource={}, featureDir={}, stepDefsPath={}, glue={}",
+//	                featureSource, localFeatureDir, stepDefProjPath, gluePackageName);
 		} catch (IOException e) {
-			logger.error("❌ Failed to load git config: {}", e.getMessage(), e);
+			logger.error("Failed to load git config: {}", e.getMessage());
 		}
 	}
 
-	/**
-	 * Returns all configured step project class paths (e.g.
-	 * /myproj/target/classes).
-	 */
-	public List<String> getStepDefsFullPaths() {
-		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
-			return stepDefProjPaths.stream().map(path -> path + File.separator + "target" + File.separator + "classes")
-					.toList();
+	public String getStepDefsFullPath() {
+		if (stepDefProjPath != null && !stepDefProjPath.trim().isEmpty()) {
+			// External project
+			return stepDefProjPath + File.separator + "target" + File.separator + "classes";
 		} else {
-			return List.of(new File("target/classes").getAbsolutePath());
+			// Fallback → current project
+			return new File("target/classes").getAbsolutePath();
 		}
 	}
 
-	/**
-	 * Returns glue packages array (from config, or auto-scan with caching).
-	 */
-	public String[] getGluePackagesArray() throws IOException {
-		// ✅ Case 1: explicit glues provided in config
-		if (gluePackageNames != null && !gluePackageNames.isEmpty()) {
-			return gluePackageNames.toArray(new String[0]);
-		}
-
-		// ✅ Case 2: auto-scan across multiple step projects
-		Set<String> glueSet = new HashSet<>();
-		for (String path : getStepDefsFullPaths()) {
-			glueSet.addAll(scanGlueWithCache(path));
-		}
-
-		if (glueSet.isEmpty()) {
-			throw new IllegalStateException("⚠️ No step definition classes found in configured paths");
-		}
-
-		return glueSet.stream().sorted().toArray(String[]::new);
+	public String[] getGluePackagesArray() {
+		return gluePackageName != null ? gluePackageName.split(",") : new String[0];
 	}
 
-	/**
-	 * Auto-scans a given path for step definitions, with caching.
-	 */
-	private Set<String> scanGlueWithCache(String stepDefsPath) throws IOException {
-		// ✅ Return cached result if already scanned
-		if (cachedGluePkgsPerPath.containsKey(stepDefsPath)) {
-			logger.debug("Using cached glue packages for {}", stepDefsPath);
-			return cachedGluePkgsPerPath.get(stepDefsPath);
-		}
-
-		File stepDefsDir = new File(stepDefsPath);
-		if (!stepDefsDir.exists()) {
-			throw new IllegalStateException("Step defs path does not exist: " + stepDefsPath);
-		}
-
-		Set<String> pkgs;
-		// Build classloader for step project (auto-closed)
-		try (URLClassLoader cl = new URLClassLoader(new URL[] { stepDefsDir.toURI().toURL() },
-				Thread.currentThread().getContextClassLoader())) {
-			// Use Reflections to scan for Cucumber annotations
-			Reflections reflections = new Reflections(
-					new ConfigurationBuilder().setUrls(ClasspathHelper.forClassLoader(cl))
-							.setScanners(Scanners.TypesAnnotated).addClassLoaders(cl));
-
-			Set<Class<?>> stepDefClasses = new HashSet<>();
-			stepDefClasses.addAll(reflections.getTypesAnnotatedWith(Given.class));
-			stepDefClasses.addAll(reflections.getTypesAnnotatedWith(When.class));
-			stepDefClasses.addAll(reflections.getTypesAnnotatedWith(Then.class));
-			stepDefClasses.addAll(reflections.getTypesAnnotatedWith(And.class));
-			stepDefClasses.addAll(reflections.getTypesAnnotatedWith(But.class));
-
-			pkgs = stepDefClasses.stream().map(clazz -> clazz.getPackage().getName()).collect(Collectors.toSet());
-		}
-
-		// ✅ Cache result per path
-		cachedGluePkgsPerPath.put(stepDefsPath, pkgs);
-
-		return pkgs;
-	}
 }

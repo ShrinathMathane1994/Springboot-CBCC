@@ -44,6 +44,10 @@ public class TestCaseReportService {
 	}
 
 	// Configurable placeholders
+	private static final Set<String> PLACEHOLDERS = Set.of("UETR"); // Add any names
+	private static final Pattern PLACEHOLDER_TOKEN = Pattern
+			.compile("\\$\\{(" + String.join("|", PLACEHOLDERS) + ")\\}");
+
 	private static final Set<String> SKIPPED_PLACEHOLDERS = new LinkedHashSet<>(Arrays.asList("UETR"));
 
 	private static String buildSkippedPlaceholderRegex(Set<String> keys) {
@@ -74,76 +78,61 @@ public class TestCaseReportService {
 		return sb.toString();
 	}
 
-//	private static boolean linesEqualWithPlaceholders(String expected, String actual) {
-//		if (expected == null)
-//			expected = "";
-//		if (actual == null)
-//			actual = "";
-//
-//		if (isPlaceholderOnlyLine(expected))
-//			return true;
-//
-//		Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
-//		if (!m.find())
-//			return expected.equals(actual);
-//
-//		StringBuilder regex = new StringBuilder();
-//		int last = 0;
-//		m.reset();
-//		while (m.find()) {
-//			// Normalize the text before placeholder
-//			appendWithWhitespaceNormalized(regex, expected.substring(last, m.start()));
-//			// Insert correct replacement for ${...}
-//			if ("${UETR}".equals(m.group())) {
-//			    // Match either 32-char SWIFT-style or UUID style
-//			    regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
-//			} else {
-//			    regex.append("[\\s\\S]*?");
-//			}
-//
-//			last = m.end();
-//		}
-//		// Remaining tail after last placeholder
-//		appendWithWhitespaceNormalized(regex, expected.substring(last));
-//
-//		String expRegex = "^" + regex + "$";
-//		logger.info("Final Built Regex = " + expRegex);
-//
-//		return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
-//	}
-
-	private static final Pattern PLACEHOLDER_TOKEN = Pattern.compile("\\$\\{UETR\\}");
-
 	public static boolean linesEqualWithPlaceholders(String expected, String actual) {
-	    Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
+		if (expected == null)
+			expected = "";
+		if (actual == null)
+			actual = "";
 
-	    if (!m.find()) {
-	        // no placeholder → strict equality
-	        return expected.equals(actual);
-	    }
+		expected = expected.replaceAll("\\s+", " ").trim();
+		actual = actual.replaceAll("\\s+", " ").trim();
 
-	    StringBuilder regex = new StringBuilder();
-	    int last = 0;
-	    m.reset();
+		Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
+		StringBuilder regex = new StringBuilder();
+		int last = 0;
+		while (m.find()) {
+			regex.append(Pattern.quote(expected.substring(last, m.start())));
+			// All placeholders use the same pattern here
+			regex.append("[^<>{}\\s]+"); // or use ".*?" for any string
+//			regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
+			last = m.end();
+		}
+		regex.append(Pattern.quote(expected.substring(last)));
 
-	    while (m.find()) {
-	        // quote everything before placeholder (preserve spaces & text strictly)
-	        regex.append(Pattern.quote(expected.substring(last, m.start())));
-
-	        // placeholder: accept either UUID (36 chars with dashes) or 32-char UETR
-	        regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
-
-	        last = m.end();
-	    }
-
-	    // append the rest after last placeholder
-	    regex.append(Pattern.quote(expected.substring(last)));
-
-	    String expRegex = "^" + regex + "$";
-//	    logger.info("Final Built Regex = " + expRegex);
-
-	    return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
+		String expRegex = "^" + regex + "$";
+		return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
 	}
+
+//	public static boolean linesEqualWithPlaceholders(String expected, String actual) {
+//	    Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
+//
+//	    if (!m.find()) {
+//	        // no placeholder → strict equality
+//	        return expected.equals(actual);
+//	    }
+//
+//	    StringBuilder regex = new StringBuilder();
+//	    int last = 0;
+//	    m.reset();
+//
+//	    while (m.find()) {
+//	        // quote everything before placeholder (preserve spaces & text strictly)
+//	        regex.append(Pattern.quote(expected.substring(last, m.start())));
+//
+//	        // placeholder: accept either UUID (36 chars with dashes) or 32-char UETR
+//	        regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
+//
+//	        last = m.end();
+//	    }
+//
+//	    // append the rest after last placeholder
+//	    regex.append(Pattern.quote(expected.substring(last)));
+//
+//	    String expRegex = "^" + regex + "$";
+////	    logger.info("Final Built Regex = " + expRegex);
+//
+//	    return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
+//	}
 
 	// Helper: turns spaces into \s+
 	private static void appendWithWhitespaceNormalized(StringBuilder regex, String literal) {
@@ -280,6 +269,12 @@ public class TestCaseReportService {
 	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
 		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent();
 		String modified = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent();
+		
+		// If nothing to compare, show aligned empty message
+	    if (original.isEmpty() && modified.isEmpty()) {
+	        return noScenarioAligned("No XML content available for Expected vs Actual", 5);
+	    }
+
 
 		// normalize CDATA for both
 		original = normalizeLargeCDataForDiff(original);
@@ -884,6 +879,20 @@ public class TestCaseReportService {
 		String expected = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent().trim();
 		String actual = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent().trim();
 
+		// ✅ Guard clause: avoid XMLUnit crash
+		if (expected.isEmpty() || actual.isEmpty()) {
+			String msg = "No semantic differences recorded";
+			if (expected.isEmpty() || actual.isEmpty()) {
+				msg += " (Skipped:";
+				if (expected.isEmpty())
+					msg += " Expected XML is missing.";
+				if (actual.isEmpty())
+					msg += " Actual XML is missing.";
+				msg += ")";
+			}
+			return noScenarioAligned(msg, 5);
+		}
+
 		Diff diff = DiffBuilder.compare(Input.fromString(expected)).withTest(Input.fromString(actual))
 				.ignoreWhitespace().checkForSimilar().build();
 
@@ -1271,8 +1280,8 @@ public class TestCaseReportService {
 		}
 
 		StringBuilder sb = new StringBuilder(
-				"<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>").append(
-						"<tr><th>Scenario</th><th>Input File</th><th>Output File</th><th>Message</th><th>Differences</th></tr>");
+				"<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>")
+				.append("<tr><th>Scenario</th><th>Input File</th><th>Output File</th><th>Message</th><th>Differences</th></tr>");
 
 		int index = 0;
 		for (Object obj : diffsList) {
@@ -1362,8 +1371,8 @@ public class TestCaseReportService {
 		}
 
 		StringBuilder sb = new StringBuilder(
-				"<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>").append(
-						"<tr><th>Scenario</th><th>Type</th><th>Example Header</th><th>Example Values</th><th>Errors</th></tr>");
+				"<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>")
+				.append("<tr><th>Scenario</th><th>Type</th><th>Example Header</th><th>Example Values</th><th>Errors</th></tr>");
 
 		int fi = 0;
 		for (Map<String, Object> s : failed) {
@@ -1393,8 +1402,8 @@ public class TestCaseReportService {
 
 		StringBuilder sb = new StringBuilder("<table class='scenario-table'><colgroup>"
 				+ "<col style='width:35%'><col style='width:15%'><col style='width:15%'><col style='width:25%'><col style='width:10%'>"
-				+ "</colgroup>").append(
-						"<tr><th>Scenario</th><th>Type</th><th>Example Header</th><th colspan='2'>Example Values</th></tr>");
+				+ "</colgroup>")
+				.append("<tr><th>Scenario</th><th>Type</th><th>Example Header</th><th colspan='2'>Example Values</th></tr>");
 
 		for (Map<String, Object> s : passed) {
 			List<String> headers = safeList(s.get("exampleHeader"));
@@ -1426,7 +1435,7 @@ public class TestCaseReportService {
 
 		StringBuilder sb = new StringBuilder("<table class='scenario-table'><colgroup>"
 				+ "<col style='width:75%'><col style='width:40%'>" + "</colgroup>")
-						.append("<tr><th>Scenario</th><th>Errors</th></tr>");
+				.append("<tr><th>Scenario</th><th>Errors</th></tr>");
 
 		int ui = 0;
 		for (Map<String, Object> s : unexec) {

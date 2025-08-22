@@ -2,16 +2,17 @@ package com.qa.cbcc.dto;
 
 public class GitConfigDTO {
 
-	private String sourceType;
+    private String sourceType;
     private String repoUrl;
     private String cloneDir;
-    private String featurePath;
+    private String gitFeaturePath;
     private String branch;
     private String username;
     private String password;
-    private String localPath;
+    private String localFeatherPath;
     private Long refreshInterval;
-
+    private String stepDefsProjectPath;
+    private String gluePackage;
     
 	public String getSourceType() {
 		return sourceType;
@@ -31,11 +32,11 @@ public class GitConfigDTO {
 	public void setCloneDir(String cloneDir) {
 		this.cloneDir = cloneDir;
 	}
-	public String getFeaturePath() {
-		return featurePath;
+	public String getGitFeaturePath() {
+		return gitFeaturePath;
 	}
-	public void setFeaturePath(String featurePath) {
-		this.featurePath = featurePath;
+	public void setGitFeaturePath(String gitFeaturePath) {
+		this.gitFeaturePath = gitFeaturePath;
 	}
 	public String getBranch() {
 		return branch;
@@ -55,11 +56,11 @@ public class GitConfigDTO {
 	public void setPassword(String password) {
 		this.password = password;
 	}
-	public String getLocalPath() {
-		return localPath;
+	public String getLocalFeatherPath() {
+		return localFeatherPath;
 	}
-	public void setLocalPath(String localPath) {
-		this.localPath = localPath;
+	public void setLocalFeatherPath(String localFeatherPath) {
+		this.localFeatherPath = localFeatherPath;
 	}
 	public Long getRefreshInterval() {
 		return refreshInterval;
@@ -67,5 +68,18 @@ public class GitConfigDTO {
 	public void setRefreshInterval(Long refreshInterval) {
 		this.refreshInterval = refreshInterval;
 	}
-    
+	public String getStepDefsProjectPath() {
+		return stepDefsProjectPath;
+	}
+	public void setStepDefsProjectPath(String stepDefsProjectPath) {
+		this.stepDefsProjectPath = stepDefsProjectPath;
+	}
+	public String getGluePackage() {
+		return gluePackage;
+	}
+	public void setGluePackage(String gluePackage) {
+		this.gluePackage = gluePackage;
+	}
+
+  
 }

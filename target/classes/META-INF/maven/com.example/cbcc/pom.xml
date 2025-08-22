@@ -154,7 +154,7 @@
 		<dependency>
 			<groupId>org.xmlunit</groupId>
 			<artifactId>xmlunit-core</artifactId>
-			</dependency>
+		</dependency>
 
 		<!-- Lombok -->
 		<dependency>
@@ -226,6 +226,13 @@
 			<artifactId>diff-match-patch</artifactId>
 			<version>1.2</version>
 		</dependency>
+
+		<dependency>
+			<groupId>org.reflections</groupId>
+			<artifactId>reflections</artifactId>
+			<version>0.10.2</version>
+		</dependency>
+
 
 	</dependencies>
 
