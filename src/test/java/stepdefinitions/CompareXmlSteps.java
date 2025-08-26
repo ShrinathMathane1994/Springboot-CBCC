@@ -1,4 +1,4 @@
-package com.qa.cbcc.stepdefinitions;
+package stepdefinitions;
 
 import static org.testng.Assert.assertTrue;
 
