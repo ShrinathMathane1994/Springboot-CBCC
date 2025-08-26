@@ -187,9 +187,12 @@ public class TestCaseRunService {
 
 			// 3. Compile stepDefs if needed (before running cucumber)
 			for (String projPath : featureService.getStepDefsProjectPaths()) {
-			    StepDefCompiler.compileStepDefs(List.of(projPath)); // ✅
+				StepDefCompiler.compileStepDefs(List.of(projPath)); // ✅
 			}
 
+			 // ✅ Ensure dependencies are copied once
+			StepDefCompiler.ensureDependenciesCopied();
+            
 			// 3.1. Capture Cucumber stdout
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			PrintStream originalOut = System.out;
@@ -197,25 +200,40 @@ public class TestCaseRunService {
 
 			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
 			try {
-				// ✅ Support multiple stepDef project paths
+				// ✅ Gather stepDef paths (target/classes, test-classes)
 				List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
 
-				URL[] urls = stepDefsPaths.stream().map(path -> new File(path)).filter(File::exists).map(file -> {
-					try {
-						return file.toURI().toURL();
-					} catch (Exception e) {
-						throw new RuntimeException("Invalid stepDefs path: " + file, e);
+				List<URL> urls = new ArrayList<>();
+
+				// Add compiled classes
+				for (String path : stepDefsPaths) {
+					File f = new File(path);
+					if (f.exists()) {
+						urls.add(f.toURI().toURL());
 					}
-				}).toArray(URL[]::new);
+				}
+
+				// ✅ Add all jars from target/dependency (so Cucumber sees external libs)
+				File depDir = new File("target/dependency");
+				if (depDir.exists() && depDir.isDirectory()) {
+					File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
+					if (jars != null) {
+						for (File jar : jars) {
+							urls.add(jar.toURI().toURL());
+						}
+					}
+				}
 
 				// 🔍 Log the resolved classpath entries
-				logger.info("StepDefs classpath URLs:");
+				logger.info("StepDefs + Dependency classpath URLs:");
 				for (URL url : urls) {
 					logger.info("  {}", url);
 				}
 
-				try (URLClassLoader classLoader = new URLClassLoader(urls,
+				// ✅ Hybrid classloader (inherits app deps + adds stepDefs + jars)
+				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
 						Thread.currentThread().getContextClassLoader())) {
+
 					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
 					Main.run(argv, classLoader);
 				}
