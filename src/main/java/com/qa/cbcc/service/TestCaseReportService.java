@@ -27,6 +27,8 @@ import org.xmlunit.diff.ComparisonType;
 import org.xmlunit.diff.Diff;
 import org.xmlunit.diff.Difference;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 
 @Service
@@ -269,12 +271,20 @@ public class TestCaseReportService {
 	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
 		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent();
 		String modified = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent();
-		
-		// If nothing to compare, show aligned empty message
-	    if (original.isEmpty() && modified.isEmpty()) {
-	        return noScenarioAligned("No XML content available for Expected vs Actual", 5);
-	    }
 
+		// If both sides are missing
+		if (original.isEmpty() && modified.isEmpty()) {
+			return noScenarioAligned("No XML content available — both Expected and Actual files are empty or missing.",
+					5);
+		}
+		// If only Expected is missing
+		if (original.isEmpty()) {
+			return noScenarioAligned("Side-by-side view skipped — Expected XML is missing.", 5);
+		}
+		// If only Actual is missing
+		if (modified.isEmpty()) {
+			return noScenarioAligned("Side-by-side view skipped — Actual XML is missing.", 5);
+		}
 
 		// normalize CDATA for both
 		original = normalizeLargeCDataForDiff(original);
@@ -879,18 +889,17 @@ public class TestCaseReportService {
 		String expected = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent().trim();
 		String actual = dto.getOutputXmlContent() == null ? "" : dto.getOutputXmlContent().trim();
 
-		// ✅ Guard clause: avoid XMLUnit crash
+		// Guard clause: missing XML content
 		if (expected.isEmpty() || actual.isEmpty()) {
-			String msg = "No semantic differences recorded";
-			if (expected.isEmpty() || actual.isEmpty()) {
-				msg += " (Skipped:";
-				if (expected.isEmpty())
-					msg += " Expected XML is missing.";
-				if (actual.isEmpty())
-					msg += " Actual XML is missing.";
-				msg += ")";
+			StringBuilder msg = new StringBuilder("Semantic comparison skipped — ");
+			if (expected.isEmpty() && actual.isEmpty()) {
+				msg.append("both Expected and Actual XML are empty or missing.");
+			} else if (expected.isEmpty()) {
+				msg.append("Expected XML is missing, so comparison could not be performed.");
+			} else if (actual.isEmpty()) {
+				msg.append("Actual XML is missing, so comparison could not be performed.");
 			}
-			return noScenarioAligned(msg, 5);
+			return noScenarioAligned(msg.toString(), 5);
 		}
 
 		Diff diff = DiffBuilder.compare(Input.fromString(expected)).withTest(Input.fromString(actual))
@@ -1275,8 +1284,28 @@ public class TestCaseReportService {
 		}
 
 		List<?> diffsList = (List<?>) dto.getXmlParsedDifferencesJson();
+
+		// Parse unexecutedScenarios JSON string
+		List<Map<String, Object>> unexecuted = java.util.Collections.emptyList();
+		try {
+			String rawJson = dto.getUnexecutedScenarios();
+			if (rawJson != null && !rawJson.isBlank()) {
+				ObjectMapper mapper = new ObjectMapper();
+				unexecuted = mapper.readValue(rawJson, new TypeReference<List<Map<String, Object>>>() {
+				});
+			}
+		} catch (Exception e) {
+			logger.warn("Failed to parse unexecutedScenarios JSON: {}", e.getMessage());
+		}
+
+		// Combined empty check
+		if (diffsList.isEmpty() && unexecuted.isEmpty()) {
+			return noScenarioAligned("No XML differences or unexecuted scenarios found", 5);
+		}
+
+		// Only XML differences empty
 		if (diffsList.isEmpty()) {
-			return noScenarioAligned("No XML differences found", 5);
+			return noScenarioAligned("No XML differences detected — Expected and Actual files appear identical.", 5);
 		}
 
 		StringBuilder sb = new StringBuilder(

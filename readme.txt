@@ -36,19 +36,30 @@ mvn spring-boot:run
 
 Body (JSON):
 {
-  "sourceType": "local",
-  "repoUrl": "https://github.com/ShrinathMathane1994/Springboot-CBCC.git",
-  "cloneDir": "features-repo",
-  "featurePath": "src/test/resources/features",
-  "branch": "testingv2",
-  "username": "",
-  "password": "",
-  "localPath": "src/test/resources/features",
-  "refreshInterval": 300000
+    "sourceType": "local",
+    "repoUrl": "https://github.com/ShrinathMathane1994/Springboot-CBCC.git",
+    "cloneDir": "features-repo",
+    "gitFeaturePath": "src/test/resources/features",
+    "branch": "testingv2",
+    "username": "",
+    "password": "",
+    "localFeatherPath": "src/test/resources/features",
+    "refreshInterval": 300000,
+    "stepDefsProjectPath": "D:/AUtomation/Eclipse2/New folder/Springboot-CBCC",
+    "gluePackage": "com.qa.cbcc.stepdefinitions"
 }
 
 🔄 Sync Feature Files
 GET /api/sync-features
+
+📥 Get Countries
+http://localhost:8080/api/master/countries
+
+📥 Get Regions
+http://localhost:8080/api/master/regions
+
+📥 Get Pods
+http://localhost:8080/api/master/pods
 
 📑 Scenarios
 GET /api/scenarios?tags=
@@ -128,6 +139,9 @@ GET /api/test-cases/{id}/history
 🕓 Test Run Case History
 GET /api/test-cases/{id}/run-history
 GET /api/test-cases/{id}/run-history/latest - Latest Record Only
+
+🕓 Testcase last run html report
+http://localhost:8080/api/test-cases/{id}/html-latest
 
 📁 Download Input/Output Files
 GET /api/test-cases/{id}/download?fileType=input

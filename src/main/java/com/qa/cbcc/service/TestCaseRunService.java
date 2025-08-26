@@ -48,6 +48,7 @@ import com.qa.cbcc.model.TestCase;
 import com.qa.cbcc.model.TestCaseRunHistory;
 import com.qa.cbcc.repository.TestCaseRepository;
 import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
+import com.qa.cbcc.utils.StepDefCompiler;
 import com.qa.cbcc.utils.TestContext;
 
 import io.cucumber.core.cli.Main;
@@ -166,20 +167,30 @@ public class TestCaseRunService {
 			String[] gluePkgs = featureService.getGluePackagesArray();
 
 			List<String> argvList = new ArrayList<>();
+
+			// 1. Add glue packages
 			for (String glue : gluePkgs) {
 				argvList.add("--glue");
 				argvList.add(glue);
 			}
 
-			argvList.add(featureFile.getAbsolutePath());
+			// 2. Add plugins
 			argvList.add("--plugin");
 			argvList.add("pretty");
 			argvList.add("--plugin");
 			argvList.add("json:" + jsonReportFile.getAbsolutePath());
 
+			// 3. Finally add the feature file(s)
+			argvList.add(featureFile.getAbsolutePath());
+
 			String[] argv = argvList.toArray(new String[0]);
 
-			// 3. Capture Cucumber stdout (optional)
+			// 3. Compile stepDefs if needed (before running cucumber)
+			for (String projPath : featureService.getStepDefsProjectPaths()) {
+			    StepDefCompiler.compileStepDefs(List.of(projPath)); // ✅
+			}
+
+			// 3.1. Capture Cucumber stdout
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			PrintStream originalOut = System.out;
 			System.setOut(new PrintStream(baos));
@@ -197,8 +208,15 @@ public class TestCaseRunService {
 					}
 				}).toArray(URL[]::new);
 
+				// 🔍 Log the resolved classpath entries
+				logger.info("StepDefs classpath URLs:");
+				for (URL url : urls) {
+					logger.info("  {}", url);
+				}
+
 				try (URLClassLoader classLoader = new URLClassLoader(urls,
 						Thread.currentThread().getContextClassLoader())) {
+					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
 					Main.run(argv, classLoader);
 				}
 
@@ -287,6 +305,7 @@ public class TestCaseRunService {
 			String outputPath = entity != null ? entity.getOutputFile() : null;
 
 			List<Map<String, Object>> xmlComparisonDetails = new ArrayList<>();
+			List<Map<String, Object>> allUnexecutedScenarios = new ArrayList<>();
 
 			for (Map<String, Object> scenario : executedScenarios) {
 				// Extract errors
@@ -295,20 +314,20 @@ public class TestCaseRunService {
 						&& errors.stream().allMatch(e -> e.contains("Step undefined"));
 
 				if (onlyUndefined) {
-				    logger.warn("Skipping XML comparison for scenario {} because glue was not found",
-				            scenario.get("scenarioName"));
+					logger.warn("Skipping XML comparison for scenario {} because glue was not found",
+							scenario.get("scenarioName"));
 
-				    // ✅ Explicitly mark skipped in results
-				    Map<String, Object> skippedDetail = new LinkedHashMap<>();
-				    skippedDetail.put("featureFileName", scenario.get("featureFileName"));
-				    skippedDetail.put("scenarioName", scenario.get("scenarioName"));
-				    skippedDetail.put("scenarioType", scenario.getOrDefault("scenarioType", "Scenario"));
-				    skippedDetail.put("status", scenario.get("status"));
-				    skippedDetail.put("errors", errors); // keep original cucumber errors
-				    skippedDetail.put("skipReason", "Glue not found – XML comparison skipped");
+					// ✅ Explicitly mark skipped in results
+					Map<String, Object> skippedDetail = new LinkedHashMap<>();
+					skippedDetail.put("featureFileName", scenario.get("featureFileName"));
+					skippedDetail.put("scenarioName", scenario.get("scenarioName"));
+					skippedDetail.put("scenarioType", scenario.getOrDefault("scenarioType", "Scenario"));
+					skippedDetail.put("status", scenario.get("status"));
+					skippedDetail.put("errors", errors); // keep original cucumber errors
+					skippedDetail.put("skipReason", "Glue not found – XML comparison skipped");
 
-				    xmlComparisonDetails.add(skippedDetail);
-				    continue;
+					xmlComparisonDetails.add(skippedDetail);
+					continue;
 				}
 
 				String featureName = (String) scenario.get("featureFileName");
@@ -336,28 +355,96 @@ public class TestCaseRunService {
 						.orElse(0);
 				xmlDetail.put("diffCount", diffCount);
 
+//				List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
+//					String name = (String) e.get("scenarioName");
+//					return testCase.getFeatureScenarios().stream().filter(fs -> fs.getScenarios().contains(name))
+//							.map(TestCaseDTO.FeatureScenario::getFeature)
+//							.anyMatch(f -> f.equals(Paths.get(featureName).getFileName().toString()));
+//				}).collect(Collectors.toList());
+//
+//				if (!unexecutedForFeature.isEmpty()) {
+//					xmlDetail.put("unexecutedScenarios", unexecutedForFeature);
+//				}
+//
+//				xmlComparisonDetails.add(xmlDetail);
+
 				List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
-					String name = (String) e.get("scenarioName");
-					return testCase.getFeatureScenarios().stream().filter(fs -> fs.getScenarios().contains(name))
-							.map(TestCaseDTO.FeatureScenario::getFeature)
-							.anyMatch(f -> f.equals(Paths.get(featureName).getFileName().toString()));
+					String unexecName = String.valueOf(e.get("scenarioName")).trim();
+					String unexecFeature = Paths.get(String.valueOf(e.get("featureFileName"))).normalize().toString();
+
+					String execFeature = Paths.get(featureName).normalize().toString();
+
+					boolean featureMatch = unexecFeature.endsWith(execFeature);
+
+					// safer matching to avoid substring collisions
+					boolean scenarioMatch = testCase.getFeatureScenarios().stream()
+							.anyMatch(fs -> fs.getScenarios().stream().anyMatch(s -> {
+								String normalized = s.trim().toLowerCase();
+								String target = unexecName.toLowerCase();
+								return normalized.equals(target);
+							}));
+
+					logger.debug("FeatureMatch={} ScenarioMatch={} for {}", featureMatch, scenarioMatch, unexecName);
+
+					return featureMatch && scenarioMatch;
 				}).collect(Collectors.toList());
 
 				if (!unexecutedForFeature.isEmpty()) {
 					xmlDetail.put("unexecutedScenarios", unexecutedForFeature);
+					allUnexecutedScenarios.addAll(unexecutedForFeature);
 				}
 
 				xmlComparisonDetails.add(xmlDetail);
+
 			}
 
-			String comparisonStatus = executedScenarios.isEmpty() && !missingFeatures.isEmpty() ? null
-					: xmlComparisonDetails.stream().anyMatch(m -> !"✅ XML files are equal.".equals(m.get("message")))
-							? "Mismatched"
-							: "Matched";
+//			String comparisonStatus = executedScenarios.isEmpty() && !missingFeatures.isEmpty() ? null
+//					: xmlComparisonDetails.stream().anyMatch(m -> !"✅ XML files are equal.".equals(m.get("message")))
+//							? "Mismatched"
+//							: "Matched";
+//
+//			String finalStatus = ("Passed".equals(statusByExecution) && "Mismatched".equals(comparisonStatus))
+//					? "Discrepancy"
+//					: statusByExecution;
 
-			String finalStatus = ("Passed".equals(statusByExecution) && "Mismatched".equals(comparisonStatus))
-					? "Discrepancy"
-					: statusByExecution;
+			// ✅ Decide status at the end, using the accumulated list
+			// ✅ Accumulate unexecuted from both sources
+			allUnexecutedScenarios.addAll(unexecutedList);
+
+			// ✅ Decide comparison status
+			String comparisonStatus;
+			if (!allUnexecutedScenarios.isEmpty()) {
+				// Some scenarios were not executed
+				if (!xmlComparisonDetails.isEmpty() && xmlComparisonDetails.stream()
+						.anyMatch(m -> !"✅ XML files are equal.".equals(m.get("message")))) {
+					// Both mismatches + unexecuted exist → partial case
+					comparisonStatus = "Partially Unexecuted";
+				} else {
+					comparisonStatus = "Unexecuted";
+				}
+			} else if (executedScenarios.isEmpty() && !missingFeatures.isEmpty()) {
+				// Nothing executed at all
+				comparisonStatus = null; // or "MissingFeatures" if you prefer
+			} else if (xmlComparisonDetails.stream()
+					.anyMatch(m -> !"✅ XML files are equal.".equals(m.get("message")))) {
+				// XML mismatches found
+				comparisonStatus = "Mismatched";
+			} else {
+				// Everything executed and all XML matched
+				comparisonStatus = "Matched";
+			}
+
+			// ✅ Derive finalStatus combining execution + XML diff
+			String finalStatus;
+			if ("Passed".equals(statusByExecution) && "Mismatched".equals(comparisonStatus)) {
+				finalStatus = "Discrepancy"; // Execution passed but XML did not
+			} else if ("Partially Unexecuted".equals(comparisonStatus)) {
+				finalStatus = "Partially Unexecuted";
+			} else if ("Unexecuted".equals(comparisonStatus)) {
+				finalStatus = "Unexecuted";
+			} else {
+				finalStatus = statusByExecution; // Fallback to cucumber result
+			}
 
 			LocalDateTime executedOn = LocalDateTime.now();
 			TestCaseRunHistory history = new TestCaseRunHistory();

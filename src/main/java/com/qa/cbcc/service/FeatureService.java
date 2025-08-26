@@ -19,6 +19,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 
@@ -528,12 +529,25 @@ public class FeatureService {
 	 * Returns all configured step project class paths (e.g.
 	 * /myproj/target/classes).
 	 */
+	
+	public List<String> getStepDefsProjectPaths() {
+	    if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
+	        return stepDefProjPaths;
+	    } else {
+	        return List.of(new File(".").getAbsolutePath()); // fallback: current dir
+	    }
+	}
+
+	
 	public List<String> getStepDefsFullPaths() {
 		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
-			return stepDefProjPaths.stream().map(path -> path + File.separator + "target" + File.separator + "classes")
+			return stepDefProjPaths.stream()
+					.flatMap(path -> Stream.of(path + File.separator + "target" + File.separator + "classes",
+							path + File.separator + "target" + File.separator + "test-classes"))
 					.toList();
 		} else {
-			return List.of(new File("target/classes").getAbsolutePath());
+			return List.of(new File("target/classes").getAbsolutePath(),
+					new File("target/test-classes").getAbsolutePath());
 		}
 	}
 
