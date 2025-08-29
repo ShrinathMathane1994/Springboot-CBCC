@@ -378,7 +378,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"sourceType\": \"local\",\r\n    \"repoUrl\": \"https://github.com/ShrinathMathane1994/Springboot-CBCC.git\",\r\n    \"cloneDir\": \"features-repo\",\r\n    \"featurePath\": \"src/test/resources/features\",\r\n    \"branch\": \"testingv2\",\r\n    \"username\": \"\",\r\n    \"password\": \"\"\r\n}",
+					"raw": "{\r\n\t\"sourceType\": \"git\",\r\n\t\"repoUrl\": \"https://github.com/Apress/repo-with-large-file-storage.git\",\r\n\t\"cloneDir\": \"features-repo\",\r\n\t\"gitFeaturePath\": \"src/test/resources/features\",\r\n\t\"branch\": \"master\",\r\n\t\"username\": \"\",\r\n\t\"password\": \"\",\r\n\t\"localFeatherPath\": \"src/test/resources/features\",\r\n\t\"refreshInterval\": 300000,\r\n\t\"stepDefsProjectPath\": \"\",\r\n\t\"gluePackage\": \"stepdefinitions\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
