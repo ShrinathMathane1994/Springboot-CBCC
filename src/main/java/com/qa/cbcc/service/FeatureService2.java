@@ -1,14 +1,13 @@
 package com.qa.cbcc.service;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileVisitResult;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -332,25 +331,26 @@ public class FeatureService2 {
 	}
 
 	private Properties loadConfig() throws IOException {
-		Properties props = new Properties();
-		Path path = Paths.get(CONFIG_FILE);
+	    Properties props = new Properties();
+	    Path path = Paths.get(CONFIG_FILE);
 
-		if (Files.exists(path)) {
-			try (var reader = Files.newBufferedReader(path)) {
-				props.load(reader);
-			}
-		}
+	    if (Files.exists(path)) {
+	        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+	            props.load(reader);
+	        }
+	    }
 
-		return props;
+	    return props;
 	}
 
 	private void saveConfig(Properties props) throws IOException {
-		Path path = Paths.get(CONFIG_FILE);
+	    Path path = Paths.get(CONFIG_FILE);
 
-		try (var writer = Files.newBufferedWriter(path)) {
-			props.store(writer, "Updated Git configuration");
-		}
+	    try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+	        props.store(writer, "Updated Git configuration");
+	    }
 	}
+
 
 	public GitConfigDTO getGitConfig() {
 		GitConfigDTO dto = new GitConfigDTO();

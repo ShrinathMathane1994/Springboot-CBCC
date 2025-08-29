@@ -53,13 +53,45 @@ Body (JSON):
 GET /api/sync-features
 
 📥 Get Countries
-http://localhost:8080/api/master/countries
+GET /api/master/countries
+➕ Create Country
+POST /api/master/country
+Content-Type: application/json
+
+{
+  "countryName": "United States"
+}
+❌ Delete Country
+DELETE /api/master/country/{id}
 
 📥 Get Regions
-http://localhost:8080/api/master/regions
+GET /api/master/regions → all active regions
+GET /api/master/regions?countryId=1 → only regions of countryId 1
+➕ Create Region
+POST /api/master/region
+Content-Type: application/json
+{
+  "regionName": "North America",
+  "idCountry": 1
+}
+❌ Delete Region
+DELETE /api/master/region/{id}
+
 
 📥 Get Pods
-http://localhost:8080/api/master/pods
+GET /api/master/pods → all active pods
+GET /api/master/pods?regionId=2 → only pods of regionId 2
+➕ Create Pod
+POST /api/master/pod
+Content-Type: application/json
+
+{
+  "podName": "U1-POD",
+  "idRegion": 2
+}
+❌ Delete Pod
+DELETE /api/master/pod/{id}
+
 
 📑 Scenarios
 GET /api/scenarios?tags=

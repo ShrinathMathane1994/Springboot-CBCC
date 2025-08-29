@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface PodRepository extends JpaRepository<Pod, Long> {
     List<Pod> findByIsActiveTrue();
+    List<Pod> findByRegion_IdRegionAndIsActiveTrue(Long regionId);       // ✅ filter
 }

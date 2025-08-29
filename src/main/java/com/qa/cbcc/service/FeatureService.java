@@ -1,9 +1,12 @@
 package com.qa.cbcc.service;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -149,7 +152,8 @@ public class FeatureService {
 								featureLevelTags = new LinkedHashSet<>(tagBuffer); // ← capture tags above the Feature
 								tagBuffer.clear(); // ← reset tagBuffer to only capture scenario-level tags
 							} else if (line.startsWith("Scenario") && line.contains(":")) {
-								String scenarioName = line.substring(line.indexOf(":") + 1).trim();
+								String scenarioNameRaw = line.substring(line.indexOf(":") + 1).trim();
+								String scenarioName = cleanScenarioName(scenarioNameRaw);
 								String scenarioType = line.startsWith("Scenario Outline") ? "Scenario Outline"
 										: "Scenario";
 
@@ -164,9 +168,16 @@ public class FeatureService {
 								dto.setFilePath(path.toAbsolutePath().toString());
 								dto.setTags(new ArrayList<>(combinedTags));
 
+//								if ("Scenario Outline".equals(scenarioType)) {
+//									List<ExampleDTO> examples = extractExamples(lines, i);
+//									dto.setExamples(examples);
+//								}
+
 								if ("Scenario Outline".equals(scenarioType)) {
-									List<ExampleDTO> examples = extractExamples(lines, i);
-									dto.setExamples(examples);
+//								     Pass scenario tags so  can compare
+								    List<ExampleDTO> examples = extractExamples(lines, i, dto.getTags());
+
+								    dto.setExamples(examples);
 								}
 
 								scenarios.add(dto);
@@ -293,15 +304,65 @@ public class FeatureService {
 		return filtered;
 	}
 
-	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex) {
+//	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex) {
+//		List<ExampleDTO> examples = new ArrayList<>();
+//		List<String> headers = null;
+//		boolean insideExamples = false;
+//
+//		for (int i = startIndex + 1; i < lines.size(); i++) {
+//			String line = lines.get(i).trim();
+//			if (line.isEmpty())
+//				continue;
+//
+//			if (line.toLowerCase().startsWith("examples")) {
+//				insideExamples = true;
+//				continue;
+//			}
+//
+//			if (insideExamples && line.startsWith("|")) {
+//				List<String> columns = extractColumns(line);
+//
+//				if (headers == null) {
+//					headers = columns;
+//				} else {
+//					ExampleDTO example = new ExampleDTO();
+//					example.setIndex(examples.size() + 1);
+//					example.setLineNumber(i + 1);
+//					Map<String, String> values = new LinkedHashMap<>();
+//
+//					for (int j = 0; j < headers.size(); j++) {
+//						String key = headers.get(j);
+//						String val = j < columns.size() ? columns.get(j) : "";
+//						values.put(key, val);
+//					}
+//
+//					example.setValues(values);
+//					examples.add(example);
+//				}
+//			} else if (insideExamples) {
+//				break;
+//			}
+//		}
+//		return examples;
+//	}
+
+	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex, List<String> scenarioTags) {
 		List<ExampleDTO> examples = new ArrayList<>();
 		List<String> headers = null;
 		boolean insideExamples = false;
+		Set<String> exampleTags = new LinkedHashSet<>();
 
 		for (int i = startIndex + 1; i < lines.size(); i++) {
 			String line = lines.get(i).trim();
-			if (line.isEmpty())
+			if (line.isEmpty() || line.startsWith("#"))
 				continue;
+
+			// 🔹 Capture tags above Examples (before "Examples:" starts)
+			if (line.startsWith("@") && !insideExamples) {
+				List<String> tags = Arrays.asList(line.split("\\s+"));
+				exampleTags.addAll(tags);
+				continue;
+			}
 
 			if (line.toLowerCase().startsWith("examples")) {
 				insideExamples = true;
@@ -326,6 +387,12 @@ public class FeatureService {
 					}
 
 					example.setValues(values);
+
+					// ✅ Only set tags if they differ from scenario-level tags
+					if (!exampleTags.isEmpty() && !exampleTags.equals(new LinkedHashSet<>(scenarioTags))) {
+						example.setTags(new ArrayList<>(exampleTags));
+					}
+
 					examples.add(example);
 				}
 			} else if (insideExamples) {
@@ -333,6 +400,16 @@ public class FeatureService {
 			}
 		}
 		return examples;
+	}
+
+	private String cleanScenarioName(String rawName) {
+		if (rawName == null)
+			return null;
+		String name = rawName.trim();
+		if (name.startsWith("-")) {
+			name = name.substring(1).trim(); // remove leading dash
+		}
+		return name;
 	}
 
 	private List<String> extractColumns(String line) {
@@ -347,24 +424,24 @@ public class FeatureService {
 	}
 
 	private Properties loadConfig() throws IOException {
-		Properties props = new Properties();
-		Path path = Paths.get(CONFIG_FILE);
+	    Properties props = new Properties();
+	    Path path = Paths.get(CONFIG_FILE);
 
-		if (Files.exists(path)) {
-			try (var reader = Files.newBufferedReader(path)) {
-				props.load(reader);
-			}
-		}
+	    if (Files.exists(path)) {
+	        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+	            props.load(reader);
+	        }
+	    }
 
-		return props;
+	    return props;
 	}
 
 	private void saveConfig(Properties props) throws IOException {
-		Path path = Paths.get(CONFIG_FILE);
+	    Path path = Paths.get(CONFIG_FILE);
 
-		try (var writer = Files.newBufferedWriter(path)) {
-			props.store(writer, "Updated Git configuration");
-		}
+	    try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+	        props.store(writer, "Updated Git configuration");
+	    }
 	}
 
 	public GitConfigDTO getGitConfig() {
@@ -529,16 +606,15 @@ public class FeatureService {
 	 * Returns all configured step project class paths (e.g.
 	 * /myproj/target/classes).
 	 */
-	
+
 	public List<String> getStepDefsProjectPaths() {
-	    if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
-	        return stepDefProjPaths;
-	    } else {
-	        return List.of(new File(".").getAbsolutePath()); // fallback: current dir
-	    }
+		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
+			return stepDefProjPaths;
+		} else {
+			return List.of(new File(".").getAbsolutePath()); // fallback: current dir
+		}
 	}
 
-	
 	public List<String> getStepDefsFullPaths() {
 		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
 			return stepDefProjPaths.stream()

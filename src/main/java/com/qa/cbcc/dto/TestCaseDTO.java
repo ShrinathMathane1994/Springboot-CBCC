@@ -2,147 +2,187 @@ package com.qa.cbcc.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.qa.cbcc.service.TestCaseRunService.ScenarioBlock;
 
 public class TestCaseDTO {
 
-    private Long tcId;  // ✅ Added Test Case ID
-    private String tcName;
-    private String description;
-    private List<FeatureScenario> featureScenarios;
+	private Long tcId; // ✅ Added Test Case ID
+	private String tcName;
+	private String description;
+	private List<FeatureScenario> featureScenarios;
 
-    // ✅ Timestamp fields
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime executionOn;
-    private LocalDateTime createdOn;
-    private LocalDateTime modifiedOn;
-    private String executionStatus;  // <- New field for tracking last status
+	// ✅ Timestamp fields
+	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime executionOn;
+	private LocalDateTime createdOn;
+	private LocalDateTime modifiedOn;
+	private String executionStatus; // <- New field for tracking last status
 
-    private String country;
-    private String region;
-    private String pod;
+	private String country;
+	private String region;
+	private String pod;
 
-    // New Getters & Setters
-    public String getCountry() {
-        return country;
-    }
+	// New Getters & Setters
+	public String getCountry() {
+		return country;
+	}
 
-    public void setCountry(String country) {
-        this.country = country;
-    }
+	public void setCountry(String country) {
+		this.country = country;
+	}
 
-    public String getRegion() {
-        return region;
-    }
+	public String getRegion() {
+		return region;
+	}
 
-    public void setRegion(String region) {
-        this.region = region;
-    }
+	public void setRegion(String region) {
+		this.region = region;
+	}
 
-    public String getPod() {
-        return pod;
-    }
+	public String getPod() {
+		return pod;
+	}
 
-    public void setPod(String pod) {
-        this.pod = pod;
-    }
+	public void setPod(String pod) {
+		this.pod = pod;
+	}
 
+	// Inner class for feature-scenario mapping
+	public static class FeatureScenario {
+		private String feature;
+		private List<String> scenarios; // used for creation & execution
+		private List<ScenarioBlock> scenarioBlocks;
+		// ✅ Tags
+		private List<String> featureTags; // Tags applied at Feature level
+		private Map<String, List<String>> scenarioTagsByName; // scenario title -> @tags
+		private Map<String, List<String>> exampleTagsByName; // scenario title -> @tags (for its Examples)
+		private List<String> backgroundBlock;
 
-    // Inner class for feature-scenario mapping
-    public static class FeatureScenario {
-        private String feature;
-        private List<String> scenarios;         // used for creation & execution
-        private List<String> scenarioBlocks;    // optional, not used at creation
+		public String getFeature() {
+			return feature;
+		}
 
-        public String getFeature() {
-            return feature;
-        }
+		public void setFeature(String feature) {
+			this.feature = feature;
+		}
 
-        public void setFeature(String feature) {
-            this.feature = feature;
-        }
+		public List<String> getScenarios() {
+			return scenarios;
+		}
 
-        public List<String> getScenarios() {
-            return scenarios;
-        }
+		public void setScenarios(List<String> scenarios) {
+			this.scenarios = scenarios;
+		}
 
-        public void setScenarios(List<String> scenarios) {
-            this.scenarios = scenarios;
-        }
+		public List<ScenarioBlock> getScenarioBlocks() {
+			return scenarioBlocks;
+		}
 
-        public List<String> getScenarioBlocks() {
-            return scenarioBlocks;
-        }
+		public void setScenarioBlocks(List<ScenarioBlock> scenarioBlocks) {
+			this.scenarioBlocks = scenarioBlocks;
+		}
 
-        public void setScenarioBlocks(List<String> scenarioBlocks) {
-            this.scenarioBlocks = scenarioBlocks;
-        }
-    }
+		public List<String> getFeatureTags() {
+			return featureTags;
+		}
 
-    // Getters and setters
+		public void setFeatureTags(List<String> featureTags) {
+			this.featureTags = featureTags;
+		}
 
-    public Long getTcId() {
-        return tcId;
-    }
+		// getters/setters
+		public Map<String, List<String>> getScenarioTagsByName() {
+			return scenarioTagsByName;
+		}
 
-    public void setTcId(Long tcId) {
-        this.tcId = tcId;
-    }
+		public void setScenarioTagsByName(Map<String, List<String>> m) {
+			this.scenarioTagsByName = m;
+		}
 
-    public String getTcName() {
-        return tcName;
-    }
+		public Map<String, List<String>> getExampleTagsByName() {
+			return exampleTagsByName;
+		}
 
-    public void setTcName(String tcName) {
-        this.tcName = tcName;
-    }
+		public void setExampleTagsByName(Map<String, List<String>> m) {
+			this.exampleTagsByName = m;
+		}
 
-    public String getDescription() {
-        return description;
-    }
+		public List<String> getBackgroundBlock() {
+			return backgroundBlock;
+		}
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
+		public void setBackgroundBlock(List<String> backgroundBlock) {
+			this.backgroundBlock = backgroundBlock;
+		}
 
-    public List<FeatureScenario> getFeatureScenarios() {
-        return featureScenarios;
-    }
+	}
 
-    public void setFeatureScenarios(List<FeatureScenario> featureScenarios) {
-        this.featureScenarios = featureScenarios;
-    }
+	// Getters and setters
 
-    public LocalDateTime getExecutionOn() {
-        return executionOn;
-    }
+	public Long getTcId() {
+		return tcId;
+	}
 
-    public void setExecutionOn(LocalDateTime executionOn) {
-        this.executionOn = executionOn;
-    }
+	public void setTcId(Long tcId) {
+		this.tcId = tcId;
+	}
 
-    public LocalDateTime getCreatedOn() {
-        return createdOn;
-    }
+	public String getTcName() {
+		return tcName;
+	}
 
-    public void setCreatedOn(LocalDateTime createdOn) {
-        this.createdOn = createdOn;
-    }
+	public void setTcName(String tcName) {
+		this.tcName = tcName;
+	}
 
-    public LocalDateTime getModifiedOn() {
-        return modifiedOn;
-    }
+	public String getDescription() {
+		return description;
+	}
 
-    public void setModifiedOn(LocalDateTime modifiedOn) {
-        this.modifiedOn = modifiedOn;
-    }
-    
-    public String getExecutionStatus() {
-        return executionStatus;
-    }
+	public void setDescription(String description) {
+		this.description = description;
+	}
 
-    public void setExecutionStatus(String executionStatus) {
-        this.executionStatus = executionStatus;
-    }
+	public List<FeatureScenario> getFeatureScenarios() {
+		return featureScenarios;
+	}
+
+	public void setFeatureScenarios(List<FeatureScenario> featureScenarios) {
+		this.featureScenarios = featureScenarios;
+	}
+
+	public LocalDateTime getExecutionOn() {
+		return executionOn;
+	}
+
+	public void setExecutionOn(LocalDateTime executionOn) {
+		this.executionOn = executionOn;
+	}
+
+	public LocalDateTime getCreatedOn() {
+		return createdOn;
+	}
+
+	public void setCreatedOn(LocalDateTime createdOn) {
+		this.createdOn = createdOn;
+	}
+
+	public LocalDateTime getModifiedOn() {
+		return modifiedOn;
+	}
+
+	public void setModifiedOn(LocalDateTime modifiedOn) {
+		this.modifiedOn = modifiedOn;
+	}
+
+	public String getExecutionStatus() {
+		return executionStatus;
+	}
+
+	public void setExecutionStatus(String executionStatus) {
+		this.executionStatus = executionStatus;
+	}
 }

@@ -3,9 +3,12 @@ package com.qa.cbcc.dto;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.Data;
 
 @Data
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
 public class ScenarioDTO {
 	private int indextNo;
     private String feature;

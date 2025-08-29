@@ -29,6 +29,7 @@ import org.xmlunit.diff.Difference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qa.cbcc.dto.ScenarioLogGroupDTO;
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 
 @Service
@@ -1447,6 +1448,48 @@ public class TestCaseReportService {
 		return sb.toString();
 	}
 
+//	private String buildUnexecutedScenarios(TestCaseRunHistoryDTO dto) {
+//		List<Map<String, Object>> unexec = extractScenarioList(dto.getOutputLog(), "unexecutedScenarioDetails");
+//
+//		// If not found, check for "unexecutedScenarioReasons"
+//		if (unexec.isEmpty() && dto.getOutputLog() instanceof Map) {
+//			Map<?, ?> map = (Map<?, ?>) dto.getOutputLog();
+//			Object reasonsList = map.get("unexecutedScenarioReasons");
+//			if (reasonsList instanceof List) {
+//				unexec = (List<Map<String, Object>>) reasonsList;
+//			}
+//		}
+//		if (unexec.isEmpty()) {
+//			return noScenarioAligned("No unexecuted scenarios", 5);
+//		}
+//
+//		StringBuilder sb = new StringBuilder("<table class='scenario-table'><colgroup>"
+//				+ "<col style='width:75%'><col style='width:40%'>" + "</colgroup>")
+//				.append("<tr><th>Scenario</th><th>Errors</th></tr>");
+//
+//		int ui = 0;
+//		for (Map<String, Object> s : unexec) {
+//			String scenario = escapeHtml(String.valueOf(s.getOrDefault("scenarioName", "N/A")));
+//			List<String> errors = safeList(s.get("errors"));
+//
+//			// Fallback to "reason" if errors list is empty
+//			if (errors.isEmpty() && s.containsKey("reason")) {
+//				errors = List.of(String.valueOf(s.get("reason")));
+//			}
+//
+//			String errHtml = errors.isEmpty() ? "-"
+//					: "<button class='toggle-btn' onclick=\"toggle('unexecErr" + ui + "')\">View</button>"
+//							+ "<div id='unexecErr" + ui + "' style='display:none;margin-top:8px'>"
+//							+ String.join("<br>", errors) + "</div>";
+//
+//			sb.append("<tr><td>").append(scenario).append("</td>").append("<td>").append(errHtml).append("</td></tr>");
+//			ui++;
+//		}
+//
+//		sb.append("</table>");
+//		return sb.toString();
+//	}
+
 	private String buildUnexecutedScenarios(TestCaseRunHistoryDTO dto) {
 		List<Map<String, Object>> unexec = extractScenarioList(dto.getOutputLog(), "unexecutedScenarioDetails");
 
@@ -1462,16 +1505,21 @@ public class TestCaseReportService {
 			return noScenarioAligned("No unexecuted scenarios", 5);
 		}
 
-		StringBuilder sb = new StringBuilder("<table class='scenario-table'><colgroup>"
-				+ "<col style='width:75%'><col style='width:40%'>" + "</colgroup>")
-				.append("<tr><th>Scenario</th><th>Errors</th></tr>");
+		// ✅ Make table like buildFailedScenarios
+		StringBuilder sb = new StringBuilder(
+				"<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>")
+				.append("<tr><th>Scenario</th><th>Type</th><th>Example Header</th><th>Example Values</th><th>Errors</th></tr>");
 
 		int ui = 0;
 		for (Map<String, Object> s : unexec) {
 			String scenario = escapeHtml(String.valueOf(s.getOrDefault("scenarioName", "N/A")));
-			List<String> errors = safeList(s.get("errors"));
 
-			// Fallback to "reason" if errors list is empty
+			// Extract outline info if available
+			List<String> headers = safeList(s.get("exampleHeader"));
+			List<String> values = safeList(s.get("exampleValues"));
+
+			// Errors fallback: check reason if errors empty
+			List<String> errors = safeList(s.get("errors"));
 			if (errors.isEmpty() && s.containsKey("reason")) {
 				errors = List.of(String.valueOf(s.get("reason")));
 			}
@@ -1481,7 +1529,13 @@ public class TestCaseReportService {
 							+ "<div id='unexecErr" + ui + "' style='display:none;margin-top:8px'>"
 							+ String.join("<br>", errors) + "</div>";
 
-			sb.append("<tr><td>").append(scenario).append("</td>").append("<td>").append(errHtml).append("</td></tr>");
+			// ✅ Add ScenarioType, ExampleHeader, ExampleValues
+			sb.append("<tr class='row-unexec'><td>").append(scenario).append("</td><td>")
+					.append(s.getOrDefault("scenarioType", "-")).append("</td><td>")
+					.append(headers.isEmpty() ? "-" : String.join(", ", headers)).append("</td><td>")
+					.append(values.isEmpty() ? "-" : String.join(", ", values)).append("</td><td>").append(errHtml)
+					.append("</td></tr>");
+
 			ui++;
 		}
 
@@ -1556,7 +1610,7 @@ public class TestCaseReportService {
 				+ "</colgroup>").append("<tr><th colspan='3'>Scenario</th><th colspan='2'>Logs</th></tr>");
 
 		int li = 0;
-		for (var group : dto.getRawCucumberLogGrouped().getGroupedLogs()) {
+		for (ScenarioLogGroupDTO group : dto.getRawCucumberLogGrouped().getGroupedLogs()) {
 			String scenarioName = escapeHtml(group.getScenario());
 			sb.append("<tr><td colspan='3'>").append(scenarioName)
 					.append("</td><td colspan='2' style='white-space:nowrap'>")

@@ -28,7 +28,7 @@ public class MasterServiceImpl implements MasterService {
     @Autowired
     private PodRepository podRepo;
 
-    // Country
+    // ---------------- COUNTRY ----------------
     @Override
     public CountryDTO saveCountry(CountryDTO dto) {
         Country country = new Country();
@@ -63,7 +63,7 @@ public class MasterServiceImpl implements MasterService {
         });
     }
 
-    // Region
+    // ---------------- REGION ----------------
     @Override
     public RegionDTO saveRegion(RegionDTO dto) {
         Region region = new Region();
@@ -92,6 +92,20 @@ public class MasterServiceImpl implements MasterService {
     }
 
     @Override
+    public List<RegionDTO> getRegionsByCountry(Long countryId) {
+        return regionRepo.findByCountry_IdCountryAndIsActiveTrue(countryId)
+                .stream()
+                .map(r -> {
+                    RegionDTO dto = new RegionDTO();
+                    dto.setIdRegion(r.getIdRegion());
+                    dto.setRegionName(r.getRegionName());
+                    dto.setIdCountry(r.getCountry().getIdCountry());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public void deleteRegion(Long id) {
         regionRepo.findById(id).ifPresent(r -> {
             r.setActive(false);
@@ -100,7 +114,7 @@ public class MasterServiceImpl implements MasterService {
         });
     }
 
-    // Pod
+    // ---------------- POD ----------------
     @Override
     public PodDTO savePod(PodDTO dto) {
         Pod pod = new Pod();
@@ -117,6 +131,20 @@ public class MasterServiceImpl implements MasterService {
     @Override
     public List<PodDTO> getAllPods() {
         return podRepo.findByIsActiveTrue()
+                .stream()
+                .map(p -> {
+                    PodDTO dto = new PodDTO();
+                    dto.setIdPod(p.getIdPod());
+                    dto.setPodName(p.getPodName());
+                    dto.setIdRegion(p.getRegion().getIdRegion());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<PodDTO> getPodsByRegion(Long regionId) {
+        return podRepo.findByRegion_IdRegionAndIsActiveTrue(regionId)
                 .stream()
                 .map(p -> {
                     PodDTO dto = new PodDTO();

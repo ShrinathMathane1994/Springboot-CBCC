@@ -39,8 +39,10 @@ public class MasterController {
     }
 
     @GetMapping("/regions")
-    public List<RegionDTO> getAllRegions() {
-        return masterService.getAllRegions();
+    public List<RegionDTO> getRegions(@RequestParam(value = "countryId", required = false) Long countryId) {
+        return (countryId == null)
+                ? masterService.getAllRegions()
+                : masterService.getRegionsByCountry(countryId);
     }
 
     @DeleteMapping("/region/{id}")
@@ -55,8 +57,10 @@ public class MasterController {
     }
 
     @GetMapping("/pods")
-    public List<PodDTO> getAllPods() {
-        return masterService.getAllPods();
+    public List<PodDTO> getPods(@RequestParam(value = "regionId", required = false) Long regionId) {
+        return (regionId == null)
+                ? masterService.getAllPods()
+                : masterService.getPodsByRegion(regionId);
     }
 
     @DeleteMapping("/pod/{id}")

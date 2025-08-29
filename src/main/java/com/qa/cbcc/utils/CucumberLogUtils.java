@@ -29,6 +29,18 @@ public class CucumberLogUtils {
 		        summary.add(trimmedLine.replaceAll("\\t", "").trim());
 		        continue;
 		    }
+		    
+		    if (trimmedLine.startsWith("@")) {
+		        // ❌ Ignore cucumber tags (environment labels)
+		        continue;
+		    }
+		    
+		    if (trimmedLine.startsWith("Undefined scenarios:") || trimmedLine.startsWith("file:///")) {
+		        // Send undefined scenarios to rawSummary only
+		        summary.add(trimmedLine); 
+		        continue;
+		    }
+
 
 		    if (trimmedLine.startsWith("Scenario") || trimmedLine.startsWith("Scenario Outline")) {
 		        currentGroup = new ScenarioLogGroupDTO();
