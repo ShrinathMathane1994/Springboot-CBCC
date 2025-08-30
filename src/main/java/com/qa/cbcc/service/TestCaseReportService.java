@@ -47,7 +47,8 @@ public class TestCaseReportService {
 	}
 
 	// Configurable placeholders
-	private static final Set<String> PLACEHOLDERS = Set.of("UETR"); // Add any names
+	private static final Set<String> PLACEHOLDERS = new LinkedHashSet<>(Arrays.asList("UETR"));
+	// Add any names
 	private static final Pattern PLACEHOLDER_TOKEN = Pattern
 			.compile("\\$\\{(" + String.join("|", PLACEHOLDERS) + ")\\}");
 
@@ -1290,7 +1291,7 @@ public class TestCaseReportService {
 		List<Map<String, Object>> unexecuted = java.util.Collections.emptyList();
 		try {
 			String rawJson = dto.getUnexecutedScenarios();
-			if (rawJson != null && !rawJson.isBlank()) {
+			if (rawJson != null && !rawJson.trim().isEmpty()) {
 				ObjectMapper mapper = new ObjectMapper();
 				unexecuted = mapper.readValue(rawJson, new TypeReference<List<Map<String, Object>>>() {
 				});
@@ -1521,7 +1522,7 @@ public class TestCaseReportService {
 			// Errors fallback: check reason if errors empty
 			List<String> errors = safeList(s.get("errors"));
 			if (errors.isEmpty() && s.containsKey("reason")) {
-				errors = List.of(String.valueOf(s.get("reason")));
+				errors = Collections.singletonList(String.valueOf(s.get("reason")));
 			}
 
 			String errHtml = errors.isEmpty() ? "-"

@@ -71,7 +71,12 @@ public class MasterServiceImpl implements MasterService {
         region.setRegionName(dto.getRegionName());
         region.setCreatedOn(LocalDateTime.now());
         region.setActive(true);
-        region.setCountry(countryRepo.findById(dto.getIdCountry()).orElseThrow());
+
+        // ❌ Java 11+: region.setCountry(countryRepo.findById(dto.getIdCountry()).orElseThrow());
+        // ✅ Java 8 replacement:
+        region.setCountry(countryRepo.findById(dto.getIdCountry())
+                .orElseThrow(() -> new RuntimeException("Country not found with id " + dto.getIdCountry())));
+
         regionRepo.save(region);
         dto.setIdRegion(region.getIdRegion());
         return dto;
@@ -122,7 +127,12 @@ public class MasterServiceImpl implements MasterService {
         pod.setPodName(dto.getPodName());
         pod.setCreatedOn(LocalDateTime.now());
         pod.setActive(true);
-        pod.setRegion(regionRepo.findById(dto.getIdRegion()).orElseThrow());
+
+        // ❌ Java 11+: pod.setRegion(regionRepo.findById(dto.getIdRegion()).orElseThrow());
+        // ✅ Java 8 replacement:
+        pod.setRegion(regionRepo.findById(dto.getIdRegion())
+                .orElseThrow(() -> new RuntimeException("Region not found with id " + dto.getIdRegion())));
+
         podRepo.save(pod);
         dto.setIdPod(pod.getIdPod());
         return dto;

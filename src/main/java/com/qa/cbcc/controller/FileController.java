@@ -2,7 +2,6 @@ package com.qa.cbcc.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,7 +22,13 @@ public class FileController {
         try {
             Path path = Paths.get(BASE_PATH, file.getOriginalFilename());
             Files.createDirectories(path.getParent());
-            Files.write(path, file.getBytes());
+
+            // ❌ Java 11: Files.write(path, file.getBytes());
+            // ✅ Java 8 alternative:
+            try (OutputStream os = Files.newOutputStream(path)) {
+                os.write(file.getBytes());
+            }
+
             return ResponseEntity.ok("✅ File uploaded successfully: " + file.getOriginalFilename());
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -50,7 +55,11 @@ public class FileController {
     public ResponseEntity<String> readFile(@PathVariable String filename) {
         try {
             Path path = Paths.get(BASE_PATH, filename);
-            String content = Files.readString(path, StandardCharsets.UTF_8);
+
+            // ❌ Java 11: String content = Files.readString(path, StandardCharsets.UTF_8);
+            // ✅ Java 8 alternative:
+            String content = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+
             return ResponseEntity.ok(content);
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("File not found: " + filename);

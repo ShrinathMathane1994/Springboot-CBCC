@@ -157,7 +157,7 @@ public class TestCaseRunService {
 						}
 
 						ScenarioBlock sb = extractScenarioBlock(featureFilePath, adjustedScenarioName);
-						if (sb == null || sb.getContent() == null || sb.getContent().isBlank())
+						if (sb == null || sb.getContent() == null || sb.getContent().trim().isEmpty())
 							continue;
 
 						if (sb.isFromExampleWithTags()) {
@@ -229,13 +229,13 @@ public class TestCaseRunService {
 
 			String[] argv = argvList.toArray(new String[0]);
 
-			// 3. Compile stepDefs if needed (before running cucumber)
-			for (String projPath : featureService.getStepDefsProjectPaths()) {
-				StepDefCompiler.compileStepDefs(List.of(projPath)); // ✅
-			}
-
 			// ✅ Ensure dependencies are copied once
 			StepDefCompiler.ensureDependenciesCopied();
+
+			// 3. Compile stepDefs if needed (before running cucumber)
+			for (String projPath : featureService.getStepDefsProjectPaths()) {
+				StepDefCompiler.compileStepDefs(Collections.singletonList(projPath)); // ✅
+			}
 
 			// 3.1. Capture Cucumber stdout
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -432,18 +432,6 @@ public class TestCaseRunService {
 				xmlComparisonDetails.add(xmlDetail);
 			}
 
-//			// ✅ Add skipped scenarios to unexecuted & output map
-//			for (Map<String, Object> skipped : skippedScenarios) {
-//				Map<String, Object> skippedDetail = new LinkedHashMap<>();
-//				skippedDetail.put("scenarioName", skipped.get("scenarioName"));
-//				skippedDetail.put("scenarioType", skipped.getOrDefault("scenarioType", "Scenario"));
-//				skippedDetail.put("errors", safeList(skipped.get("errors")));
-//				skippedDetail.put("status", skipped.get("status"));
-//				skippedDetail.put("skipReason", "Glue not found – scenario skipped");
-//				unexecutedList.add(skippedDetail);
-//				allUnexecutedScenarios.add(skippedDetail);
-//			}
-
 			// ✅ Add skipped scenarios to unexecuted & output map
 			for (Map<String, Object> skipped : skippedScenarios) {
 				Map<String, Object> skippedDetail = new LinkedHashMap<>();
@@ -536,8 +524,10 @@ public class TestCaseRunService {
 					passedEntry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
 
 					if ("Scenario Outline".equals(exec.get("scenarioType"))) {
-						passedEntry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
-						passedEntry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
+						passedEntry.put("exampleHeader", exec.containsKey("exampleHeader") ? exec.get("exampleHeader")
+								: Collections.emptyList());
+						passedEntry.put("exampleValues", exec.containsKey("exampleValues") ? exec.get("exampleValues")
+								: Collections.emptyList());
 					}
 
 					passedScenariosDetailed.add(passedEntry);
@@ -558,14 +548,17 @@ public class TestCaseRunService {
 			for (Map<String, Object> exec : executedScenarios) {
 				if ("Failed".equals(exec.get("status"))) {
 					Map<String, Object> entry = new LinkedHashMap<>();
-					List<String> parsedDiffs = (List<String>) exec.getOrDefault("parsedDifferences", List.of());
+					List<String> parsedDiffs = (List<String>) exec.getOrDefault("parsedDifferences",
+							Collections.emptyList());
 
 					entry.put("scenarioName", exec.get("scenarioName"));
 					entry.put("scenarioType", exec.getOrDefault("scenarioType", "Scenario"));
 
 					if ("Scenario Outline".equals(exec.get("scenarioType"))) {
-						entry.put("exampleHeader", exec.getOrDefault("exampleHeader", List.of()));
-						entry.put("exampleValues", exec.getOrDefault("exampleValues", List.of()));
+						entry.put("exampleHeader", exec.containsKey("exampleHeader") ? exec.get("exampleHeader")
+								: Collections.emptyList());
+						entry.put("exampleValues", exec.containsKey("exampleValues") ? exec.get("exampleValues")
+								: Collections.emptyList());
 					}
 
 					List<String> errors = safeList(exec.get("errors")).stream().map(err -> {
@@ -857,16 +850,16 @@ public class TestCaseRunService {
 			out.append("Feature: ").append(testCase.getTcName().trim()).append("\n\n");
 
 			// --- Background (once per feature) ---
-//			if (fs.getBackgroundBlock() != null && !fs.getBackgroundBlock().isEmpty()) {
-//			    out.append("Background:\n");
-//			    for (String bgLine : fs.getBackgroundBlock()) {
-//			        String trimmed = bgLine.trim();
-//			        if (!trimmed.startsWith("Background:") && !trimmed.isEmpty()) {
-//			            out.append("  ").append(trimmed).append("\n"); // ✅ 2-space indent
-//			        }
-//			    }
-//			    out.append("\n"); // ✅ exactly one blank line after background
-//			}
+			if (fs.getBackgroundBlock() != null && !fs.getBackgroundBlock().isEmpty()) {
+				out.append("Background:\n");
+				for (String bgLine : fs.getBackgroundBlock()) {
+					String trimmed = bgLine.trim();
+					if (!trimmed.startsWith("Background:") && !trimmed.isEmpty()) {
+						out.append("  ").append(trimmed).append("\n"); // ✅ 2-space indent
+					}
+				}
+				out.append("\n"); // ✅ exactly one blank line after background
+			}
 
 			String currentScenarioTitle = null;
 
@@ -906,20 +899,19 @@ public class TestCaseRunService {
 
 					// --- Examples ---
 					if (s.startsWith("Examples:")) {
-					    if (currentScenarioTitle != null && fs.getExampleTagsByName() != null) {
-					        List<String> exTags = fs.getExampleTagsByName().get(currentScenarioTitle);
-					        if (exTags != null && !exTags.isEmpty()) {
-					            out.append("\n") // ✅ ensure spacing before tags
-					               .append(String.join(" ", exTags).trim())
-					               .append("\n");
-					        } else {
-					            out.append("\n"); // ✅ blank line before "Examples:" even without tags
-					        }
-					    } else {
-					        out.append("\n"); // ✅ blank line before "Examples:"
-					    }
-					    out.append("Examples:\n");
-					    continue;
+						if (currentScenarioTitle != null && fs.getExampleTagsByName() != null) {
+							List<String> exTags = fs.getExampleTagsByName().get(currentScenarioTitle);
+							if (exTags != null && !exTags.isEmpty()) {
+								out.append("\n") // ✅ ensure spacing before tags
+										.append(String.join(" ", exTags).trim()).append("\n");
+							} else {
+								out.append("\n"); // ✅ blank line before "Examples:" even without tags
+							}
+						} else {
+							out.append("\n"); // ✅ blank line before "Examples:"
+						}
+						out.append("Examples:\n");
+						continue;
 					}
 
 					// --- Tables (indent under Examples) ---
@@ -943,9 +935,8 @@ public class TestCaseRunService {
 		}
 
 		// ✅ Write to temp file (trim trailing whitespace globally)
-		List<String> cleanedLines = Arrays.stream(out.toString().split("\n")).map(String::trim) // remove trailing
-																								// spaces
-				.toList();
+		List<String> cleanedLines = Arrays.stream(out.toString().split("\n")).map(String::trim)
+				.collect(Collectors.toList());
 
 		File temp = File.createTempFile("testcase_", ".feature");
 		try (BufferedWriter w = new BufferedWriter(new FileWriter(temp))) {
@@ -1163,7 +1154,8 @@ public class TestCaseRunService {
 		Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap = new HashMap<>();
 
 		// normalize newlines
-		String content = Files.readString(featureFile.toPath(), StandardCharsets.UTF_8);
+//		String content = Files.readString(featureFile.toPath(), StandardCharsets.UTF_8);
+		String content = new String(Files.readAllBytes(featureFile.toPath()), StandardCharsets.UTF_8);
 		List<String> lines = Arrays.asList(content.split("\\R"));
 
 		String currentScenarioId = null;
@@ -1250,37 +1242,81 @@ public class TestCaseRunService {
 		return cleaned.toString().trim().replaceAll("\n{2,}", "\n");
 	}
 
-	private static final List<DiffPattern> DIFF_PATTERNS = List.of(
-			new DiffPattern("Text Mismatch", Pattern.compile("Expected text value '(.*?)' but was '(.*?)' - comparing"),
-					(m, raw) -> Map.of("expected", m.group(1), "actual", m.group(2))),
-			new DiffPattern("Attribute Mismatch",
-					Pattern.compile("Expected attribute value '(.*?)' but was '(.*?)' - comparing"), (m, raw) -> {
-						Map<String, Object> data = new LinkedHashMap<>();
-						data.put("expected", m.group(1));
-						data.put("actual", m.group(2));
-						data.put("attribute", extractAttributeName(raw));
-						return data;
-					}),
-			new DiffPattern("Tag Mismatch",
-					Pattern.compile("Expected element tag name '(.*?)' but was '(.*?)' - comparing"),
-					(m, raw) -> Map.of("expected", m.group(1), "actual", m.group(2))),
-			new DiffPattern("Child Count Mismatch",
-					Pattern.compile("Expected child nodelist length '.*?' but was '.*?' - comparing.*"),
-					(m, raw) -> Map.of("description", raw)),
-			new DiffPattern("Missing/Extra Node", Pattern.compile("Expected child '.*?' but was '.*?' - comparing.*"),
-					(m, raw) -> Map.of("description", raw)),
-			new DiffPattern("False Positive Equality",
-					Pattern.compile(
-							"Expected XML files to be NOT equal, but got:.*expected \\[true\\] but found \\[false\\]"),
-					(m, raw) -> Map.of("description", raw)),
-			new DiffPattern("Assertion Result",
-					Pattern.compile("^(?!.*NOT equal).*expected \\[true\\] but found \\[false\\]"),
-					(m, raw) -> Map.of("description", raw)),
-			new DiffPattern("Parsing Error",
-					Pattern.compile(".*(invalid xml|parsing error).*", Pattern.CASE_INSENSITIVE),
-					(m, raw) -> Map.of("description", raw)),
-			new DiffPattern("Namespace Mismatch", Pattern.compile(".*(namespace|xmlns).*", Pattern.CASE_INSENSITIVE),
-					(m, raw) -> Map.of("description", raw)));
+	private static final List<DiffPattern> DIFF_PATTERNS;
+	static {
+		List<DiffPattern> patterns = new ArrayList<>();
+
+		patterns.add(new DiffPattern("Text Mismatch",
+				Pattern.compile("Expected text value '(.*?)' but was '(.*?)' - comparing"), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("expected", m.group(1));
+					map.put("actual", m.group(2));
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("Attribute Mismatch",
+				Pattern.compile("Expected attribute value '(.*?)' but was '(.*?)' - comparing"), (m, raw) -> {
+					Map<String, Object> data = new LinkedHashMap<>();
+					data.put("expected", m.group(1));
+					data.put("actual", m.group(2));
+					data.put("attribute", extractAttributeName(raw));
+					return data;
+				}));
+
+		patterns.add(new DiffPattern("Tag Mismatch",
+				Pattern.compile("Expected element tag name '(.*?)' but was '(.*?)' - comparing"), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("expected", m.group(1));
+					map.put("actual", m.group(2));
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("Child Count Mismatch",
+				Pattern.compile("Expected child nodelist length '.*?' but was '.*?' - comparing.*"), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("description", raw);
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("Missing/Extra Node",
+				Pattern.compile("Expected child '.*?' but was '.*?' - comparing.*"), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("description", raw);
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("False Positive Equality",
+				Pattern.compile(
+						"Expected XML files to be NOT equal, but got:.*expected \\[true\\] but found \\[false\\]"),
+				(m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("description", raw);
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("Assertion Result",
+				Pattern.compile("^(?!.*NOT equal).*expected \\[true\\] but found \\[false\\]"), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("description", raw);
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("Parsing Error",
+				Pattern.compile(".*(invalid xml|parsing error).*", Pattern.CASE_INSENSITIVE), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("description", raw);
+					return map;
+				}));
+
+		patterns.add(new DiffPattern("Namespace Mismatch",
+				Pattern.compile(".*(namespace|xmlns).*", Pattern.CASE_INSENSITIVE), (m, raw) -> {
+					Map<String, Object> map = new LinkedHashMap<>();
+					map.put("description", raw);
+					return map;
+				}));
+
+		DIFF_PATTERNS = Collections.unmodifiableList(patterns);
+	}
 
 	private Map<String, Object> parseSingleDiff(String raw, Set<String> seen) {
 		raw = cleanStackAndFooterLines(raw);
@@ -1342,11 +1378,12 @@ public class TestCaseRunService {
 			Set<Map<String, Object>> executedScenarios) {
 
 		int xmlDiffCount = xmlComparisonDetails.stream()
-				.mapToInt(detail -> ((List<?>) detail.getOrDefault("differences", List.of())).size()).sum();
+				.mapToInt(detail -> ((List<?>) detail.getOrDefault("differences", Collections.emptyList())).size())
+				.sum();
 
 		// Count only real XML diff lines
 		int cucumberDiffCount = executedScenarios.stream()
-				.flatMap(s -> ((List<?>) s.getOrDefault("parsedDifferences", List.of())).stream())
+				.flatMap(s -> ((List<?>) s.getOrDefault("parsedDifferences", Collections.emptyList())).stream())
 				.filter(Objects::nonNull).map(Object::toString).map(String::trim).filter(s -> !s.isEmpty())
 				.filter(line -> line.contains("comparing")) // Real XML diff lines include 'comparing'
 				.collect(Collectors.toSet()) // Remove duplicates
@@ -1367,24 +1404,6 @@ public class TestCaseRunService {
 	private String removeAnsiCodes(String input) {
 		return input.replaceAll("\\u001B\\[[;\\d]*m", "");
 	}
-
-//	private File generateTempFeatureFile(TestCaseDTO testCase) throws IOException {
-//		StringBuilder content = new StringBuilder();
-//		content.append("Feature: ").append(testCase.getTcName()).append("\n\n");
-//
-//		for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
-//			for (String block : fs.getScenarioBlocks()) {
-//				content.append(block.trim()).append("\n\n"); // ensure clean spacing
-//			}
-//		}
-//
-//		File tempFile = File.createTempFile("testcase_", ".feature");
-//		try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
-//			writer.write(content.toString().trim());
-//			writer.newLine();
-//		}
-//		return tempFile;
-//	}
 
 	public List<Map<String, Object>> runByIds(List<Long> testCaseIds) {
 		List<TestCaseDTO> dtos = testCaseRepository.findByIdTCIn(testCaseIds).stream().map(this::convertToDTO)
@@ -1426,7 +1445,7 @@ public class TestCaseRunService {
 
 		if (!isXml(inputFile) || !isXml(outputFile)) {
 			xmlDetail.put("message", "⚠️ Skipped: Input/Output file is not XML.");
-			xmlDetail.put("differences", List.of());
+			xmlDetail.put("differences", Collections.emptyList());
 			return xmlDetail;
 		}
 
@@ -1436,7 +1455,7 @@ public class TestCaseRunService {
 		// 👇 NEW: read & cache exact XML content for this run (only once)
 		try {
 			if (TestContext.get("inputXmlContent") == null) {
-				String inputContent = Files.readString(Paths.get(fullInputPath));
+				String inputContent = new String(Files.readAllBytes(Paths.get(fullInputPath)), StandardCharsets.UTF_8);
 				TestContext.set("inputXmlContent", inputContent);
 			}
 		} catch (IOException e) {
@@ -1446,7 +1465,8 @@ public class TestCaseRunService {
 		}
 		try {
 			if (TestContext.get("outputXmlContent") == null) {
-				String outputContent = Files.readString(Paths.get(fullOutputPath));
+				String outputContent = new String(Files.readAllBytes(Paths.get(fullOutputPath)),
+						StandardCharsets.UTF_8);
 				TestContext.set("outputXmlContent", outputContent);
 			}
 		} catch (IOException e) {
@@ -1460,10 +1480,10 @@ public class TestCaseRunService {
 
 		if (xmlComparisonResult.contains("✅ XML files are equal.")) {
 			xmlDetail.put("message", "✅ XML files are equal.");
-			xmlDetail.put("differences", List.of());
+			xmlDetail.put("differences", Collections.emptyList());
 		} else if (xmlComparisonResult.contains("❌ Error comparing XML files")) {
 			xmlDetail.put("message", xmlComparisonResult);
-			xmlDetail.put("differences", List.of());
+			xmlDetail.put("differences", Collections.emptyList());
 		} else {
 			List<Map<String, Object>> parsed = extractXmlDifferences(xmlComparisonResult);
 			xmlDetail.put("message", "❌ XML files have differences");

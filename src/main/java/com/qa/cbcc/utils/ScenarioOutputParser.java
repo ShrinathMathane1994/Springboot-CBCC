@@ -77,7 +77,13 @@ public class ScenarioOutputParser {
                 diff.put("differenceType", "Assertion Result");
                 diff.put("description", block.message);
                 if (block.failedStep != null) diff.put("failedStep", block.failedStep);
-                map.put("parsedDifferences", List.of(diff));
+
+                // ❌ Java 9+: map.put("parsedDifferences", List.of(diff));
+                // ✅ Java 8 replacement:
+                List<Map<String, Object>> diffs = new ArrayList<>();
+                diffs.add(diff);
+                map.put("parsedDifferences", diffs);
+
                 map.put("diffCount", 1);
                 result.failedNames.add(block.name);
             } else {

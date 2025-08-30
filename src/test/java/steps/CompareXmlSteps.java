@@ -1,4 +1,4 @@
-package stepdefinitions;
+package steps;
 
 import static org.testng.Assert.assertTrue;
 
