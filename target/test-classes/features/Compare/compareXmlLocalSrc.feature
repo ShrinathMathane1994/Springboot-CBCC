@@ -4,7 +4,6 @@ Feature:  Regression_U1-POD_GB_CBPR_UKPT_PRS_ISV
   Background:
     When database connection established
 
-
   Scenario Outline:- UKPT PRS_ISV Message Validation in PDP Payload Results:<Scenario>
     When Execute or Ignore for rule "<RuleId_Desc>" having excel "syncResponseAndDBValidationUKChaps/Data Driven/PRS.xlsx"
     Given Scenario "<Scenario>" with report path "syncResponseAndDBValidationUKChaps\CBPR_UKPT_PRS_ISV-TestReport.xlsx"

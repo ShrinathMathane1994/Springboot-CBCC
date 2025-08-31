@@ -207,6 +207,14 @@ public class TestCaseRunService {
 			tempPathMapping.put(featureFile.getAbsolutePath(),
 					featureToPathMap.values().stream().findFirst().orElse(featureFile.getAbsolutePath()));
 
+			String tempFileName = featureFile.getName();
+			String originalPath = featureToPathMap.values().stream().findFirst().orElse(featureFile.getAbsolutePath());
+			String originalFileName = Paths.get(originalPath).getFileName().toString();
+			// map temp → file name
+			featureToPathMap.put(tempFileName, originalFileName);
+			// store path separately
+			featureToPathMap.put(originalFileName, originalPath);
+
 			// 2. Setup Cucumber command-line arguments
 			String[] gluePkgs = featureService.getGluePackagesArray();
 
@@ -228,6 +236,11 @@ public class TestCaseRunService {
 			argvList.add(featureFile.getAbsolutePath());
 
 			String[] argv = argvList.toArray(new String[0]);
+			
+			// ✅ Inject Maven profile env.name as a system property
+			String envName = System.getProperty("env.name", "UAT"); 
+			logger.info("🚀 Running tests with env.name={}", envName);
+			System.setProperty("env.name", envName);
 
 			// ✅ Ensure dependencies are copied once
 			StepDefCompiler.ensureDependenciesCopied();
@@ -309,28 +322,47 @@ public class TestCaseRunService {
 			logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
 
 			// 5. Parse the generated JSON report
-			executedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
+			Set<Map<String, Object>> parsedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
 
 			if (jsonReportFile.exists())
 				jsonReportFile.delete();
 
-			// ✅ Split truly executed vs skipped (undefined steps)
+			// ✅ Split: truly executed vs skipped/unexecuted
 			List<Map<String, Object>> trulyExecutedScenarios = new ArrayList<>();
 			List<Map<String, Object>> skippedScenarios = new ArrayList<>();
-			for (Map<String, Object> scenario : executedScenarios) {
+
+			for (Map<String, Object> scenario : parsedScenarios) {
+				String rawName = (String) scenario.get("featureFileName");
+				if (rawName != null) {
+					// mapped file name (clean, not temp)
+					String mappedFileName = featureToPathMap.getOrDefault(rawName, rawName);
+					scenario.put("featureFileName", mappedFileName);
+					// also attach full path if available
+					String fullPath = featureToPathMap.get(mappedFileName);
+					if (fullPath != null) {
+						scenario.put("featureFilePath", fullPath);
+					}
+				}
+				String status = (String) scenario.get("status");
 				List<String> errors = safeList(scenario.get("errors"));
-				boolean onlyUndefined = !errors.isEmpty()
-						&& errors.stream().allMatch(e -> e.contains("Step undefined"));
-				if (onlyUndefined) {
-					skippedScenarios.add(scenario);
-				} else {
+
+				if ("Passed".equalsIgnoreCase(status) || "Failed".equalsIgnoreCase(status)) {
 					trulyExecutedScenarios.add(scenario);
+				} else if ("Undefined".equalsIgnoreCase(status)) {
+					scenario.put("status", "Skipped");
+					scenario.put("skipReason", "Glue not found – scenario skipped");
+					skippedScenarios.add(scenario);
+				} else if ("Skipped".equalsIgnoreCase(status) && errors.isEmpty()) {
+					scenario.put("skipReason", "All steps skipped (Background only)");
+					skippedScenarios.add(scenario);
 				}
 			}
 
 			// 6. Extract scenario names from executedScenarios
-			Set<String> executedScenarioNames = executedScenarios.stream()
-					.map(s -> s.get("scenarioName").toString().trim()).collect(Collectors.toSet());
+			// Real executed = passed, failed, skipped
+			Set<String> executedScenarioNames = Stream
+					.concat(trulyExecutedScenarios.stream(), skippedScenarios.stream())
+					.map(s -> String.valueOf(s.get("scenarioName")).trim()).collect(Collectors.toSet());
 
 			Set<String> declaredScenarioNames = testCase.getFeatureScenarios().stream()
 					.flatMap(fs -> fs.getScenarios().stream()).map(String::trim).collect(Collectors.toSet());
@@ -448,10 +480,18 @@ public class TestCaseRunService {
 				if (skipped.containsKey("exampleValues")) {
 					skippedDetail.put("exampleValues", skipped.get("exampleValues"));
 				}
-
-				// ✅ Optionally include feature file name if present
+				
+				// ✅ Include feature file name + path if present
 				if (skipped.containsKey("featureFileName")) {
-					skippedDetail.put("featureFileName", skipped.get("featureFileName"));
+				    String rawFeature = (String) skipped.get("featureFileName");
+
+				    // clean name (just the file name)
+				    String fileName = Paths.get(rawFeature).getFileName().toString();
+				    skippedDetail.put("featureFileName", fileName);
+
+				    // full path (from mapping if available)
+				    String fullPath = featureToPathMap.getOrDefault(fileName, rawFeature);
+				    skippedDetail.put("featureFilePath", fullPath);
 				}
 
 				unexecutedList.add(skippedDetail);
@@ -1001,11 +1041,26 @@ public class TestCaseRunService {
 			if (elements == null)
 				continue;
 
+			// 🔑 Collect Background steps
+			List<Map<String, Object>> backgroundSteps = new ArrayList<>();
 			for (Map<String, Object> element : elements) {
+				if ("background".equalsIgnoreCase((String) element.get("type"))) {
+					List<Map<String, Object>> steps = (List<Map<String, Object>>) element.get("steps");
+					if (steps != null)
+						backgroundSteps.addAll(steps);
+				}
+			}
+
+			for (Map<String, Object> element : elements) {
+				if ("background".equalsIgnoreCase((String) element.get("type"))) {
+					continue; // ✅ skip treating background as scenario
+				}
+
 				String scenarioName = (String) element.get("name");
 				String originalId = (String) element.get("id");
 				String id = originalId;
 
+				// 🔑 Fix example indices
 				if (originalId != null && originalId.contains(";;")) {
 					int splitIndex = originalId.lastIndexOf(";;");
 					String scenarioNamePart = originalId.substring(0, splitIndex);
@@ -1025,118 +1080,110 @@ public class TestCaseRunService {
 				}
 
 				String fullScenarioName = scenarioName;
-				if (!exampleIndex.isEmpty())
+				if (!exampleIndex.isEmpty()) {
 					fullScenarioName += " [example #" + exampleIndex + "]";
+				}
 
-				List<Map<String, Object>> steps = (List<Map<String, Object>>) element.get("steps");
+				// 🔑 Merge background + scenario steps
+				List<Map<String, Object>> steps = new ArrayList<>(backgroundSteps);
+				List<Map<String, Object>> scenarioSteps = (List<Map<String, Object>>) element.get("steps");
+				if (scenarioSteps != null)
+					steps.addAll(scenarioSteps);
+
 				boolean hasFailed = false;
-				boolean hasUndefined = false; // track undefined steps
+				boolean hasUndefined = false;
 				List<String> errors = new ArrayList<>();
 				List<String> parsedDifferences = new ArrayList<>();
+				Set<String> undefinedStepsSeen = new HashSet<>(); // 🚀 Track undefined steps per scenario
 
-				if (steps != null) {
-					for (Map<String, Object> step : steps) {
-						Map<String, Object> result = (Map<String, Object>) step.get("result");
-						if (result != null) {
-							String status = (String) result.get("status");
-							if ("failed".equalsIgnoreCase(status)) {
-								hasFailed = true;
-								String errorMessage = (String) result.get("error_message");
-								if (errorMessage != null) {
-									String trimmedError = errorMessage.split("\tat")[0].trim();
-									trimmedError = trimmedError.replaceAll("java\\.lang\\.AssertionError:\\s*", "")
-											.replaceAll("[\\r\\n]+", " ").trim();
+				for (Map<String, Object> step : steps) {
+					Map<String, Object> result = (Map<String, Object>) step.get("result");
+					String keyword = step.get("keyword") != null ? step.get("keyword").toString() : "";
+					String name = step.get("name") != null ? step.get("name").toString() : "";
+					String stepName = keyword + name;
 
-									String[] parts = trimmedError.split("Differences:", 2);
-									errors.add(parts[0].trim());
+					if (result != null) {
+						String status = (String) result.get("status");
 
-									if (parts.length > 1) {
-										String differencesSection = parts[1].trim();
-										Pattern pattern = Pattern.compile("(?=\\b[Ee]xpected )");
-										Matcher matcher = pattern.matcher(differencesSection);
-										int lastIndex = 0;
-										while (matcher.find()) {
-											if (lastIndex != matcher.start()) {
-												String diff = differencesSection.substring(lastIndex, matcher.start())
-														.trim();
-												if (!diff.isEmpty() && !diff
-														.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
-													parsedDifferences.add(diff);
-												}
+						if ("failed".equalsIgnoreCase(status)) {
+							hasFailed = true;
+							String errorMessage = (String) result.get("error_message");
+							if (errorMessage != null) {
+								String trimmedError = errorMessage.split("\tat")[0].trim();
+								trimmedError = trimmedError.replaceAll("java\\.lang\\.AssertionError:\\s*", "")
+										.replaceAll("[\\r\\n]+", " ").trim();
+
+								String[] parts = trimmedError.split("Differences:", 2);
+								errors.add(parts[0].trim());
+
+								if (parts.length > 1) {
+									String differencesSection = parts[1].trim();
+									Pattern pattern = Pattern.compile("(?=\\b[Ee]xpected )");
+									Matcher matcher = pattern.matcher(differencesSection);
+									int lastIndex = 0;
+									while (matcher.find()) {
+										if (lastIndex != matcher.start()) {
+											String diff = differencesSection.substring(lastIndex, matcher.start())
+													.trim();
+											if (!diff.isEmpty()
+													&& !diff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
+												parsedDifferences.add(diff);
 											}
-											lastIndex = matcher.start();
 										}
-										String lastDiff = differencesSection.substring(lastIndex).trim();
-										if (!lastDiff.isEmpty()
-												&& !lastDiff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
-											parsedDifferences.add(lastDiff);
-										}
+										lastIndex = matcher.start();
+									}
+									String lastDiff = differencesSection.substring(lastIndex).trim();
+									if (!lastDiff.isEmpty()
+											&& !lastDiff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
+										parsedDifferences.add(lastDiff);
 									}
 								}
-							} else if ("undefined".equalsIgnoreCase(status)) {
-								hasUndefined = true;
-								errors.add("Step undefined: " + step.get("keyword") + step.get("name")
-										+ " (check glue packages or step definitions)");
 							}
+
+						} else if ("undefined".equalsIgnoreCase(status)) {
+							hasUndefined = true;
+							// ✅ Only add if not already recorded
+							if (undefinedStepsSeen.add(stepName)) {
+								errors.add(
+										"Step undefined: " + stepName + " (check glue packages or step definitions)");
+							}
+
+						} else if ("skipped".equalsIgnoreCase(status) && hasUndefined) {
+							// ✅ Always keep skipped steps, even if duplicates
+							errors.add("Step skipped: " + stepName + " (due to previous undefined step)");
 						}
 					}
 				}
 
-				// Only add truly executed scenarios (failed/passed)
-				if (steps != null && !steps.isEmpty() && !hasUndefined) {
-					Map<String, Object> scenarioMap = new LinkedHashMap<>();
-					scenarioMap.put("featureFileName", featureFileName);
-					scenarioMap.put("scenarioName", fullScenarioName);
-					scenarioMap.put("status", hasFailed ? "Failed" : "Passed");
-					if (!errors.isEmpty()) {
-						scenarioMap.put("errors", errors);
-						if (!parsedDifferences.isEmpty()) {
-							scenarioMap.put("parsedDifferences", parsedDifferences);
-							scenarioMap.put("parsedDiffCount", parsedDifferences.size());
-						}
+				// Build scenario map (no skip classification here!)
+				Map<String, Object> scenarioMap = new LinkedHashMap<>();
+				scenarioMap.put("featureFileName", featureFileName);
+				scenarioMap.put("scenarioName", fullScenarioName);
+				scenarioMap.put("status", hasUndefined ? "Undefined" : hasFailed ? "Failed" : "Passed");
+				if (!errors.isEmpty()) {
+					scenarioMap.put("errors", errors);
+					if (!parsedDifferences.isEmpty()) {
+						scenarioMap.put("parsedDifferences", parsedDifferences);
+						scenarioMap.put("parsedDiffCount", parsedDifferences.size());
 					}
+				}
 
-					// Scenario Outline metadata
-					if (id != null && exampleLookup.containsKey(featureFileName)) {
-						Map<String, Pair<List<String>, List<String>>> examples = exampleLookup.get(featureFileName);
-						String lookupId = id.contains(";;") ? id.substring(id.indexOf(';') + 1) : id;
-						if (examples.containsKey(lookupId)) {
-							Pair<List<String>, List<String>> example = examples.get(lookupId);
-							scenarioMap.put("scenarioType", "Scenario Outline");
-							scenarioMap.put("exampleHeader", example.getKey());
-							scenarioMap.put("exampleValues", example.getValue());
-						} else {
-							scenarioMap.put("scenarioType", "Scenario");
-						}
+				if (id != null && exampleLookup.containsKey(featureFileName)) {
+					Map<String, Pair<List<String>, List<String>>> examples = exampleLookup.get(featureFileName);
+					String lookupId = id.contains(";;") ? id.substring(id.indexOf(';') + 1) : id;
+					if (examples.containsKey(lookupId)) {
+						Pair<List<String>, List<String>> example = examples.get(lookupId);
+						scenarioMap.put("scenarioType", "Scenario Outline");
+						scenarioMap.put("exampleHeader", example.getKey());
+						scenarioMap.put("exampleValues", example.getValue());
 					} else {
 						scenarioMap.put("scenarioType", "Scenario");
 					}
-
-					executedScenarios.add(scenarioMap);
+				} else {
+					scenarioMap.put("scenarioType", "Scenario");
 				}
 
-				// ✅ Handle undefined as unexecuted
-				if (hasUndefined) {
-					Map<String, Object> unexecMap = new LinkedHashMap<>();
-					unexecMap.put("featureFileName", featureFileName);
-					unexecMap.put("scenarioName", fullScenarioName);
-					unexecMap.put("scenarioType",
-							id != null && exampleLookup.containsKey(featureFileName) ? "Scenario Outline" : "Scenario");
-
-					if (id != null && exampleLookup.containsKey(featureFileName)) {
-						Map<String, Pair<List<String>, List<String>>> examples = exampleLookup.get(featureFileName);
-						String lookupId = id.contains(";;") ? id.substring(id.indexOf(';') + 1) : id;
-						if (examples.containsKey(lookupId)) {
-							Pair<List<String>, List<String>> example = examples.get(lookupId);
-							unexecMap.put("exampleHeader", example.getKey());
-							unexecMap.put("exampleValues", example.getValue());
-						}
-					}
-
-					unexecMap.put("errors", errors);
-					unexecMap.put("skipReason", "Step undefined – scenario skipped");
-					executedScenarios.add(unexecMap); // keep in same set but flagged as skipped
-				}
+				executedScenarios.add(scenarioMap);
 			}
 		}
 

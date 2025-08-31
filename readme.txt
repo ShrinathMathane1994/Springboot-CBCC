@@ -37,16 +37,17 @@ mvn spring-boot:run
 Body (JSON):
 {
     "sourceType": "local",
-    "repoUrl": "https://github.com/ShrinathMathane1994/Springboot-CBCC.git",
+    "repoUrl": "https://alm-github.systems.uk.hsbc/POL/pol-testing-framework.git",
     "cloneDir": "features-repo",
-    "gitFeaturePath": "src/test/resources/features",
-    "branch": "testingv2",
-    "username": "",
+    "gitFeaturePath": "e2e/src/test/resources/syncResponseAndDBValidationUKChaps",
+    "branch": "master",
+    "username": "45458765",
     "password": "",
     "localFeatherPath": "src/test/resources/features",
     "refreshInterval": 300000,
-    "stepDefsProjectPath": "D:/AUtomation/Eclipse2/New folder/Springboot-CBCC",
-    "gluePackage": "com.qa.cbcc.stepdefinitions"
+    "stepDefsProjectPathGit": "features-repo/e2e",
+    "stepDefsProjectPathLocal": "src/test/java",
+    "gluePackage": "steps"
 }
 
 🔄 Sync Feature Files

@@ -82,8 +82,11 @@ public class FeatureService {
 	@Value("${feature.refresh.interval.ms:300000}")
 	private Long refreshInterval;
 
-	@Value("${step.defs.project-path:}")
-	private String stepDefProjPath;
+	@Value("${step.defs.project-path.git:}")
+	private String stepDefProjPathGit;
+
+	@Value("${step.defs.project-path.local:}")
+	private String stepDefProjPathLocal;
 
 	@Value("${step.defs.glue:}")
 	private String gluePackageName;
@@ -493,7 +496,8 @@ public class FeatureService {
 		dto.setPassword(gitPassword);
 		dto.setLocalFeatherPath(localFeatureDir);
 		dto.setRefreshInterval(refreshInterval);
-		dto.setStepDefsProjectPath(stepDefProjPath);
+		dto.setStepDefsProjectPathGit(stepDefProjPathGit);
+		dto.setStepDefsProjectPathLocal(stepDefProjPathLocal);
 		dto.setGluePackage(gluePackageName);
 		return dto;
 	}
@@ -558,10 +562,18 @@ public class FeatureService {
 				updatedFields.put("refreshInterval", newConfig.getRefreshInterval());
 			}
 
-			if (newConfig.getStepDefsProjectPath() != null) {
-				props.setProperty("step.defs.project-path", newConfig.getStepDefsProjectPath());
-				this.stepDefProjPath = newConfig.getStepDefsProjectPath();
-				updatedFields.put("stepDefProjectPath", newConfig.getStepDefsProjectPath());
+			// ✅ Handle Git-specific stepDefs project path
+			if (newConfig.getStepDefsProjectPathGit() != null) {
+				props.setProperty("step.defs.project-path.git", newConfig.getStepDefsProjectPathGit());
+				this.stepDefProjPathGit = newConfig.getStepDefsProjectPathGit();
+				updatedFields.put("stepDefProjectPathGit", newConfig.getStepDefsProjectPathGit());
+			}
+
+			// ✅ Handle Local-specific stepDefs project path
+			if (newConfig.getStepDefsProjectPathLocal() != null) {
+				props.setProperty("step.defs.project-path.local", newConfig.getStepDefsProjectPathLocal());
+				this.stepDefProjPathLocal = newConfig.getStepDefsProjectPathLocal();
+				updatedFields.put("stepDefProjectPathLocal", newConfig.getStepDefsProjectPathLocal());
 			}
 
 			if (newConfig.getGluePackage() != null) {
@@ -621,18 +633,22 @@ public class FeatureService {
 			this.localFeatureDir = props.getProperty("feature.local.path", "src/test/resources/features");
 			this.refreshInterval = Long.parseLong(props.getProperty("feature.refresh.interval.ms", "300000"));
 
-			this.stepDefProjPath = props.getProperty("step.defs.project-path", "");
-			this.gluePackageName = props.getProperty("step.defs.glue", "com.qa.cbcc.steps");
+			// ✅ Explicitly load both paths into their respective fields
+			this.stepDefProjPathGit = props.getProperty("step.defs.project-path.git", "");
+			this.stepDefProjPathLocal = props.getProperty("step.defs.project-path.local", "");
+			this.gluePackageName = props.getProperty("step.defs.glue", "");
+			// ✅ Build stepDefProjPaths list depending on source type
+			String rawStepDefs = "git".equalsIgnoreCase(this.featureSource) ? stepDefProjPathGit : stepDefProjPathLocal;
 
-			// 🔹 Support multiple paths (comma-separated)
-			this.stepDefProjPaths = Arrays.stream(stepDefProjPath.split(",")).map(String::trim)
-					.filter(s -> !s.isEmpty()).collect(Collectors.toList());
+			this.stepDefProjPaths = Arrays.stream(rawStepDefs.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+					.map(p -> Paths.get(p).toAbsolutePath().normalize().toString()).collect(Collectors.toList());
 
-			// 🔹 Support multiple glue packages (comma-separated)
 			this.gluePackageNames = Arrays.stream(gluePackageName.split(",")).map(String::trim)
 					.filter(s -> !s.isEmpty()).collect(Collectors.toList());
 
-			logger.info("✅ StepDef paths resolved: {}", stepDefProjPaths);
+			logger.info("✅ StepDef Git Path: {}", stepDefProjPathGit);
+			logger.info("✅ StepDef Local Path: {}", stepDefProjPathLocal);
+			logger.info("✅ StepDef project paths resolved: {}", stepDefProjPaths);
 			logger.info("✅ Glue packages resolved: {}", gluePackageNames);
 
 		} catch (IOException e) {
@@ -654,17 +670,21 @@ public class FeatureService {
 //	}
 
 	public List<String> getStepDefsProjectPaths() {
-		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
-			if (featureSource.equalsIgnoreCase("git")) {
+		if ("git".equalsIgnoreCase(featureSource)) {
+			if (stepDefProjPathGit != null && !stepDefProjPathGit.isEmpty()) {
 				String baseDir = System.getProperty("user.dir");
-				String fullPath = Paths.get(baseDir, stepDefProjPath).toAbsolutePath().normalize().toString();
+				String fullPath = Paths.get(baseDir, stepDefProjPathGit).toAbsolutePath().normalize().toString();
 				return Collections.singletonList(fullPath);
 			}
-			return stepDefProjPaths;
-		} else {
-			return Collections.singletonList(Paths.get(".").toAbsolutePath().normalize().toString()); // fallback:
-																										// current dir
+		} else { // local
+			if (stepDefProjPathLocal != null && !stepDefProjPathLocal.isEmpty()) {
+				return Collections
+						.singletonList(Paths.get(stepDefProjPathLocal).toAbsolutePath().normalize().toString());
+			}
 		}
+
+		// fallback: current dir
+		return Collections.singletonList(Paths.get(".").toAbsolutePath().normalize().toString());
 	}
 
 	public List<String> getStepDefsFullPaths() {
