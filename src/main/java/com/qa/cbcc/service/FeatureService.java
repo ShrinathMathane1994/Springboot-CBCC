@@ -205,6 +205,79 @@ public class FeatureService {
 		this.tagIndex.putAll(newIndex);
 	}
 
+	private void syncResourcesFromGit() throws IOException {
+		// Git repo's resources folder
+		Path gitResourceDir = Paths.get(localCloneDir, stepDefProjPathGit, "src", "test", "resources");
+
+		// Local project resources folder
+		Path localResourceDir = Paths.get("src", "test", "resources");
+
+		if (!Files.exists(gitResourceDir)) {
+			logger.warn("⚠️ No resources folder found in Git repo: {}", gitResourceDir);
+			return;
+		}
+
+		logger.info("🔄 Syncing resources from Git: {} -> {}", gitResourceDir, localResourceDir);
+
+		// Ensure target exists
+		if (!Files.exists(localResourceDir)) {
+			Files.createDirectories(localResourceDir);
+		}
+
+		// ✅ Incremental copy (updates only changed/new files)
+		FileUtils.copyDirectory(gitResourceDir.toFile(), localResourceDir.toFile());
+
+		logger.info("✅ Resources synced successfully.");
+	}
+
+//	private void cloneRepositoryIfNeeded() throws IOException {
+//		File repoDir = new File(localCloneDir);
+//		File gitDir = new File(repoDir, ".git");
+//
+//		boolean credentialsProvided = gitUsername != null && !gitUsername.isEmpty();
+//		UsernamePasswordCredentialsProvider credentials = credentialsProvided
+//				? new UsernamePasswordCredentialsProvider(gitUsername, gitPassword)
+//				: null;
+//
+//		try {
+//			// If directory doesn't exist, clone fresh
+//			if (!repoDir.exists() || !gitDir.exists()) {
+//				logger.info("Repo folder doesn't exist or missing .git. Cloning fresh.");
+//				FileUtils.deleteQuietly(repoDir);
+//				cloneFresh(repoDir, credentials);
+//				return;
+//			}
+//
+//			try (Git git = Git.open(repoDir)) {
+//				String currentBranch = git.getRepository().getBranch();
+//				logger.info("Current local branch: '{}'", currentBranch);
+//
+//				// Branch mismatch -> delete and reclone
+//				if (!currentBranch.equals(gitBranch)) {
+//					logger.warn("Branch mismatch (expected '{}', found '{}'). Cleaning and recloning.", gitBranch,
+//							currentBranch);
+//					git.getRepository().close();
+//					FileUtils.deleteDirectory(repoDir);
+//					cloneFresh(repoDir, credentials);
+//					return;
+//				}
+//
+//				// Pull if branch matches
+//				git.pull().setCredentialsProvider(credentials).call();
+//				logger.info("Repository updated (pull completed).");
+//
+//			} catch (Exception e) {
+//				logger.error("Failed to open or update repo. Re-cloning. Reason: {}", e.getMessage());
+//				FileUtils.deleteDirectory(repoDir);
+//				cloneFresh(repoDir, credentials);
+//			}
+//
+//		} catch (Exception e) {
+//			logger.error("Git sync failed: {}", e.getMessage(), e);
+//			throw new IOException("Git sync failed: " + e.getMessage(), e);
+//		}
+//	}
+
 	private void cloneRepositoryIfNeeded() throws IOException {
 		File repoDir = new File(localCloneDir);
 		File gitDir = new File(repoDir, ".git");
@@ -220,6 +293,9 @@ public class FeatureService {
 				logger.info("Repo folder doesn't exist or missing .git. Cloning fresh.");
 				FileUtils.deleteQuietly(repoDir);
 				cloneFresh(repoDir, credentials);
+
+				// ✅ sync resources immediately after fresh clone
+				syncResourcesFromGit();
 				return;
 			}
 
@@ -234,6 +310,9 @@ public class FeatureService {
 					git.getRepository().close();
 					FileUtils.deleteDirectory(repoDir);
 					cloneFresh(repoDir, credentials);
+
+					// ✅ sync resources after re-clone
+					syncResourcesFromGit();
 					return;
 				}
 
@@ -241,10 +320,16 @@ public class FeatureService {
 				git.pull().setCredentialsProvider(credentials).call();
 				logger.info("Repository updated (pull completed).");
 
+				// ✅ incremental resource sync after pull
+				syncResourcesFromGit();
+
 			} catch (Exception e) {
 				logger.error("Failed to open or update repo. Re-cloning. Reason: {}", e.getMessage());
 				FileUtils.deleteDirectory(repoDir);
 				cloneFresh(repoDir, credentials);
+
+				// ✅ sync resources after recovery clone
+				syncResourcesFromGit();
 			}
 
 		} catch (Exception e) {
@@ -253,13 +338,6 @@ public class FeatureService {
 		}
 	}
 
-//	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials) throws GitAPIException {
-//		logger.info("Cloning fresh from {}", gitRepoUrl);
-//		Git.cloneRepository().setURI(gitRepoUrl).setDirectory(repoDir).setBranch(gitBranch)
-//				.setCredentialsProvider(credentials).call();
-//		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
-//	}
-
 	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials)
 			throws IOException, InterruptedException {
 		logger.info("Cloning fresh from {} using cmd", gitRepoUrl);
@@ -267,6 +345,7 @@ public class FeatureService {
 		List<String> command = new ArrayList<>();
 		command.add("cmd");
 		command.add("/c");
+
 		String repoUrlWithCreds = gitRepoUrl;
 		if (credentials != null && gitRepoUrl.startsWith("http")) {
 			int idx = repoUrlWithCreds.indexOf("://") + 3;
@@ -277,6 +356,7 @@ public class FeatureService {
 			}
 			repoUrlWithCreds = repoUrlWithCreds.substring(0, idx) + repoUrlWithCreds.substring(idx);
 		}
+
 		command.add(String.format("git clone --branch %s %s \"%s\"", gitBranch, repoUrlWithCreds,
 				repoDir.getAbsolutePath()));
 
@@ -291,12 +371,60 @@ public class FeatureService {
 				logger.info(line);
 			}
 		}
+
 		int exitCode = process.waitFor();
 		if (exitCode != 0) {
 			throw new IOException("Git clone failed with exit code " + exitCode);
 		}
+
 		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
 	}
+
+//	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials) throws GitAPIException {
+//		logger.info("Cloning fresh from {}", gitRepoUrl);
+//		Git.cloneRepository().setURI(gitRepoUrl).setDirectory(repoDir).setBranch(gitBranch)
+//				.setCredentialsProvider(credentials).call();
+//		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
+//	}
+
+//---Old---//
+//	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials)
+//			throws IOException, InterruptedException {
+//		logger.info("Cloning fresh from {} using cmd", gitRepoUrl);
+//
+//		List<String> command = new ArrayList<>();
+//		command.add("cmd");
+//		command.add("/c");
+//		String repoUrlWithCreds = gitRepoUrl;
+//		if (credentials != null && gitRepoUrl.startsWith("http")) {
+//			int idx = repoUrlWithCreds.indexOf("://") + 3;
+//			// Remove any username already present in the URL
+//			int atIdx = repoUrlWithCreds.indexOf("@", idx);
+//			if (atIdx != -1) {
+//				repoUrlWithCreds = repoUrlWithCreds.substring(0, idx) + repoUrlWithCreds.substring(atIdx + 1);
+//			}
+//			repoUrlWithCreds = repoUrlWithCreds.substring(0, idx) + repoUrlWithCreds.substring(idx);
+//		}
+//		command.add(String.format("git clone --branch %s %s \"%s\"", gitBranch, repoUrlWithCreds,
+//				repoDir.getAbsolutePath()));
+//
+//		ProcessBuilder pb = new ProcessBuilder(command);
+//		pb.redirectErrorStream(true);
+//		pb.directory(repoDir.getParentFile());
+//
+//		Process process = pb.start();
+//		try (BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
+//			String line;
+//			while ((line = reader.readLine()) != null) {
+//				logger.info(line);
+//			}
+//		}
+//		int exitCode = process.waitFor();
+//		if (exitCode != 0) {
+//			throw new IOException("Git clone failed with exit code " + exitCode);
+//		}
+//		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
+//	}
 
 	public List<ScenarioDTO> getScenariosByTags(List<String> tagsToMatch) throws IOException {
 		if (cachedScenarios.isEmpty()) {
