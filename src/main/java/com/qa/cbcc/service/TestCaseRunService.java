@@ -52,6 +52,7 @@ import com.qa.cbcc.repository.TestCaseRepository;
 import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
 import com.qa.cbcc.utils.StepDefCompiler;
 import com.qa.cbcc.utils.TestContext;
+import com.qa.cbcc.utils.XmlComparator;
 
 import io.cucumber.core.cli.Main;
 
@@ -236,9 +237,9 @@ public class TestCaseRunService {
 			argvList.add(featureFile.getAbsolutePath());
 
 			String[] argv = argvList.toArray(new String[0]);
-			
+
 			// ✅ Inject Maven profile env.name as a system property
-			String envName = System.getProperty("env.name", "UAT"); 
+			String envName = System.getProperty("env.name", "UAT");
 			logger.info("🚀 Running tests with env.name={}", envName);
 			System.setProperty("env.name", envName);
 
@@ -282,10 +283,10 @@ public class TestCaseRunService {
 				}
 
 				// 🔍 Log the resolved classpath entries
-				logger.info("StepDefs + Dependency classpath URLs:");
-				for (URL url : urls) {
-					logger.info("  {}", url);
-				}
+//				logger.info("StepDefs + Dependency classpath URLs:");
+//				for (URL url : urls) {
+//					logger.info("  {}", url);
+//				}
 
 				// ✅ Hybrid classloader (inherits app deps + adds stepDefs + jars)
 				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
@@ -317,12 +318,13 @@ public class TestCaseRunService {
 				String tempPath = entry.getKey().replace("\\", "/");
 				String realPath = entry.getValue().replace("\\", "/");
 				fullOutput = fullOutput.replace(tempPath, realPath);
+				fullOutput = fullOutput.replace(tempFileName, originalFileName);
 			}
 
 			logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
 
 			// 5. Parse the generated JSON report
-			Set<Map<String, Object>> parsedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
+			executedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
 
 			if (jsonReportFile.exists())
 				jsonReportFile.delete();
@@ -331,7 +333,7 @@ public class TestCaseRunService {
 			List<Map<String, Object>> trulyExecutedScenarios = new ArrayList<>();
 			List<Map<String, Object>> skippedScenarios = new ArrayList<>();
 
-			for (Map<String, Object> scenario : parsedScenarios) {
+			for (Map<String, Object> scenario : executedScenarios) {
 				String rawName = (String) scenario.get("featureFileName");
 				if (rawName != null) {
 					// mapped file name (clean, not temp)
@@ -369,9 +371,15 @@ public class TestCaseRunService {
 
 			// Only include scenarios that were truly never executed (not in
 			// executedScenarioNames)
+//			Set<String> unexecuted = declaredScenarioNames.stream()
+//					.filter(declared -> executedScenarioNames.stream().noneMatch(
+//							executed -> executed.equals(declared) || executed.startsWith(declared + " [example")))
+//					.collect(Collectors.toSet());
+
+			// Java: Match scenario outlines by prefix
 			Set<String> unexecuted = declaredScenarioNames.stream()
-					.filter(declared -> executedScenarioNames.stream().noneMatch(
-							executed -> executed.equals(declared) || executed.startsWith(declared + " [example")))
+					.filter(declared -> executedScenarioNames.stream()
+							.noneMatch(executed -> executed.startsWith(declared.replace("<Scenario>", ""))))
 					.collect(Collectors.toSet());
 
 			List<Map<String, Object>> allUnexecutedScenarios = new ArrayList<>();
@@ -480,18 +488,18 @@ public class TestCaseRunService {
 				if (skipped.containsKey("exampleValues")) {
 					skippedDetail.put("exampleValues", skipped.get("exampleValues"));
 				}
-				
+
 				// ✅ Include feature file name + path if present
 				if (skipped.containsKey("featureFileName")) {
-				    String rawFeature = (String) skipped.get("featureFileName");
+					String rawFeature = (String) skipped.get("featureFileName");
 
-				    // clean name (just the file name)
-				    String fileName = Paths.get(rawFeature).getFileName().toString();
-				    skippedDetail.put("featureFileName", fileName);
+					// clean name (just the file name)
+					String fileName = Paths.get(rawFeature).getFileName().toString();
+					skippedDetail.put("featureFileName", fileName);
 
-				    // full path (from mapping if available)
-				    String fullPath = featureToPathMap.getOrDefault(fileName, rawFeature);
-				    skippedDetail.put("featureFilePath", fullPath);
+					// full path (from mapping if available)
+					String fullPath = featureToPathMap.getOrDefault(fileName, rawFeature);
+					skippedDetail.put("featureFilePath", fullPath);
 				}
 
 				unexecutedList.add(skippedDetail);
@@ -1161,7 +1169,13 @@ public class TestCaseRunService {
 				scenarioMap.put("scenarioName", fullScenarioName);
 				scenarioMap.put("status", hasUndefined ? "Undefined" : hasFailed ? "Failed" : "Passed");
 				if (!errors.isEmpty()) {
-					scenarioMap.put("errors", errors);
+//					scenarioMap.put("errors", errors);
+//					if (!parsedDifferences.isEmpty()) {
+//						scenarioMap.put("parsedDifferences", parsedDifferences);
+//						scenarioMap.put("parsedDiffCount", parsedDifferences.size());
+//					}
+					List<String> uniqueErrors = errors.stream().distinct().collect(Collectors.toList());
+					scenarioMap.put("errors", uniqueErrors);
 					if (!parsedDifferences.isEmpty()) {
 						scenarioMap.put("parsedDifferences", parsedDifferences);
 						scenarioMap.put("parsedDiffCount", parsedDifferences.size());
@@ -1523,7 +1537,7 @@ public class TestCaseRunService {
 		}
 
 		// Existing compare call
-		String xmlComparisonResult = com.qa.cbcc.utils.XmlComparator.compareXmlFiles(fullInputPath, fullOutputPath);
+		String xmlComparisonResult = XmlComparator.compareXmlFiles(fullInputPath, fullOutputPath);
 
 		if (xmlComparisonResult.contains("✅ XML files are equal.")) {
 			xmlDetail.put("message", "✅ XML files are equal.");

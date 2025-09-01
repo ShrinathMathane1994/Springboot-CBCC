@@ -154,85 +154,140 @@ public class StepDefCompiler {
 		}
 	}
 
-	public static void compileStepDefs(List<String> projectPaths) {
-		for (String projectPath : projectPaths) {
-			File srcDir = new File(projectPath, "src/test/java");
-			if (!srcDir.exists()) {
-				throw new IllegalArgumentException("Source dir not found: " + srcDir.getAbsolutePath());
-			}
+//	public static void compileStepDefs(List<String> projectPaths) {
+//		for (String projectPath : projectPaths) {
+//			File srcDir = new File(projectPath, "src/test/java");
+//			if (!srcDir.exists()) {
+//				throw new IllegalArgumentException("Source dir not found: " + srcDir.getAbsolutePath());
+//			}
+//
+//			File outputDir = new File(projectPath, "target/test-classes");
+//			outputDir.mkdirs();
+//
+//			JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+//			if (compiler == null) {
+//				throw new IllegalStateException(
+//						"❌ No system Java compiler. Are you running on a JRE instead of a JDK?");
+//			}
+//
+//			// Collect all .java files
+//			List<File> javaFiles = new ArrayList<>();
+//			collectJavaFiles(srcDir, javaFiles);
+//
+//			if (javaFiles.isEmpty()) {
+//				System.out.println("⚠ No stepDef .java files found in " + srcDir);
+//				continue;
+//			}
+//
+//			// Filter only those that are newer than .class
+//			List<File> toCompile = new ArrayList<>();
+//			for (File javaFile : javaFiles) {
+//				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
+//				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
+//					toCompile.add(javaFile);
+//				}
+//			}
+//
+//			if (toCompile.isEmpty()) {
+//				System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
+//				continue;
+//			}
+//
+//			// Build classpath: target/dependency/*.jar + target/classes +
+//			// target/test-classes
+//			File depDir = new File("target/dependency"); // <-- use root, not per-project
+//			StringBuilder classpath = new StringBuilder();
+//			if (depDir.exists() && depDir.isDirectory()) {
+//				File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
+//				if (jars != null) {
+//					for (File jar : jars) {
+//						classpath.append(jar.getAbsolutePath()).append(File.pathSeparator);
+//					}
+//				}
+//			}
+//			classpath.append(new File(projectPath, "target/classes").getAbsolutePath()).append(File.pathSeparator);
+//			classpath.append(outputDir.getAbsolutePath());
+//
+//// Build processor path from jars in target/dependency
+//			StringBuilder processorPath = new StringBuilder();
+//			if (depDir.exists() && depDir.isDirectory()) {
+//				File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
+//				if (jars != null) {
+//					for (File jar : jars) {
+//						processorPath.append(jar.getAbsolutePath()).append(File.pathSeparator);
+//					}
+//				}
+//			}
+//
+//			List<String> options = Arrays.asList(
+//					"-d", outputDir.getAbsolutePath(),
+//					"-classpath", classpath.toString(),
+//					"-processorpath", processorPath.toString(),
+//					"-encoding", System.getProperty("file.encoding")
+//			);
+//
+//			int result = compiler.run(null, null, null, Stream
+//					.concat(options.stream(), toCompile.stream().map(File::getAbsolutePath)).toArray(String[]::new));
+//
+//			if (result != 0) {
+//				throw new RuntimeException("❌ StepDefs compilation failed, exit code " + result);
+//			} else {
+//				System.out
+//						.println("✅ Compiled " + toCompile.size() + " StepDef(s) into " + outputDir.getAbsolutePath());
+//			}
+//		}
+//	}
 
-			File outputDir = new File(projectPath, "target/test-classes");
-			outputDir.mkdirs();
+public static void compileStepDefs(List<String> projectPaths) {
+	for (String projectPath : projectPaths) {
+		File srcDir = new File(projectPath, "src/test/java");
+		File outputDir = new File(projectPath, "target/test-classes");
+		File pomFile = new File(projectPath, "pom.xml");
+		if (!pomFile.exists()) {
+			System.out.println("⚠ No pom.xml found in " + projectPath + ", skipping Maven compile.");
+			continue;
+		}
+		List<File> javaFiles = new ArrayList<>();
+		collectJavaFiles(srcDir, javaFiles);
 
-			JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-			if (compiler == null) {
-				throw new IllegalStateException(
-						"❌ No system Java compiler. Are you running on a JRE instead of a JDK?");
-			}
-
-			// Collect all .java files
-			List<File> javaFiles = new ArrayList<>();
-			collectJavaFiles(srcDir, javaFiles);
-
-			if (javaFiles.isEmpty()) {
-				System.out.println("⚠ No stepDef .java files found in " + srcDir);
-				continue;
-			}
-
-			// Filter only those that are newer than .class
-			List<File> toCompile = new ArrayList<>();
-			for (File javaFile : javaFiles) {
-				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
-				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
-					toCompile.add(javaFile);
-				}
-			}
-
-			if (toCompile.isEmpty()) {
-				System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
-				continue;
-			}
-
-			// Build classpath: target/dependency/*.jar + target/classes +
-			// target/test-classes
-			File depDir = new File("target/dependency"); // <-- use root, not per-project
-			StringBuilder classpath = new StringBuilder();
-			if (depDir.exists() && depDir.isDirectory()) {
-				File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
-				if (jars != null) {
-					for (File jar : jars) {
-						classpath.append(jar.getAbsolutePath()).append(File.pathSeparator);
-					}
-				}
-			}
-			classpath.append(new File(projectPath, "target/classes").getAbsolutePath()).append(File.pathSeparator);
-			classpath.append(outputDir.getAbsolutePath());
-
-// Build processor path from jars in target/dependency
-			StringBuilder processorPath = new StringBuilder();
-			if (depDir.exists() && depDir.isDirectory()) {
-				File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
-				if (jars != null) {
-					for (File jar : jars) {
-						processorPath.append(jar.getAbsolutePath()).append(File.pathSeparator);
-					}
-				}
-			}
-
-			List<String> options = Arrays.asList("-d", outputDir.getAbsolutePath(), "-classpath", classpath.toString(),
-					"-processorpath", processorPath.toString());
-
-			int result = compiler.run(null, null, null, Stream
-					.concat(options.stream(), toCompile.stream().map(File::getAbsolutePath)).toArray(String[]::new));
-
-			if (result != 0) {
-				throw new RuntimeException("❌ StepDefs compilation failed, exit code " + result);
-			} else {
-				System.out
-						.println("✅ Compiled " + toCompile.size() + " StepDef(s) into " + outputDir.getAbsolutePath());
+		boolean needsCompile = false;
+		for (File javaFile : javaFiles) {
+			File classFile = getClassFileFor(javaFile, srcDir, outputDir);
+			if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
+				needsCompile = true;
+				break;
 			}
 		}
+
+		if (!needsCompile) {
+			System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
+			continue;
+		}
+
+		String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
+		ProcessBuilder pb = new ProcessBuilder(mvnCmd, "test-compile");
+		pb.directory(new File(projectPath));
+		pb.redirectErrorStream(true);
+
+		try {
+			Process process = pb.start();
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+				String line;
+				while ((line = reader.readLine()) != null) {
+					System.out.println("[maven] " + line);
+				}
+			}
+			int exitCode = process.waitFor();
+			if (exitCode != 0) {
+				throw new RuntimeException("❌ Maven test-compile failed for " + projectPath + ", exit code " + exitCode);
+			} else {
+				System.out.println("✅ Maven test-compile succeeded for " + projectPath);
+			}
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, e);
+		}
 	}
+}
 
 	private static void collectJavaFiles(File dir, List<File> javaFiles) {
 		for (File file : dir.listFiles()) {

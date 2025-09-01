@@ -2,7 +2,9 @@ package com.qa.cbcc.controller;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 import com.qa.cbcc.model.TestCaseRunHistory;
@@ -37,153 +38,167 @@ import com.qa.cbcc.utils.CucumberLogUtils;
 @RequestMapping("/api/test-cases")
 public class TestCaseRunController {
 
-    private static final Logger logger = LoggerFactory.getLogger(TestCaseRunController.class);
+	private static final Logger logger = LoggerFactory.getLogger(TestCaseRunController.class);
 
-    @Autowired
-    private TestCaseRunService testCaseRunService;
+	@Autowired
+	private TestCaseRunService testCaseRunService;
 
-    @Autowired
-    private TestCaseRunHistoryRepository historyRepository;
+	@Autowired
+	private TestCaseRunHistoryRepository historyRepository;
 
-    @Autowired
-    private TestCaseReportService caseReportService;
+	@Autowired
+	private TestCaseReportService caseReportService;
 
-    @PostMapping("/run")
-    public List<Map<String, Object>> runTestCasesByIds(
-            @RequestBody java.util.LinkedHashMap<String, List<Integer>> payload) {
-        List<Integer> testCaseIds = payload.get("testCaseIds");
-        logger.info("Received request to run test case IDs: {}", testCaseIds);
+//    @PostMapping("/run")
+//    public List<Map<String, Object>> runTestCasesByIds(
+//            @RequestBody java.util.LinkedHashMap<String, List<Integer>> payload) {
+//        List<Integer> testCaseIds = payload.get("testCaseIds");
+//        logger.info("Received request to run test case IDs: {}", testCaseIds);
+//
+//        try {
+//            List<Long> longIds = testCaseIds.stream().map(Integer::longValue).collect(Collectors.toList());
+//
+//            List<Map<String, Object>> results = testCaseRunService.runByIds(longIds);
+//
+//            ObjectMapper mapper = new ObjectMapper();
+//            mapper.registerModule(new JavaTimeModule());
+//            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+//            // logger.info("Execution completed: {}", mapper.writeValueAsString(results));
+//
+//            return results;
+//
+//        } catch (Exception e) {
+//            logger.error("Execution failed: {}", e.getMessage(), e);
+//            throw new RuntimeException("Execution failed", e);
+//        }
+//    }
 
-        try {
-            List<Long> longIds = testCaseIds.stream().map(Integer::longValue).collect(Collectors.toList());
+	@PostMapping("/run")
+	public ResponseEntity<?> runTestCasesByIds(@RequestBody LinkedHashMap<String, List<Integer>> payload) {
+		List<Integer> testCaseIds = payload.get("testCaseIds");
+		logger.info("Received request to run test case IDs: {}", testCaseIds);
 
-            List<Map<String, Object>> results = testCaseRunService.runByIds(longIds);
+		try {
+			List<Long> longIds = testCaseIds.stream().map(Integer::longValue).collect(Collectors.toList());
+			List<Map<String, Object>> results = testCaseRunService.runByIds(longIds);
+			return ResponseEntity.ok(results);
+		} catch (Exception e) {
+			logger.error("Execution failed: {}", e.getMessage(), e);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(Collections.singletonMap("error", "Execution failed: " + e.getMessage()));
+		}
+	}
 
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
-            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            // logger.info("Execution completed: {}", mapper.writeValueAsString(results));
+	@GetMapping("/{tcId}/run-history")
+	public List<TestCaseRunHistoryDTO> getExecutionHistory(@PathVariable Long tcId) {
+		ObjectMapper mapper = new ObjectMapper();
+		mapper.registerModule(new JavaTimeModule());
 
-            return results;
+		return historyRepository.findAll().stream().filter(h -> h.getTestCase().getIdTC().equals(tcId))
+				.sorted(Comparator.comparing(TestCaseRunHistory::getRunTime).reversed()) // 🔁 Sort by runTime DESC
+				.map(h -> {
+					TestCaseRunHistoryDTO dto = new TestCaseRunHistoryDTO();
+					dto.setId(h.getId());
+					dto.setTestCaseId(h.getTestCase().getIdTC());
+					dto.setRunTime(h.getRunTime());
+					dto.setRunStatus(h.getRunStatus());
+					dto.setExecutedScenarios(h.getExecutedScenarios());
+					dto.setUnexecutedScenarios(h.getUnexecutedScenarios());
+					List<String> rawLog = h.getRawCucumberLog() != null
+							? Arrays.asList(h.getRawCucumberLog().split("\\r?\\n"))
+							: null;
 
-        } catch (Exception e) {
-            logger.error("Execution failed: {}", e.getMessage(), e);
-            throw new RuntimeException("Execution failed", e);
-        }
-    }
+					// dto.setRawCucumberLog(rawLog);
 
-    @GetMapping("/{tcId}/run-history")
-    public List<TestCaseRunHistoryDTO> getExecutionHistory(@PathVariable Long tcId) {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
+					if (rawLog != null) {
+						dto.setRawCucumberLogGrouped(CucumberLogUtils.groupRawCucumberLog(rawLog));
+					}
 
-        return historyRepository.findAll().stream().filter(h -> h.getTestCase().getIdTC().equals(tcId))
-                .sorted(Comparator.comparing(TestCaseRunHistory::getRunTime).reversed()) // 🔁 Sort by runTime DESC
-                .map(h -> {
-                    TestCaseRunHistoryDTO dto = new TestCaseRunHistoryDTO();
-                    dto.setId(h.getId());
-                    dto.setTestCaseId(h.getTestCase().getIdTC());
-                    dto.setRunTime(h.getRunTime());
-                    dto.setRunStatus(h.getRunStatus());
-                    dto.setExecutedScenarios(h.getExecutedScenarios());
-                    dto.setUnexecutedScenarios(h.getUnexecutedScenarios());
-                    List<String> rawLog = h.getRawCucumberLog() != null
-                            ? Arrays.asList(h.getRawCucumberLog().split("\\r?\\n"))
-                            : null;
+					dto.setXmlDiffStatus(h.getXmlDiffStatus());
 
-                    // dto.setRawCucumberLog(rawLog);
+					try {
+						if (h.getOutputLog() != null) {
+							dto.setOutputLog(mapper.readValue(h.getOutputLog(), Object.class));
+						}
+						if (h.getXmlParsedDifferencesJson() != null) {
+							dto.setXmlParsedDifferencesJson(mapper.readValue(h.getXmlParsedDifferencesJson(),
+									new TypeReference<List<Map<String, Object>>>() {
+									}));
+						}
+					} catch (Exception e) {
+						logger.warn("Failed to parse stored JSON", e);
+					}
 
-                    if (rawLog != null) {
-                        dto.setRawCucumberLogGrouped(CucumberLogUtils.groupRawCucumberLog(rawLog));
-                    }
+					return dto;
+				}).collect(Collectors.toList());
+	}
 
-                    dto.setXmlDiffStatus(h.getXmlDiffStatus());
+	@GetMapping("/{tcId}/run-history/latest")
+	public ResponseEntity<TestCaseRunHistoryDTO> getLatestExecution(@PathVariable Long tcId) {
+		ObjectMapper mapper = new ObjectMapper();
+		mapper.registerModule(new JavaTimeModule());
 
-                    try {
-                        if (h.getOutputLog() != null) {
-                            dto.setOutputLog(mapper.readValue(h.getOutputLog(), Object.class));
-                        }
-                        if (h.getXmlParsedDifferencesJson() != null) {
-                            dto.setXmlParsedDifferencesJson(mapper.readValue(
-                                    h.getXmlParsedDifferencesJson(),
-                                    new TypeReference<List<Map<String, Object>>>() {
-                                    }
-                            ));
-                        }
-                    } catch (Exception e) {
-                        logger.warn("Failed to parse stored JSON", e);
-                    }
+		Optional<TestCaseRunHistory> latest = historyRepository.findAll().stream()
+				.filter(h -> h.getTestCase().getIdTC().equals(tcId))
+				.max(Comparator.comparing(TestCaseRunHistory::getRunTime)); // 🕒 latest one
 
-                    return dto;
-                }).collect(Collectors.toList());
-    }
+		// if (latest.isEmpty()) return ResponseEntity.notFound().build(); // ❌ Java 11+
+		if (!latest.isPresent()) {
+			return ResponseEntity.notFound().build();
+		}
 
-    @GetMapping("/{tcId}/run-history/latest")
-    public ResponseEntity<TestCaseRunHistoryDTO> getLatestExecution(@PathVariable Long tcId) {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
+		TestCaseRunHistory h = latest.get();
+		TestCaseRunHistoryDTO dto = new TestCaseRunHistoryDTO();
+		dto.setId(h.getId());
+		dto.setTestCaseId(h.getTestCase().getIdTC());
+		dto.setRunTime(h.getRunTime());
+		dto.setRunStatus(h.getRunStatus());
+		dto.setExecutedScenarios(h.getExecutedScenarios());
+		dto.setUnexecutedScenarios(h.getUnexecutedScenarios());
 
-        Optional<TestCaseRunHistory> latest = historyRepository.findAll().stream()
-                .filter(h -> h.getTestCase().getIdTC().equals(tcId))
-                .max(Comparator.comparing(TestCaseRunHistory::getRunTime)); // 🕒 latest one
+		List<String> rawLog = h.getRawCucumberLog() != null ? Arrays.asList(h.getRawCucumberLog().split("\\r?\\n"))
+				: null;
+		// dto.setRawCucumberLog(rawLog);
 
-        // if (latest.isEmpty()) return ResponseEntity.notFound().build(); // ❌ Java 11+
-        if (!latest.isPresent()) {
-            return ResponseEntity.notFound().build();
-        }
+		if (rawLog != null) {
+			dto.setRawCucumberLogGrouped(CucumberLogUtils.groupRawCucumberLog(rawLog));
+		}
 
-        TestCaseRunHistory h = latest.get();
-        TestCaseRunHistoryDTO dto = new TestCaseRunHistoryDTO();
-        dto.setId(h.getId());
-        dto.setTestCaseId(h.getTestCase().getIdTC());
-        dto.setRunTime(h.getRunTime());
-        dto.setRunStatus(h.getRunStatus());
-        dto.setExecutedScenarios(h.getExecutedScenarios());
-        dto.setUnexecutedScenarios(h.getUnexecutedScenarios());
+		dto.setXmlDiffStatus(h.getXmlDiffStatus());
+		dto.setInputXmlContent(h.getInputXmlContent());
+		dto.setOutputXmlContent(h.getOutputXmlContent());
 
-        List<String> rawLog = h.getRawCucumberLog() != null ? Arrays.asList(h.getRawCucumberLog().split("\\r?\\n"))
-                : null;
-        // dto.setRawCucumberLog(rawLog);
+		try {
+			if (h.getOutputLog() != null) {
+				dto.setOutputLog(mapper.readValue(h.getOutputLog(), Object.class));
+			}
+			if (h.getXmlParsedDifferencesJson() != null) {
+				List<Map<String, Object>> xmlDiffs = mapper.readValue(h.getXmlParsedDifferencesJson(),
+						new TypeReference<List<Map<String, Object>>>() {
+						});
+				dto.setXmlParsedDifferencesJson(xmlDiffs);
+			}
 
-        if (rawLog != null) {
-            dto.setRawCucumberLogGrouped(CucumberLogUtils.groupRawCucumberLog(rawLog));
-        }
+		} catch (Exception e) {
+			logger.warn("Failed to parse stored JSON", e);
+		}
 
-        dto.setXmlDiffStatus(h.getXmlDiffStatus());
-        dto.setInputXmlContent(h.getInputXmlContent());
-        dto.setOutputXmlContent(h.getOutputXmlContent());
+		return ResponseEntity.ok(dto);
+	}
 
-        try {
-            if (h.getOutputLog() != null) {
-                dto.setOutputLog(mapper.readValue(h.getOutputLog(), Object.class));
-            }
-            if (h.getXmlParsedDifferencesJson() != null) {
-                List<Map<String, Object>> xmlDiffs = mapper.readValue(h.getXmlParsedDifferencesJson(),
-                        new TypeReference<List<Map<String, Object>>>() {
-                        });
-                dto.setXmlParsedDifferencesJson(xmlDiffs);
-            }
+	@GetMapping("/{tcId}/html-latest")
+	public ResponseEntity<String> getLatestExecutionHtml(@PathVariable Long tcId) throws IOException {
+		ResponseEntity<TestCaseRunHistoryDTO> latestExecution = getLatestExecution(tcId);
 
-        } catch (Exception e) {
-            logger.warn("Failed to parse stored JSON", e);
-        }
+		if (!latestExecution.getStatusCode().is2xxSuccessful() || latestExecution.getBody() == null) {
+			return ResponseEntity.notFound().build();
+		}
 
-        return ResponseEntity.ok(dto);
-    }
+		String html = caseReportService.generateHtmlReport(latestExecution.getBody());
 
-    @GetMapping("/{tcId}/html-latest")
-    public ResponseEntity<String> getLatestExecutionHtml(@PathVariable Long tcId) throws IOException {
-        ResponseEntity<TestCaseRunHistoryDTO> latestExecution = getLatestExecution(tcId);
-
-        if (!latestExecution.getStatusCode().is2xxSuccessful() || latestExecution.getBody() == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        String html = caseReportService.generateHtmlReport(latestExecution.getBody());
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.TEXT_HTML);
-        return new ResponseEntity<>(html, headers, HttpStatus.OK);
-    }
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.TEXT_HTML);
+		return new ResponseEntity<>(html, headers, HttpStatus.OK);
+	}
 
 }
