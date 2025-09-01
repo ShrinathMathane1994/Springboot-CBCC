@@ -205,30 +205,30 @@ public class FeatureService {
 		this.tagIndex.putAll(newIndex);
 	}
 
-	private void syncResourcesFromGit() throws IOException {
-		// Git repo's resources folder
-		Path gitResourceDir = Paths.get(localCloneDir, stepDefProjPathGit, "src", "test", "resources");
-
-		// Local project resources folder
-		Path localResourceDir = Paths.get("src", "test", "resources");
-
-		if (!Files.exists(gitResourceDir)) {
-			logger.warn("⚠️ No resources folder found in Git repo: {}", gitResourceDir);
-			return;
-		}
-
-		logger.info("🔄 Syncing resources from Git: {} -> {}", gitResourceDir, localResourceDir);
-
-		// Ensure target exists
-		if (!Files.exists(localResourceDir)) {
-			Files.createDirectories(localResourceDir);
-		}
-
-		// ✅ Incremental copy (updates only changed/new files)
-		FileUtils.copyDirectory(gitResourceDir.toFile(), localResourceDir.toFile());
-
-		logger.info("✅ Resources synced successfully.");
-	}
+//	private void syncResourcesFromGit() throws IOException {
+//		// Git repo's resources folder
+//		Path gitResourceDir = Paths.get(localCloneDir, stepDefProjPathGit, "src", "test", "resources");
+//
+//		// Local project resources folder
+//		Path localResourceDir = Paths.get("src", "test", "resources");
+//
+//		if (!Files.exists(gitResourceDir)) {
+//			logger.warn("⚠️ No resources folder found in Git repo: {}", gitResourceDir);
+//			return;
+//		}
+//
+//		logger.info("🔄 Syncing resources from Git: {} -> {}", gitResourceDir, localResourceDir);
+//
+//		// Ensure target exists
+//		if (!Files.exists(localResourceDir)) {
+//			Files.createDirectories(localResourceDir);
+//		}
+//
+//		// ✅ Incremental copy (updates only changed/new files)
+//		FileUtils.copyDirectory(gitResourceDir.toFile(), localResourceDir.toFile());
+//
+//		logger.info("✅ Resources synced successfully.");
+//	}
 
 //	private void cloneRepositoryIfNeeded() throws IOException {
 //		File repoDir = new File(localCloneDir);
@@ -277,6 +277,75 @@ public class FeatureService {
 //			throw new IOException("Git sync failed: " + e.getMessage(), e);
 //		}
 //	}
+
+	private void syncResourcesFromGit() throws IOException {
+		// Git repo resources path
+		Path sourceDir = Paths.get(localCloneDir, gitFeatureSubPath);
+		// Target app resources path
+		Path targetDir = Paths.get("src", "test", "resources", gitFeatureSubPath);
+
+		if (!Files.exists(sourceDir)) {
+			logger.warn("Source directory for sync does not exist: {}", sourceDir);
+			return;
+		}
+
+		logger.info("🔄 Starting incremental resource sync...");
+		long start = System.currentTimeMillis();
+
+		// Collect all files
+		List<Path> sourceFiles;
+		try (Stream<Path> stream = Files.walk(sourceDir)) {
+			sourceFiles = stream.filter(Files::isRegularFile).collect(Collectors.toList());
+		}
+
+		int totalFiles = sourceFiles.size();
+		if (totalFiles == 0) {
+			logger.info("No files to sync.");
+			return;
+		}
+
+		int copied = 0, skipped = 0;
+		int lastLoggedPercent = -1;
+
+		for (int i = 0; i < totalFiles; i++) {
+			Path srcFile = sourceFiles.get(i);
+			Path relative = sourceDir.relativize(srcFile);
+			Path destFile = targetDir.resolve(relative);
+
+			// Ensure parent dir exists
+			Files.createDirectories(destFile.getParent());
+
+			boolean shouldCopy = true;
+			if (Files.exists(destFile)) {
+				// Compare metadata
+				long srcSize = Files.size(srcFile);
+				long destSize = Files.size(destFile);
+				long srcTime = Files.getLastModifiedTime(srcFile).toMillis();
+				long destTime = Files.getLastModifiedTime(destFile).toMillis();
+
+				if (srcSize == destSize && srcTime <= destTime) {
+					shouldCopy = false;
+				}
+			}
+
+			if (shouldCopy) {
+				Files.copy(srcFile, destFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				copied++;
+			} else {
+				skipped++;
+			}
+
+			// Progress log every 5%
+			int percent = (int) ((i + 1) * 100.0 / totalFiles);
+			if (percent / 5 > lastLoggedPercent / 5) {
+				lastLoggedPercent = percent;
+				logger.info("... {}% complete ({} copied, {} skipped)", percent, copied, skipped);
+			}
+		}
+
+		long duration = System.currentTimeMillis() - start;
+		logger.info("✅ Sync complete: {} files copied, {} skipped in {} ms", copied, skipped, duration);
+	}
 
 	private void cloneRepositoryIfNeeded() throws IOException {
 		File repoDir = new File(localCloneDir);
