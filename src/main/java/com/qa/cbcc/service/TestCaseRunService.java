@@ -332,10 +332,14 @@ public class TestCaseRunService {
 			StepDefCompiler.ensureDependenciesCopied();
 
 			// 3. Compile stepDefs if needed (before running cucumber)
-			for (String projPath : featureService.getStepDefsProjectPaths()) {
-				StepDefCompiler.compileStepDefs(Collections.singletonList(projPath)); // ✅
-			}
+//			for (String projPath : featureService.getStepDefsProjectPaths()) {
+//				StepDefCompiler.compileStepDefs(Collections.singletonList(projPath)); // ✅
+//			}
 
+			// Always compile step defs from the current application project
+			String currentAppPath = Paths.get(".").toAbsolutePath().normalize().toString();
+			StepDefCompiler.compileStepDefs(Collections.singletonList(currentAppPath));
+			
 			// 3.1. Capture Cucumber stdout
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			PrintStream originalOut = System.out;
