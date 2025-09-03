@@ -47,7 +47,8 @@ Body (JSON):
     "refreshInterval": 300000,
     "stepDefsProjectPathGit": "features-repo/e2e",
     "stepDefsProjectPathLocal": "src/test/java",
-    "gluePackage": "steps"
+    "gluePackage": "steps",
+    "mavenEnv":"uat"
 }
 
 🔄 Sync Feature Files
