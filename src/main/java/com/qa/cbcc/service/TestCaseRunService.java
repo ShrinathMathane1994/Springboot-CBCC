@@ -348,28 +348,38 @@ public class TestCaseRunService {
 			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
 			try {
 				// ✅ Gather stepDef paths (target/classes, test-classes)
-				List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
+//				List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
+				
+				// ✅ Gather stepDef paths (current application only)
+				List<String> stepDefsPaths = Arrays.asList(
+				    "target/test-classes",
+				    "target/classes"
+				);
 
 				List<URL> urls = new ArrayList<>();
 
-				// Add compiled classes
 				for (String path : stepDefsPaths) {
-					File f = new File(path);
-					if (f.exists()) {
-						urls.add(f.toURI().toURL());
-					}
+				    File f = new File(path);
+				    if (f.exists()) {
+				        urls.add(f.toURI().toURL());
+				    }
 				}
 
-				// ✅ Add all jars from target/dependency (so Cucumber sees external libs)
+				// ✅ Add jars from target/dependency
 				File depDir = new File("target/dependency");
 				if (depDir.exists() && depDir.isDirectory()) {
-					File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
-					if (jars != null) {
-						for (File jar : jars) {
-							urls.add(jar.toURI().toURL());
-						}
-					}
+				    File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
+				    if (jars != null) {
+				        for (File jar : jars) {
+				            urls.add(jar.toURI().toURL());
+				        }
+				    }
 				}
+
+				// ✅ Now just run cucumber using the system classloader
+				logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+				Main.run(argv, Thread.currentThread().getContextClassLoader());
+
 
 				// 🔍 Log the resolved classpath entries
 //					logger.info("StepDefs + Dependency classpath URLs:");
@@ -384,9 +394,7 @@ public class TestCaseRunService {
 //					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
 //					Main.run(argv, classLoader);
 //				}
-
-				logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-			    Main.run(argv, Thread.currentThread().getContextClassLoader());
+;
 				// ✅ Extract from the temp feature file BEFORE deleting it
 				exampleMap = extractExamplesFromFeature(featureFile);
 
