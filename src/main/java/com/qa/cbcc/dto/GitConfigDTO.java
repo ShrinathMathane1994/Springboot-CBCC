@@ -14,6 +14,7 @@ public class GitConfigDTO {
     private String stepDefsProjectPathGit;
     private String stepDefsProjectPathLocal;
     private String gluePackage;
+    private String mavenEnv;
 
     // === Getters & Setters ===
 
@@ -99,5 +100,13 @@ public class GitConfigDTO {
     }
     public void setGluePackage(String gluePackage) {
         this.gluePackage = gluePackage;
+    }
+    
+    public String getMavenEnv() {
+        return mavenEnv;
+    }
+
+    public void setMavenEnv(String mavenEnv) {
+        this.mavenEnv = mavenEnv;
     }
 }

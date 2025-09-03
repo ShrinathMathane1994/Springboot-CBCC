@@ -4,12 +4,15 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -22,6 +25,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -90,6 +96,9 @@ public class FeatureService {
 
 	@Value("${step.defs.glue:}")
 	private String gluePackageName;
+
+	@Value("${maven.env:}")
+	private String mavenEnv;
 
 	private List<String> stepDefProjPaths = new ArrayList<>();
 	private List<String> gluePackageNames = new ArrayList<>();
@@ -205,146 +214,229 @@ public class FeatureService {
 		this.tagIndex.putAll(newIndex);
 	}
 
-//	private void syncResourcesFromGit() throws IOException {
-//		// Git repo's resources folder
-//		Path gitResourceDir = Paths.get(localCloneDir, stepDefProjPathGit, "src", "test", "resources");
-//
-//		// Local project resources folder
-//		Path localResourceDir = Paths.get("src", "test", "resources");
-//
-//		if (!Files.exists(gitResourceDir)) {
-//			logger.warn("⚠️ No resources folder found in Git repo: {}", gitResourceDir);
-//			return;
-//		}
-//
-//		logger.info("🔄 Syncing resources from Git: {} -> {}", gitResourceDir, localResourceDir);
-//
-//		// Ensure target exists
-//		if (!Files.exists(localResourceDir)) {
-//			Files.createDirectories(localResourceDir);
-//		}
-//
-//		// ✅ Incremental copy (updates only changed/new files)
-//		FileUtils.copyDirectory(gitResourceDir.toFile(), localResourceDir.toFile());
-//
-//		logger.info("✅ Resources synced successfully.");
-//	}
-
-//	private void cloneRepositoryIfNeeded() throws IOException {
-//		File repoDir = new File(localCloneDir);
-//		File gitDir = new File(repoDir, ".git");
-//
-//		boolean credentialsProvided = gitUsername != null && !gitUsername.isEmpty();
-//		UsernamePasswordCredentialsProvider credentials = credentialsProvided
-//				? new UsernamePasswordCredentialsProvider(gitUsername, gitPassword)
-//				: null;
-//
-//		try {
-//			// If directory doesn't exist, clone fresh
-//			if (!repoDir.exists() || !gitDir.exists()) {
-//				logger.info("Repo folder doesn't exist or missing .git. Cloning fresh.");
-//				FileUtils.deleteQuietly(repoDir);
-//				cloneFresh(repoDir, credentials);
-//				return;
-//			}
-//
-//			try (Git git = Git.open(repoDir)) {
-//				String currentBranch = git.getRepository().getBranch();
-//				logger.info("Current local branch: '{}'", currentBranch);
-//
-//				// Branch mismatch -> delete and reclone
-//				if (!currentBranch.equals(gitBranch)) {
-//					logger.warn("Branch mismatch (expected '{}', found '{}'). Cleaning and recloning.", gitBranch,
-//							currentBranch);
-//					git.getRepository().close();
-//					FileUtils.deleteDirectory(repoDir);
-//					cloneFresh(repoDir, credentials);
-//					return;
-//				}
-//
-//				// Pull if branch matches
-//				git.pull().setCredentialsProvider(credentials).call();
-//				logger.info("Repository updated (pull completed).");
-//
-//			} catch (Exception e) {
-//				logger.error("Failed to open or update repo. Re-cloning. Reason: {}", e.getMessage());
-//				FileUtils.deleteDirectory(repoDir);
-//				cloneFresh(repoDir, credentials);
-//			}
-//
-//		} catch (Exception e) {
-//			logger.error("Git sync failed: {}", e.getMessage(), e);
-//			throw new IOException("Git sync failed: " + e.getMessage(), e);
-//		}
-//	}
-
 	private void syncResourcesFromGit() throws IOException {
-		// Git repo resources path
 		Path sourceDir = Paths.get(localCloneDir, gitFeatureSubPath);
-		// Target app resources path
-		Path targetDir = Paths.get("src", "test", "resources", gitFeatureSubPath);
+		Path targetDir = Paths.get("src", "test", "resources");
 
 		if (!Files.exists(sourceDir)) {
 			logger.warn("Source directory for sync does not exist: {}", sourceDir);
 			return;
 		}
 
-		logger.info("🔄 Starting incremental resource sync...");
+		logger.info("🔄 Starting incremental resource folder sync: '{}' -> '{}'", sourceDir, targetDir);
 		long start = System.currentTimeMillis();
 
-		// Collect all files
-		List<Path> sourceFiles;
-		try (Stream<Path> stream = Files.walk(sourceDir)) {
-			sourceFiles = stream.filter(Files::isRegularFile).collect(Collectors.toList());
+		Path destDir = targetDir.resolve(sourceDir.getFileName());
+		if (!Files.exists(destDir)) {
+			Files.createDirectories(destDir);
 		}
 
-		int totalFiles = sourceFiles.size();
-		if (totalFiles == 0) {
-			logger.info("No files to sync.");
+		// Cache source files
+		List<Path> sourceFiles = Files.walk(sourceDir).filter(Files::isRegularFile).collect(Collectors.toList());
+		long totalFiles = sourceFiles.size();
+		final long[] copiedFiles = { 0 };
+		final int[] lastLoggedPercent = { -1 };
+
+		// Use a thread pool for parallel processing
+		ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+		List<Future<?>> tasks = new ArrayList<>();
+
+		for (Path srcFile : sourceFiles) {
+			tasks.add(executor.submit(() -> {
+				try {
+					Path relative = sourceDir.relativize(srcFile);
+					Path destFile = destDir.resolve(relative);
+
+					boolean shouldCopy = false;
+					if (!Files.exists(destFile)) {
+						shouldCopy = true;
+					} else {
+						// Compare file content using hash
+						String srcHash = computeFileHash(srcFile);
+						String destHash = computeFileHash(destFile);
+						if (!srcHash.equals(destHash)) {
+							shouldCopy = true;
+						}
+					}
+
+					if (shouldCopy) {
+						Files.createDirectories(destFile.getParent());
+						Files.copy(srcFile, destFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+						synchronized (copiedFiles) {
+							copiedFiles[0]++;
+						}
+					}
+
+					synchronized (lastLoggedPercent) {
+						int percent = (int) ((copiedFiles[0] * 100.0) / totalFiles);
+						if (percent / 5 > lastLoggedPercent[0] / 5) {
+							lastLoggedPercent[0] = percent;
+							logger.info("... {}% complete ({} of {} files copied)", percent, copiedFiles[0],
+									totalFiles);
+						}
+					}
+				} catch (IOException e) {
+					logger.error("Failed to copy file: {}", srcFile, e);
+				}
+			}));
+		}
+
+		// Wait for all tasks to complete
+		for (Future<?> task : tasks) {
+			try {
+				task.get();
+			} catch (Exception e) {
+				logger.error("Error during file copy task", e);
+			}
+		}
+
+		executor.shutdown();
+
+		long duration = System.currentTimeMillis() - start;
+		syncConfigFolderIncremental(sourceDir, targetDir);
+		logger.info("✅ Incremental sync complete: folder '{}' checked, {} files copied in {} ms",
+				sourceDir.getFileName(), copiedFiles[0], duration);
+	}
+
+	private String computeFileHash(Path file) throws IOException {
+		try (InputStream is = Files.newInputStream(file)) {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			byte[] buffer = new byte[8192];
+			int bytesRead;
+			while ((bytesRead = is.read(buffer)) != -1) {
+				digest.update(buffer, 0, bytesRead);
+			}
+			byte[] hashBytes = digest.digest();
+			StringBuilder hash = new StringBuilder();
+			for (byte b : hashBytes) {
+				hash.append(String.format("%02x", b));
+			}
+			return hash.toString();
+		} catch (NoSuchAlgorithmException e) {
+			throw new IOException("Failed to compute file hash", e);
+		}
+	}
+
+	private void syncStepDefsAndJavaFromGit() throws IOException {
+		// Source 1: stepDefProjPathGit
+		Path stepDefSource = Paths.get(stepDefProjPathGit);
+		// Source 2: src/test/java in the repo
+		Path repoJavaSource = Paths.get(stepDefProjPathGit, "src", "test", "java");
+		// Target: src/test/java in your project
+		Path targetJavaDir = Paths.get("src", "test", "java");
+
+//		syncDirIncrementalWithHash(stepDefSource, targetJavaDir);
+		syncDirIncrementalWithHash(repoJavaSource, targetJavaDir);
+
+		logger.info("✅ StepDefs and Java files sync complete.");
+	}
+
+	private void syncDirIncrementalWithHash(Path sourceDir, Path targetDir) throws IOException {
+		if (!Files.exists(sourceDir)) {
+			logger.warn("Source directory for sync does not exist: {}", sourceDir);
 			return;
 		}
 
-		int copied = 0, skipped = 0;
-		int lastLoggedPercent = -1;
+		logger.info("🔄 Starting incremental sync: '{}' -> '{}'", sourceDir, targetDir);
+		long start = System.currentTimeMillis();
 
-		for (int i = 0; i < totalFiles; i++) {
-			Path srcFile = sourceFiles.get(i);
-			Path relative = sourceDir.relativize(srcFile);
-			Path destFile = targetDir.resolve(relative);
+		List<Path> sourceFiles = Files.walk(sourceDir).filter(Files::isRegularFile).collect(Collectors.toList());
+		long totalFiles = sourceFiles.size();
+		final long[] copiedFiles = { 0 };
+		final int[] lastLoggedPercent = { -1 };
 
-			// Ensure parent dir exists
-			Files.createDirectories(destFile.getParent());
+		ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+		List<Future<?>> tasks = new ArrayList<>();
 
-			boolean shouldCopy = true;
-			if (Files.exists(destFile)) {
-				// Compare metadata
-				long srcSize = Files.size(srcFile);
-				long destSize = Files.size(destFile);
-				long srcTime = Files.getLastModifiedTime(srcFile).toMillis();
-				long destTime = Files.getLastModifiedTime(destFile).toMillis();
+		for (Path srcFile : sourceFiles) {
+			tasks.add(executor.submit(() -> {
+				try {
+					Path relative = sourceDir.relativize(srcFile);
+					Path destFile = targetDir.resolve(relative);
 
-				if (srcSize == destSize && srcTime <= destTime) {
-					shouldCopy = false;
+					boolean shouldCopy = false;
+					if (!Files.exists(destFile)) {
+						shouldCopy = true;
+					} else {
+						String srcHash = computeFileHash(srcFile);
+						String destHash = computeFileHash(destFile);
+						if (!srcHash.equals(destHash)) {
+							shouldCopy = true;
+						}
+					}
+
+					if (shouldCopy) {
+						Files.createDirectories(destFile.getParent());
+						Files.copy(srcFile, destFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+						synchronized (copiedFiles) {
+							copiedFiles[0]++;
+						}
+					}
+				} catch (IOException e) {
+					logger.error("Failed to copy file: {}", srcFile, e);
 				}
-			}
+			}));
+		}
 
-			if (shouldCopy) {
-				Files.copy(srcFile, destFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-				copied++;
-			} else {
-				skipped++;
-			}
-
-			// Progress log every 5%
-			int percent = (int) ((i + 1) * 100.0 / totalFiles);
-			if (percent / 5 > lastLoggedPercent / 5) {
-				lastLoggedPercent = percent;
-				logger.info("... {}% complete ({} copied, {} skipped)", percent, copied, skipped);
+		for (Future<?> task : tasks) {
+			try {
+				task.get();
+			} catch (Exception e) {
+				logger.error("Error during file copy task", e);
 			}
 		}
 
+		executor.shutdown();
+
 		long duration = System.currentTimeMillis() - start;
-		logger.info("✅ Sync complete: {} files copied, {} skipped in {} ms", copied, skipped, duration);
+		logger.info("✅ Incremental sync complete: folder '{}' checked, {} files copied in {} ms",
+				sourceDir.getFileName(), copiedFiles[0], duration);
+	}
+
+	private void syncConfigFolderIncremental(Path sourceDir, Path targetDir) throws IOException {
+		Path parentDir = sourceDir.getParent();
+		if (parentDir == null) {
+			logger.warn("SourceDir has no parent: {}", sourceDir);
+			return;
+		}
+		Path sourceConfigDir = parentDir.resolve("configs");
+		Path targetConfigDir = targetDir.resolve("configs");
+
+		logger.info("🔄 Checking for configs folder incremental sync: sourceConfigDir='{}', targetConfigDir='{}'",
+				sourceConfigDir, targetConfigDir);
+
+		if (!Files.exists(sourceConfigDir)) {
+			logger.warn("No configs folder found in parent of sourceDir: {}", sourceConfigDir);
+			return;
+		}
+
+		if (!Files.exists(targetConfigDir)) {
+			logger.info("Configs folder not found at target, copying entire folder.");
+			FileUtils.copyDirectory(sourceConfigDir.toFile(), targetConfigDir.toFile());
+			logger.info("✅ Configs folder copied successfully.");
+			return;
+		}
+
+		// Copy only new files from source config to target config
+		try (Stream<Path> sourceFiles = Files.walk(sourceConfigDir)) {
+			List<Path> filesToCopy = sourceFiles.filter(Files::isRegularFile).filter(srcFile -> {
+				Path relative = sourceConfigDir.relativize(srcFile);
+				Path targetFile = targetConfigDir.resolve(relative);
+				return !Files.exists(targetFile);
+			}).collect(Collectors.toList());
+
+			for (Path srcFile : filesToCopy) {
+				Path relative = sourceConfigDir.relativize(srcFile);
+				Path targetFile = targetConfigDir.resolve(relative);
+				Files.createDirectories(targetFile.getParent());
+				Files.copy(srcFile, targetFile);
+				logger.info("Copied new configs file: {}", targetFile);
+			}
+
+			if (filesToCopy.isEmpty()) {
+				logger.info("No new configs files to copy.");
+			}
+		}
 	}
 
 	private void cloneRepositoryIfNeeded() throws IOException {
@@ -365,12 +457,13 @@ public class FeatureService {
 
 				// ✅ sync resources immediately after fresh clone
 				syncResourcesFromGit();
+				syncStepDefsAndJavaFromGit();
 				return;
 			}
 
 			try (Git git = Git.open(repoDir)) {
 				String currentBranch = git.getRepository().getBranch();
-				logger.info("Current local branch: '{}'", currentBranch);
+				logger.info("Current Git Branch: '{}'", currentBranch);
 
 				// Branch mismatch -> delete and reclone
 				if (!currentBranch.equals(gitBranch)) {
@@ -382,6 +475,7 @@ public class FeatureService {
 
 					// ✅ sync resources after re-clone
 					syncResourcesFromGit();
+					syncStepDefsAndJavaFromGit();
 					return;
 				}
 
@@ -391,6 +485,7 @@ public class FeatureService {
 
 				// ✅ incremental resource sync after pull
 				syncResourcesFromGit();
+				syncStepDefsAndJavaFromGit();
 
 			} catch (Exception e) {
 				logger.error("Failed to open or update repo. Re-cloning. Reason: {}", e.getMessage());
@@ -399,6 +494,7 @@ public class FeatureService {
 
 				// ✅ sync resources after recovery clone
 				syncResourcesFromGit();
+				syncStepDefsAndJavaFromGit();
 			}
 
 		} catch (Exception e) {
@@ -449,52 +545,6 @@ public class FeatureService {
 		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
 	}
 
-//	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials) throws GitAPIException {
-//		logger.info("Cloning fresh from {}", gitRepoUrl);
-//		Git.cloneRepository().setURI(gitRepoUrl).setDirectory(repoDir).setBranch(gitBranch)
-//				.setCredentialsProvider(credentials).call();
-//		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
-//	}
-
-//---Old---//
-//	private void cloneFresh(File repoDir, UsernamePasswordCredentialsProvider credentials)
-//			throws IOException, InterruptedException {
-//		logger.info("Cloning fresh from {} using cmd", gitRepoUrl);
-//
-//		List<String> command = new ArrayList<>();
-//		command.add("cmd");
-//		command.add("/c");
-//		String repoUrlWithCreds = gitRepoUrl;
-//		if (credentials != null && gitRepoUrl.startsWith("http")) {
-//			int idx = repoUrlWithCreds.indexOf("://") + 3;
-//			// Remove any username already present in the URL
-//			int atIdx = repoUrlWithCreds.indexOf("@", idx);
-//			if (atIdx != -1) {
-//				repoUrlWithCreds = repoUrlWithCreds.substring(0, idx) + repoUrlWithCreds.substring(atIdx + 1);
-//			}
-//			repoUrlWithCreds = repoUrlWithCreds.substring(0, idx) + repoUrlWithCreds.substring(idx);
-//		}
-//		command.add(String.format("git clone --branch %s %s \"%s\"", gitBranch, repoUrlWithCreds,
-//				repoDir.getAbsolutePath()));
-//
-//		ProcessBuilder pb = new ProcessBuilder(command);
-//		pb.redirectErrorStream(true);
-//		pb.directory(repoDir.getParentFile());
-//
-//		Process process = pb.start();
-//		try (BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
-//			String line;
-//			while ((line = reader.readLine()) != null) {
-//				logger.info(line);
-//			}
-//		}
-//		int exitCode = process.waitFor();
-//		if (exitCode != 0) {
-//			throw new IOException("Git clone failed with exit code " + exitCode);
-//		}
-//		logger.info("Repo successfully cloned to {}", repoDir.getAbsolutePath());
-//	}
-
 	public List<ScenarioDTO> getScenariosByTags(List<String> tagsToMatch) throws IOException {
 		if (cachedScenarios.isEmpty()) {
 			syncGitAndParseFeatures();
@@ -541,48 +591,6 @@ public class FeatureService {
 
 		return filtered;
 	}
-
-//	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex) {
-//		List<ExampleDTO> examples = new ArrayList<>();
-//		List<String> headers = null;
-//		boolean insideExamples = false;
-//
-//		for (int i = startIndex + 1; i < lines.size(); i++) {
-//			String line = lines.get(i).trim();
-//			if (line.isEmpty())
-//				continue;
-//
-//			if (line.toLowerCase().startsWith("examples")) {
-//				insideExamples = true;
-//				continue;
-//			}
-//
-//			if (insideExamples && line.startsWith("|")) {
-//				List<String> columns = extractColumns(line);
-//
-//				if (headers == null) {
-//					headers = columns;
-//				} else {
-//					ExampleDTO example = new ExampleDTO();
-//					example.setIndex(examples.size() + 1);
-//					example.setLineNumber(i + 1);
-//					Map<String, String> values = new LinkedHashMap<>();
-//
-//					for (int j = 0; j < headers.size(); j++) {
-//						String key = headers.get(j);
-//						String val = j < columns.size() ? columns.get(j) : "";
-//						values.put(key, val);
-//					}
-//
-//					example.setValues(values);
-//					examples.add(example);
-//				}
-//			} else if (insideExamples) {
-//				break;
-//			}
-//		}
-//		return examples;
-//	}
 
 	private List<ExampleDTO> extractExamples(List<String> lines, int startIndex, List<String> scenarioTags) {
 		List<ExampleDTO> examples = new ArrayList<>();
@@ -696,6 +704,7 @@ public class FeatureService {
 		dto.setStepDefsProjectPathGit(stepDefProjPathGit);
 		dto.setStepDefsProjectPathLocal(stepDefProjPathLocal);
 		dto.setGluePackage(gluePackageName);
+		dto.setMavenEnv(mavenEnv);
 		return dto;
 	}
 
@@ -779,6 +788,12 @@ public class FeatureService {
 				updatedFields.put("gluePackages", newConfig.getGluePackage());
 			}
 
+			if (newConfig.getMavenEnv() != null) { // <-- Add this block
+				props.setProperty("maven.env", newConfig.getMavenEnv());
+				this.mavenEnv = newConfig.getMavenEnv();
+				updatedFields.put("mavenEnv", newConfig.getMavenEnv());
+			}
+
 			saveConfig(props);
 
 			response.put("status", 200);
@@ -792,29 +807,6 @@ public class FeatureService {
 
 		return response;
 	}
-
-//	@PostConstruct
-//	public void initializeGitPropertiesFromFile() {
-//		try {
-//			Properties props = loadConfig();
-//			this.featureSource = props.getProperty("feature.source", "local");
-//			this.gitRepoUrl = props.getProperty("feature.git.repo-url", "");
-//			this.localCloneDir = props.getProperty("feature.git.clone-dir", "features-repo");
-//			this.gitFeatureSubPath = props.getProperty("feature.git.feature-path", "");
-//			this.gitBranch = props.getProperty("feature.git.branch", "main");
-//			this.gitUsername = props.getProperty("feature.git.username", "");
-//			this.gitPassword = props.getProperty("feature.git.password", "");
-//			this.localFeatureDir = props.getProperty("feature.local.path", "src/test/resources/features");
-//			this.refreshInterval = Long.parseLong(props.getProperty("feature.refresh.interval.ms", "300000"));
-//			this.stepDefProjPath = props.getProperty("step.defs.project-path", "");
-//			this.gluePackageName = props.getProperty("step.defs.glue", "com.qa.cbcc.steps");
-//			// Optional: Log resolved paths for debugging
-////	        logger.info("Initialized Git Config: featureSource={}, featureDir={}, stepDefsPath={}, glue={}",
-////	                featureSource, localFeatureDir, stepDefProjPath, gluePackageName);
-//		} catch (IOException e) {
-//			logger.error("Failed to load git config: {}", e.getMessage());
-//		}
-//	}
 
 	@PostConstruct
 	public void initializeGitPropertiesFromFile() {
@@ -843,28 +835,18 @@ public class FeatureService {
 			this.gluePackageNames = Arrays.stream(gluePackageName.split(",")).map(String::trim)
 					.filter(s -> !s.isEmpty()).collect(Collectors.toList());
 
+			this.mavenEnv = props.getProperty("maven.env", "");
+
 			logger.info("✅ StepDef Git Path: {}", stepDefProjPathGit);
 			logger.info("✅ StepDef Local Path: {}", stepDefProjPathLocal);
 			logger.info("✅ StepDef project paths resolved: {}", stepDefProjPaths);
 			logger.info("✅ Glue packages resolved: {}", gluePackageNames);
+			logger.info("✅ Maven Run Env: {}", mavenEnv);
 
 		} catch (IOException e) {
 			logger.error("❌ Failed to load git config: {}", e.getMessage(), e);
 		}
 	}
-
-	/**
-	 * Returns all configured step project class paths (e.g.
-	 * /myproj/target/classes).
-	 */
-
-//	public List<String> getStepDefsProjectPaths() {
-//		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
-//			return stepDefProjPaths;
-//		} else {
-//			return Collections.singletonList(new File(".").getAbsolutePath()); // fallback: current dir
-//		}
-//	}
 
 	public List<String> getStepDefsProjectPaths() {
 		if ("git".equalsIgnoreCase(featureSource)) {
@@ -884,19 +866,28 @@ public class FeatureService {
 		return Collections.singletonList(Paths.get(".").toAbsolutePath().normalize().toString());
 	}
 
+	//---For Dynamic Step Defination Project Path
+//	public List<String> getStepDefsFullPaths() {
+//		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
+//			return stepDefProjPaths.stream()
+//					.flatMap(path -> Stream.of(path + File.separator + "target" + File.separator + "classes",
+//							path + File.separator + "target" + File.separator + "test-classes"))
+//					.collect(Collectors.toList());
+//		} else {
+//			List<String> fallback = new ArrayList<>();
+//			fallback.add(new File("target/classes").getAbsolutePath());
+//			fallback.add(new File("target/test-classes").getAbsolutePath());
+//			return fallback;
+//		}
+//	}
+	
 	public List<String> getStepDefsFullPaths() {
-		if (stepDefProjPaths != null && !stepDefProjPaths.isEmpty()) {
-			return stepDefProjPaths.stream()
-					.flatMap(path -> Stream.of(path + File.separator + "target" + File.separator + "classes",
-							path + File.separator + "target" + File.separator + "test-classes"))
-					.collect(Collectors.toList());
-		} else {
-			List<String> fallback = new ArrayList<>();
-			fallback.add(new File("target/classes").getAbsolutePath());
-			fallback.add(new File("target/test-classes").getAbsolutePath());
-			return fallback;
-		}
+	    List<String> paths = new ArrayList<>();
+	    paths.add(new File("target/classes").getAbsolutePath());      // main app classes
+	    paths.add(new File("target/test-classes").getAbsolutePath()); // test classes (if used)
+	    return paths;
 	}
+
 
 	/**
 	 * Returns glue packages array (from config, or auto-scan with caching).

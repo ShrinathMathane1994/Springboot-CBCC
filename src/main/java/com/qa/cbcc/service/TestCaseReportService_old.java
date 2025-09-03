@@ -33,9 +33,9 @@ import com.qa.cbcc.dto.ScenarioLogGroupDTO;
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 
 @Service
-public class TestCaseReportService {
+public class TestCaseReportService_old {
 
-	private static final Logger logger = LoggerFactory.getLogger(TestCaseReportService.class);
+	private static final Logger logger = LoggerFactory.getLogger(TestCaseReportService_old.class);
 	// Central config for tags to skip
 	private static final Set<String> SKIPPED_TAGS = new LinkedHashSet<>(
 			Arrays.asList("CreDtTm", "TmStmpDetls", "EndToEndId"));

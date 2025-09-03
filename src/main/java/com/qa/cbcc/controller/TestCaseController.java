@@ -121,7 +121,7 @@ public class TestCaseController {
         logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
         List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
 
-        result.sort(Comparator.comparing(TestCaseResponseDTO::getId));
+        result.sort(Comparator.comparing(TestCaseResponseDTO::getId).reversed());
 
         if (result.isEmpty()) {
             logger.warn("No test cases found with given filters.");

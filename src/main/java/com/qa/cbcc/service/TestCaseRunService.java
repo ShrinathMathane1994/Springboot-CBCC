@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.regex.Matcher;
@@ -97,27 +99,109 @@ public class TestCaseRunService {
 		return new ArrayList<>();
 	}
 
-	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) throws Exception {
-		GitConfigDTO config = featureService.getGitConfig();
-
-		if (config.getSourceType().equalsIgnoreCase("git")) {
-			featureService.syncGitAndParseFeatures();
+	public static void loadSystemPropertiesFromConfig(String configFilePath) {
+		Properties props = new Properties();
+		try (FileInputStream fis = new FileInputStream(configFilePath)) {
+			props.load(fis);
+			for (String key : props.stringPropertyNames()) {
+				System.setProperty(key, props.getProperty(key));
+			}
+		} catch (IOException e) {
+			throw new RuntimeException("Failed to load config properties from " + configFilePath, e);
 		}
+	}
 
-//		String baseFeaturePath = config.getSourceType().equalsIgnoreCase("git")
-//				? Paths.get(config.getCloneDir(), config.getFeaturePath()).toString()
-//				: config.getFeaturePath();
-
-		String baseFeaturePath;
-		if (config.getSourceType().equalsIgnoreCase("git")) {
-			baseFeaturePath = Paths.get(config.getCloneDir(), config.getGitFeaturePath()).toString();
-		} else {
-			baseFeaturePath = config.getLocalFeatherPath();
-		}
-
+	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) {
 		List<Map<String, Object>> results = new ArrayList<>();
 
 		for (TestCaseDTO testCase : testCases) {
+			LocalDateTime executedOn = LocalDateTime.now();
+			Map<String, Object> result = new LinkedHashMap<>();
+			result.put("testCaseId", testCase.getTcId());
+			result.put("testCaseName", testCase.getTcName());
+			result.put("runOn", executedOn);
+
+			try {
+				Map<String, Object> executionResult = runSingleTestCase(testCase);
+				result.putAll(executionResult);
+
+			} catch (Exception e) {
+				// ✅ Capture error result instead of breaking
+				logger.error("Execution failed for TestCase {}: {}", testCase.getTcId(), e.getMessage(), e);
+				result.put("tcStatus", "Execution Error");
+				result.put("xmlComparisonStatus", "Error");
+				result.put("xmlComparisonDetails", Collections.emptyList());
+				Map<String, Object> runSummary = new LinkedHashMap<>();
+				runSummary.put("totalExecutedScenarios", 0);
+				runSummary.put("passedScenarioDetails", Collections.emptyList());
+				runSummary.put("totalFailedScenarios", 0);
+				runSummary.put("totalPassedScenarios", 0);
+				runSummary.put("durationMillis", 0);
+				runSummary.put("totalUnexecutedScenarios", 1);
+				result.put("runSummary", runSummary);
+				result.put("xmlComparisonStatus", "N/A");
+				result.put("xmlComparisonDetails", Collections.emptyList());
+
+				Map<String, Object> errorDetail = new LinkedHashMap<>();
+				errorDetail.put("scenarioName",
+						testCase.getFeatureScenarios().isEmpty() ? "N/A"
+								: testCase.getFeatureScenarios().get(0).getScenarios().isEmpty() ? "N/A"
+										: testCase.getFeatureScenarios().get(0).getScenarios().get(0));
+				errorDetail.put("errors", Collections.singletonList(e.getMessage()));
+				errorDetail.put("exception", e.getClass().getSimpleName());
+				result.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
+				result.put("diffSummary", Collections.emptyMap());
+			}
+
+			results.add(result);
+
+			// ✅ Always persist history, even if exception occurred
+			try {
+				TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
+				if (entity != null) {
+					entity.setLastRunOn(executedOn);
+					entity.setLastRunStatus((String) result.get("tcStatus"));
+					testCaseRepository.save(entity);
+				}
+
+				TestCaseRunHistory history = new TestCaseRunHistory();
+				history.setTestCase(entity);
+				history.setRunTime(executedOn);
+				history.setRunStatus((String) result.get("tcStatus"));
+				history.setXmlDiffStatus((String) result.get("xmlComparisonStatus"));
+				history.setOutputLog(objectMapper.writeValueAsString(result));
+				historyRepository.save(history);
+
+			} catch (Exception dbEx) {
+				logger.error("⚠ Failed to persist run history for TestCase {}: {}", testCase.getTcId(),
+						dbEx.getMessage(), dbEx);
+			}
+
+			TestContext.clear();
+		}
+
+		return results;
+	}
+
+	private Map<String, Object> runSingleTestCase(TestCaseDTO testCase) throws Exception {
+		Map<String, Object> result = new LinkedHashMap<>();
+		LocalDateTime executedOn = LocalDateTime.now();
+		try {
+			GitConfigDTO config = featureService.getGitConfig();
+
+			if (config.getSourceType().equalsIgnoreCase("git")) {
+				featureService.syncGitAndParseFeatures();
+			}
+
+			String baseFeaturePath;
+			if (config.getSourceType().equalsIgnoreCase("git")) {
+				baseFeaturePath = Paths.get(config.getCloneDir(), config.getGitFeaturePath()).toString();
+			} else {
+				baseFeaturePath = config.getLocalFeatherPath();
+			}
+
+			List<Map<String, Object>> results = new ArrayList<>();
+
 			TestContext.setTestCaseId(testCase.getTcId());
 			Map<String, String> featureToPathMap = new HashMap<>();
 			Map<String, String> scenarioToFeatureMap = new HashMap<>();
@@ -238,10 +322,11 @@ public class TestCaseRunService {
 
 			String[] argv = argvList.toArray(new String[0]);
 
-			// ✅ Inject Maven profile env.name as a system property
-			String envName = System.getProperty("env.name", "UAT");
-			logger.info("🚀 Running tests with env.name={}", envName);
-			System.setProperty("env.name", envName);
+			// ✅ Inject Maven Run Profile
+			if (config.getSourceType().equalsIgnoreCase("git")) {
+				String configPath = "src/test/resources/configs/" + config.getMavenEnv() + "/configs.properties";
+				loadSystemPropertiesFromConfig(configPath);
+			}
 
 			// ✅ Ensure dependencies are copied once
 			StepDefCompiler.ensureDependenciesCopied();
@@ -283,19 +368,21 @@ public class TestCaseRunService {
 				}
 
 				// 🔍 Log the resolved classpath entries
-//				logger.info("StepDefs + Dependency classpath URLs:");
-//				for (URL url : urls) {
-//					logger.info("  {}", url);
+//					logger.info("StepDefs + Dependency classpath URLs:");
+//					for (URL url : urls) {
+//						logger.info("  {}", url);
+//					}
+
+				// ✅ Dynamic Hybrid classloader (inherits app deps + adds stepDefs + jars)
+//				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
+//						Thread.currentThread().getContextClassLoader())) {
+//
+//					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+//					Main.run(argv, classLoader);
 //				}
 
-				// ✅ Hybrid classloader (inherits app deps + adds stepDefs + jars)
-				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
-						Thread.currentThread().getContextClassLoader())) {
-
-					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-					Main.run(argv, classLoader);
-				}
-
+				logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+			    Main.run(argv, Thread.currentThread().getContextClassLoader());
 				// ✅ Extract from the temp feature file BEFORE deleting it
 				exampleMap = extractExamplesFromFeature(featureFile);
 
@@ -368,13 +455,6 @@ public class TestCaseRunService {
 
 			Set<String> declaredScenarioNames = testCase.getFeatureScenarios().stream()
 					.flatMap(fs -> fs.getScenarios().stream()).map(String::trim).collect(Collectors.toSet());
-
-			// Only include scenarios that were truly never executed (not in
-			// executedScenarioNames)
-//			Set<String> unexecuted = declaredScenarioNames.stream()
-//					.filter(declared -> executedScenarioNames.stream().noneMatch(
-//							executed -> executed.equals(declared) || executed.startsWith(declared + " [example")))
-//					.collect(Collectors.toSet());
 
 			// Java: Match scenario outlines by prefix
 			Set<String> unexecuted = declaredScenarioNames.stream()
@@ -513,7 +593,7 @@ public class TestCaseRunService {
 						.anyMatch(m -> !"✅ XML files are equal.".equals(m.get("message")))) {
 					comparisonStatus = "Partially Unexecuted";
 				} else {
-					comparisonStatus = "Unexecuted";
+					comparisonStatus = "N/A";
 				}
 			} else if (trulyExecutedScenarios.isEmpty() && !missingFeatures.isEmpty()) {
 				comparisonStatus = null;
@@ -530,13 +610,12 @@ public class TestCaseRunService {
 				finalStatus = "Discrepancy";
 			} else if ("Partially Unexecuted".equals(comparisonStatus)) {
 				finalStatus = "Partially Unexecuted";
-			} else if ("Unexecuted".equals(comparisonStatus)) {
+			} else if ("N/A".equals(comparisonStatus)) {
 				finalStatus = "Unexecuted";
 			} else {
 				finalStatus = statusByExecution;
 			}
 
-			LocalDateTime executedOn = LocalDateTime.now();
 			TestCaseRunHistory history = new TestCaseRunHistory();
 			history.setTestCase(entity);
 			history.setRunTime(executedOn);
@@ -659,13 +738,12 @@ public class TestCaseRunService {
 			String cleanedLog = String.join("\n", finalLines);
 			history.setRawCucumberLog(cleanedLog);
 
-//			history.setUnexecutedScenarios(unexecuted.isEmpty() ? null : String.join(", ", unexecuted));
+//				history.setUnexecutedScenarios(unexecuted.isEmpty() ? null : String.join(", ", unexecuted));
 			history.setInputXmlContent((String) TestContext.get("inputXmlContent"));
 			history.setOutputXmlContent((String) TestContext.get("outputXmlContent"));
 
 			historyRepository.save(history);
 
-			Map<String, Object> result = new LinkedHashMap<>();
 			result.put("testCaseId", testCase.getTcId());
 			result.put("testCaseName", testCase.getTcName());
 			result.put("runOn", executedOn);
@@ -692,9 +770,62 @@ public class TestCaseRunService {
 			TestContext.remove("outputXmlContent");
 
 			TestContext.clear();
+
+		} catch (Exception e) {
+			logger.error("Execution failed for TestCase {}: {}", testCase.getTcId(), e.getMessage(), e);
+//
+//			result.put("testCaseId", testCase.getTcId());
+//			result.put("testCaseName", testCase.getTcName());
+//			result.put("runOn", executedOn);
+			result.put("tcStatus", "Execution Error");
+
+			// 🔹 Prepare runSummary even on failure
+			Map<String, Object> runSummary = new LinkedHashMap<>();
+			runSummary.put("totalExecutedScenarios", 0);
+			runSummary.put("passedScenarioDetails", Collections.emptyList());
+			runSummary.put("totalFailedScenarios", 0);
+			runSummary.put("totalPassedScenarios", 0);
+			runSummary.put("durationMillis", 0);
+			runSummary.put("totalUnexecutedScenarios", 1);
+			result.put("runSummary", runSummary);
+			result.put("xmlComparisonStatus", "N/A");
+			result.put("xmlComparisonDetails", Collections.emptyList());
+
+			Map<String, Object> errorDetail = new LinkedHashMap<>();
+			errorDetail.put("scenarioName",
+					testCase.getFeatureScenarios().isEmpty() ? "N/A"
+							: testCase.getFeatureScenarios().get(0).getScenarios().isEmpty() ? "N/A"
+									: testCase.getFeatureScenarios().get(0).getScenarios().get(0));
+			errorDetail.put("reason", Collections.singletonList(e.getMessage()));
+			errorDetail.put("exception", e.getClass().getSimpleName());
+
+			result.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
+			result.put("diffSummary", Collections.emptyMap());
+
+			// ✅ Save failure run history too
+			try {
+				TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
+				if (entity != null) {
+					entity.setLastRunOn(executedOn);
+					entity.setLastRunStatus("Execution Error");
+					testCaseRepository.save(entity);
+				}
+
+				TestCaseRunHistory history = new TestCaseRunHistory();
+				history.setTestCase(entity);
+				history.setRunTime(executedOn);
+				history.setRunStatus("Execution Error");
+				history.setXmlDiffStatus("N/A");
+				history.setOutputLog(objectMapper.writeValueAsString(result));
+				historyRepository.save(history);
+			} catch (Exception dbEx) {
+				logger.error("⚠ Failed to persist run history for TestCase {}: {}", testCase.getTcId(),
+						dbEx.getMessage(), dbEx);
+			}
 		}
 
-		return results;
+		TestContext.clear();
+		return result;
 	}
 
 	private List<String> extractFeatureTags(String featureFilePath) throws IOException {
