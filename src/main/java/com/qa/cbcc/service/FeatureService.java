@@ -829,9 +829,19 @@ public class FeatureService {
 			// ✅ Build stepDefProjPaths list depending on source type
 			String rawStepDefs = "git".equalsIgnoreCase(this.featureSource) ? stepDefProjPathGit : stepDefProjPathLocal;
 
-			this.stepDefProjPaths = Arrays.stream(rawStepDefs.split(",")).map(String::trim).filter(s -> !s.isEmpty())
-					.map(p -> Paths.get(p).toAbsolutePath().normalize().toString()).collect(Collectors.toList());
+//			this.stepDefProjPaths = Arrays.stream(rawStepDefs.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+//					.map(p -> Paths.get(p).toAbsolutePath().normalize().toString()).collect(Collectors.toList());
 
+			if (rawStepDefs == null || rawStepDefs.trim().isEmpty()) {
+				this.stepDefProjPaths = Collections.singletonList(Paths.get(".").toAbsolutePath().normalize().toString());
+			} else {
+				this.stepDefProjPaths = Arrays.stream(rawStepDefs.split(","))
+						.map(String::trim)
+						.filter(s -> !s.isEmpty())
+						.map(p -> Paths.get(p).toAbsolutePath().normalize().toString())
+						.collect(Collectors.toList());
+			}
+			
 			this.gluePackageNames = Arrays.stream(gluePackageName.split(",")).map(String::trim)
 					.filter(s -> !s.isEmpty()).collect(Collectors.toList());
 

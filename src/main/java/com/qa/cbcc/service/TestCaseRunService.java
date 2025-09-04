@@ -348,13 +348,13 @@ public class TestCaseRunService {
 			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
 			try {
 				// ✅ Gather stepDef paths (target/classes, test-classes)
-//				List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
+				List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
 				
 				// ✅ Gather stepDef paths (current application only)
-				List<String> stepDefsPaths = Arrays.asList(
-				    "target/test-classes",
-				    "target/classes"
-				);
+//				List<String> stepDefsPaths = Arrays.asList(
+//				    "target/test-classes",
+//				    "target/classes"
+//				);
 
 				List<URL> urls = new ArrayList<>();
 
@@ -377,8 +377,11 @@ public class TestCaseRunService {
 				}
 
 				// ✅ Now just run cucumber using the system classloader
-				logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-				Main.run(argv, Thread.currentThread().getContextClassLoader());
+				// Create a URLClassLoader with stepDefs and dependency jars
+				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]), Thread.currentThread().getContextClassLoader())) {
+					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+					Main.run(argv, classLoader);
+				}
 
 
 				// 🔍 Log the resolved classpath entries
