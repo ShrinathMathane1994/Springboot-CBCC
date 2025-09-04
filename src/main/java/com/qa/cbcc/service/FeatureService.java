@@ -319,9 +319,14 @@ public class FeatureService {
 
 	private void syncStepDefsAndJavaFromGit() throws IOException {
 		// Source 1: stepDefProjPathGit
-		Path stepDefSource = Paths.get(stepDefProjPathGit);
+		Path stepDefSource = Paths.get(localCloneDir, gitFeatureSubPath);
+//		Path stepDefSource = Paths.get(stepDefProjPathGit);
+		
+		Path stepDefProjPathGit = stepDefSource
+		        .subpath(0, stepDefSource.getNameCount() - 4); 
 		// Source 2: src/test/java in the repo
-		Path repoJavaSource = Paths.get(stepDefProjPathGit, "src", "test", "java");
+//		Path repoJavaSource = Paths.get(stepDefProjPathGit, "src", "test", "java");
+		Path repoJavaSource = Paths.get(stepDefProjPathGit.toString(), "src", "test", "java");
 		// Target: src/test/java in your project
 		Path targetJavaDir = Paths.get("src", "test", "java");
 
