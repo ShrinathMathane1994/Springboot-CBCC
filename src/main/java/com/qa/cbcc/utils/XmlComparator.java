@@ -94,8 +94,8 @@ public class XmlComparator {
 	public static String compareXmlFiles(String filePath1, String filePath2) {
 		StringBuilder result = new StringBuilder();
 		try {
-			String xml1 = Files.readString(Paths.get(filePath1), StandardCharsets.UTF_8);
-			String xml2 = Files.readString(Paths.get(filePath2), StandardCharsets.UTF_8);
+			String xml1 = new String(Files.readAllBytes(Paths.get(filePath1)), StandardCharsets.UTF_8);
+			String xml2 = new String(Files.readAllBytes(Paths.get(filePath2)), StandardCharsets.UTF_8);
 
 			// Remove skipped tags from both XML strings
 			String sanitized1 = removeSkippedTags(xml1, SKIPPED_TAGS_REGEX);

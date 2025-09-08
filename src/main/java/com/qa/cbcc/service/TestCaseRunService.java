@@ -663,11 +663,11 @@ public class TestCaseRunService {
 						TestCaseDTO.FeatureScenario fs0 = testCase.getFeatureScenarios().get(0);
 						if (fs0.getSelections() != null && !fs0.getSelections().isEmpty()) {
 							String nm = fs0.getSelections().get(0).getScenarioName();
-							if (nm != null && !nm.isBlank())
+							if (nm != null && !nm.trim().isEmpty())
 								firstScenarioName = nm;
 						} else if (fs0.getScenarios() != null && !fs0.getScenarios().isEmpty()) {
 							String nm = fs0.getScenarios().get(0);
-							if (nm != null && !nm.isBlank())
+							if (nm != null && !nm.trim().isEmpty())
 								firstScenarioName = nm;
 						}
 					}
@@ -1443,12 +1443,12 @@ public class TestCaseRunService {
 					TestCaseDTO.FeatureScenario fs0 = testCase.getFeatureScenarios().get(0);
 					if (fs0.getSelections() != null && !fs0.getSelections().isEmpty()) {
 						String nm = fs0.getSelections().get(0).getScenarioName();
-						if (nm != null && !nm.isBlank())
+						if (nm != null && !nm.trim().isEmpty())
 							firstScenarioName = nm;
 					} else if (fs0.getScenarios() != null && !fs0.getScenarios().isEmpty()) {
 						// fallback if older DTO still present
 						String nm = fs0.getScenarios().get(0);
-						if (nm != null && !nm.isBlank())
+						if (nm != null && !nm.trim().isEmpty())
 							firstScenarioName = nm;
 					}
 				}
