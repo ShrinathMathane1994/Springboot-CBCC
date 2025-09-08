@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import com.qa.cbcc.service.TestCaseRunService.ScenarioBlock;
 
 public class TestCaseDTO {
@@ -12,6 +15,7 @@ public class TestCaseDTO {
 	private Long tcId; // ✅ Added Test Case ID
 	private String tcName;
 	private String description;
+	@JsonInclude(JsonInclude.Include.NON_NULL)
 	private List<FeatureScenario> featureScenarios;
 
 	// ✅ Timestamp fields
@@ -50,7 +54,88 @@ public class TestCaseDTO {
 		this.pod = pod;
 	}
 
+	// 1A) Add just below your imports or near top of TestCaseDTO
+	public enum ScenarioType {
+		SCENARIO("Scenario"), SCENARIO_OUTLINE("Scenario Outline");
+
+		private final String label;
+
+		ScenarioType(String label) {
+			this.label = label;
+		}
+
+		@JsonValue
+		public String getLabel() {
+			return label;
+		}
+
+		@JsonCreator
+		public static ScenarioType from(String value) {
+			if (value == null)
+				return null;
+			String v = value.trim();
+			for (ScenarioType t : values()) {
+				if (t.label.equalsIgnoreCase(v))
+					return t; // "Scenario", "Scenario Outline"
+			}
+			// allow enum names too as a fallback
+			return ScenarioType.valueOf(v.toUpperCase().replace(' ', '_'));
+		}
+	}
+
+	public static class ExampleTable {
+		private List<String> headers; // e.g. ["country","amount","currency"]
+		private List<Map<String, String>> rows; // e.g. [{"country":"UK","amount":"10","currency":"GBP"}]
+
+		public List<String> getHeaders() {
+			return headers;
+		}
+
+		public void setHeaders(List<String> headers) {
+			this.headers = headers;
+		}
+
+		public List<Map<String, String>> getRows() {
+			return rows;
+		}
+
+		public void setRows(List<Map<String, String>> rows) {
+			this.rows = rows;
+		}
+	}
+
+	public static class ScenarioSelection {
+		private String scenarioName; // scenario title
+		private ScenarioType type; // SCENARIO or SCENARIO_OUTLINE
+		private ExampleTable selectedExamples; // only for OUTLINE
+
+		public String getScenarioName() {
+			return scenarioName;
+		}
+
+		public void setScenarioName(String scenarioName) {
+			this.scenarioName = scenarioName;
+		}
+
+		public ScenarioType getType() {
+			return type;
+		}
+
+		public void setType(ScenarioType type) {
+			this.type = type;
+		}
+
+		public ExampleTable getSelectedExamples() {
+			return selectedExamples;
+		}
+
+		public void setSelectedExamples(ExampleTable selectedExamples) {
+			this.selectedExamples = selectedExamples;
+		}
+	}
+
 	// Inner class for feature-scenario mapping
+	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static class FeatureScenario {
 		private String feature;
 		private List<String> scenarios; // used for creation & execution
@@ -60,6 +145,7 @@ public class TestCaseDTO {
 		private Map<String, List<String>> scenarioTagsByName; // scenario title -> @tags
 		private Map<String, List<String>> exampleTagsByName; // scenario title -> @tags (for its Examples)
 		private List<String> backgroundBlock;
+		private List<ScenarioSelection> selections;
 
 		public String getFeature() {
 			return feature;
@@ -116,6 +202,14 @@ public class TestCaseDTO {
 
 		public void setBackgroundBlock(List<String> backgroundBlock) {
 			this.backgroundBlock = backgroundBlock;
+		}
+
+		public List<ScenarioSelection> getSelections() {
+			return selections;
+		}
+
+		public void setSelections(List<ScenarioSelection> selections) {
+			this.selections = selections;
 		}
 
 	}

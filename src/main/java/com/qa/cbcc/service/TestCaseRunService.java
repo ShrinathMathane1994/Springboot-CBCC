@@ -14,7 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -47,9 +49,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.GitConfigDTO;
+import com.qa.cbcc.dto.ScenarioExampleRunDTO;
 import com.qa.cbcc.dto.TestCaseDTO;
+import com.qa.cbcc.model.ScenarioExampleRun;
 import com.qa.cbcc.model.TestCase;
 import com.qa.cbcc.model.TestCaseRunHistory;
+import com.qa.cbcc.repository.ScenarioExampleRunRepository;
 import com.qa.cbcc.repository.TestCaseRepository;
 import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
 import com.qa.cbcc.utils.StepDefCompiler;
@@ -73,6 +78,18 @@ public class TestCaseRunService {
 	private final TestCaseRunHistoryRepository historyRepository;
 	private final ObjectMapper objectMapper;
 	private final ObjectWriter prettyWriter;
+	@Autowired
+	private ScenarioExampleRunRepository scenarioExampleRunRepository;
+
+	// now you can save rows:
+	public void saveScenarioExampleRun(ScenarioExampleRun row) {
+		scenarioExampleRunRepository.save(row);
+	}
+
+	// or fetch by execution:
+	public List<ScenarioExampleRun> getDetailsForExecution(Long executionId) {
+		return scenarioExampleRunRepository.findByExecutionIdOrderByIdAsc(executionId);
+	}
 
 	public TestCaseRunService(TestCaseRepository testCaseRepository, TestCaseRunHistoryRepository historyRepository) {
 		this.testCaseRepository = testCaseRepository;
@@ -111,6 +128,486 @@ public class TestCaseRunService {
 		}
 	}
 
+	/**
+	 * Derive a per-example XML diff status for a scenario row. Possible returned
+	 * values: "Matched", "Mismatched", "No Content", "Unexecuted", "Error", "N/A"
+	 */
+	/**
+	 * Returns one of: "Matched", "Mismatched", "No Content", "Unexecuted", "Error",
+	 * "N/A"
+	 */
+	private String derivePerExampleXmlStatus(String scenarioName, String inputXml, String outputXml,
+			String differencesJson, Map<String, Map<String, Object>> xmlDetailByScenario,
+			List<Map<String, Object>> skippedScenarios) {
+		try {
+			// 1) If the scenario is in skippedScenarios -> Unexecuted
+			if (skippedScenarios != null && scenarioName != null) {
+				boolean isSkipped = skippedScenarios.stream()
+						.anyMatch(m -> scenarioName.equals(String.valueOf(m.get("scenarioName"))));
+				if (isSkipped)
+					return "Unexecuted";
+			}
+
+			// 2) If xmlComparisonDetails had an explicit detail for this scenario, prefer
+			// it
+			if (xmlDetailByScenario != null && scenarioName != null && xmlDetailByScenario.containsKey(scenarioName)) {
+				Map<String, Object> detail = xmlDetailByScenario.get(scenarioName);
+				Object message = detail.get("message");
+				if (message != null) {
+					String msg = String.valueOf(message).toLowerCase();
+					if (msg.contains("equal") || msg.contains("identical"))
+						return "Matched";
+					if (msg.contains("missing") || msg.contains("empty"))
+						return "No Content";
+					return "Mismatched";
+				}
+				Object diffCountObj = detail.get("diffCount");
+				if (diffCountObj != null) {
+					try {
+						int dc = Integer.parseInt(String.valueOf(diffCountObj));
+						return dc > 0 ? "Mismatched" : "Matched";
+					} catch (Exception ignore) {
+					}
+				}
+				Object diffs = detail.get("differences");
+				if (diffs instanceof List) {
+					return ((List<?>) diffs).size() > 0 ? "Mismatched" : "Matched";
+				}
+			}
+
+			// 3) If differencesJson exists, parse it defensively
+			if (differencesJson != null && !differencesJson.trim().isEmpty()) {
+				try {
+					Object parsed = objectMapper.readValue(differencesJson, Object.class);
+					if (parsed instanceof List) {
+						return ((List<?>) parsed).size() > 0 ? "Mismatched" : "Matched";
+					} else if (parsed instanceof Map) {
+						return "Mismatched";
+					} else {
+						return "Mismatched";
+					}
+				} catch (Exception e) {
+					// ignore parse error and continue
+				}
+			}
+
+			// 4) If both input and output xml are empty -> No Content
+			boolean emptyIn = inputXml == null || inputXml.trim().isEmpty();
+			boolean emptyOut = outputXml == null || outputXml.trim().isEmpty();
+			if (emptyIn && emptyOut)
+				return "No Content";
+
+			// Default assumption: Matched
+			return "Matched";
+		} catch (Exception ex) {
+			logger.warn("Failed to derive per-example xml status for '{}': {}", scenarioName, ex.getMessage());
+			return "Error";
+		}
+	}
+
+	// import statements assumed present
+	// e.g. import java.time.LocalDateTime; import java.util.*;
+
+	private void persistPerExampleRows(TestCase testCaseEntity, TestCaseRunHistory history,
+			List<Map<String, Object>> trulyExecutedScenarios, List<Map<String, Object>> skippedScenarios,
+			List<Map<String, Object>> xmlComparisonDetails) {
+		if (history == null)
+			return;
+
+		try {
+			List<ScenarioExampleRun> rowsToSave = new ArrayList<>();
+
+			// Quick lookup xml details by scenarioName (if available)
+			Map<String, Map<String, Object>> xmlDetailByScenario = new HashMap<>();
+			if (xmlComparisonDetails != null) {
+				for (Map<String, Object> d : xmlComparisonDetails) {
+					Object name = d.get("scenarioName");
+					if (name != null) {
+						xmlDetailByScenario.put(String.valueOf(name).trim(), d);
+					}
+				}
+			}
+
+			// merge executed + skipped into one iterable
+			List<Map<String, Object>> allScenarios = new ArrayList<>();
+			if (trulyExecutedScenarios != null)
+				allScenarios.addAll(trulyExecutedScenarios);
+			if (skippedScenarios != null)
+				allScenarios.addAll(skippedScenarios);
+
+			for (Map<String, Object> scenario : allScenarios) {
+				try {
+					String scenarioName = safeStringFromMap(scenario, "scenarioName");
+					String scenarioType = safeStringFromMap(scenario, "scenarioType");
+					String featureFileName = safeStringFromMap(scenario, "featureFileName");
+					String featureFilePath = safeStringFromMap(scenario, "featureFilePath");
+					String status = safeStringFromMap(scenario, "status");
+
+					Integer exampleIndex = null;
+					if (scenario.containsKey("exampleIndex") && scenario.get("exampleIndex") != null) {
+						Object idxObj = scenario.get("exampleIndex");
+						try {
+							if (idxObj instanceof Number) {
+								exampleIndex = ((Number) idxObj).intValue();
+							} else {
+								exampleIndex = Integer.valueOf(String.valueOf(idxObj));
+							}
+						} catch (Exception ignore) {
+						}
+					}
+
+					String exampleHeaderJson = toJsonOrString(scenario.get("exampleHeader"));
+					String exampleValuesJson = toJsonOrString(scenario.get("exampleValues"));
+
+					// Input/output xml: try few places
+					String inputXml = tryExtractXml(scenario, xmlDetailByScenario, "inputXml");
+					String outputXml = tryExtractXml(scenario, xmlDetailByScenario, "outputXml");
+
+					// differences / diff summary / errors
+					String differencesJson = toJsonOrString(scenario.get("parsedDifferences"));
+					if ((differencesJson == null || differencesJson.isEmpty()) && scenarioName != null
+							&& xmlDetailByScenario.containsKey(scenarioName)) {
+						differencesJson = toJsonOrString(xmlDetailByScenario.get(scenarioName).get("differences"));
+					}
+
+					String errorsJson = toJsonOrString(scenario.get("errors"));
+
+					// Build entity row
+					ScenarioExampleRun row = new ScenarioExampleRun();
+					row.setExecution(history);
+					row.setTestCase(testCaseEntity);
+					row.setFeatureFileName(featureFileName);
+					row.setFeatureFilePath(featureFilePath);
+					row.setScenarioName(scenarioName);
+					row.setScenarioType(scenarioType);
+					row.setExampleHeaderJson(exampleHeaderJson);
+					row.setExampleValuesJson(exampleValuesJson);
+					row.setStatus(status);
+
+					if (scenario.get("durationMs") != null) {
+						try {
+							Object d = scenario.get("durationMs");
+							if (d instanceof Number) {
+								row.setDurationMs(((Number) d).longValue());
+							} else {
+								row.setDurationMs(Long.valueOf(String.valueOf(d)));
+							}
+						} catch (Exception ignore) {
+						}
+					}
+
+					row.setInputXml(inputXml);
+					row.setOutputXml(outputXml);
+					row.setDifferencesJson(differencesJson);
+					row.setErrorsJson(errorsJson);
+					row.setCreatedAt(LocalDateTime.now());
+
+//					// --- NEW: derive per-example xmlDiffStatus and set it ---
+//					String xmlStatus = derivePerExampleXmlStatus(scenarioName, inputXml, outputXml, differencesJson,
+//							xmlDetailByScenario, skippedScenarios);
+//					row.setXmlDiffStatus(xmlStatus);
+
+					// prefer explicit xmlDiffStatus from xmlDetailByScenario if present
+					String xmlStatusFromDetail = null;
+					if (scenarioName != null && xmlDetailByScenario.containsKey(scenarioName)) {
+					    Object s = xmlDetailByScenario.get(scenarioName).get("xmlDiffStatus");
+					    xmlStatusFromDetail = s == null ? null : String.valueOf(s);
+					}
+					String xmlStatus = xmlStatusFromDetail != null ? xmlStatusFromDetail
+					        : derivePerExampleXmlStatus(scenarioName, inputXml, outputXml, differencesJson, xmlDetailByScenario, skippedScenarios);
+					row.setXmlDiffStatus(xmlStatus);
+
+					rowsToSave.add(row);
+				} catch (Exception rowEx) {
+					logger.error("Failed to persist one scenario/example row (will continue): {}", rowEx.getMessage(),
+							rowEx);
+				}
+			}
+
+			if (!rowsToSave.isEmpty()) {
+				scenarioExampleRunRepository.saveAll(rowsToSave);
+			}
+		} catch (Exception ex) {
+			logger.error("Failed to persist per-example rows: {}", ex.getMessage(), ex);
+		}
+	}
+
+	/* Helpers (place these in same class) */
+
+	private String safeStringFromMap(Map<String, Object> m, String key) {
+		if (m == null || !m.containsKey(key) || m.get(key) == null)
+			return null;
+		return String.valueOf(m.get(key));
+	}
+
+	private String toJsonOrString(Object obj) {
+		if (obj == null)
+			return null;
+		if (obj instanceof String)
+			return (String) obj;
+		// If it's a char[] or byte[] or Clob, handle explicitly
+		if (obj instanceof char[])
+			return new String((char[]) obj);
+		if (obj instanceof byte[])
+			return new String((byte[]) obj);
+		// javax.sql.Clob or java.sql.Clob -> try to read
+		try {
+			if (obj instanceof java.sql.Clob) {
+				java.sql.Clob cl = (java.sql.Clob) obj;
+				long len = cl.length();
+				return cl.getSubString(1, (int) Math.min(len, Integer.MAX_VALUE));
+			}
+		} catch (Throwable t) {
+			// ignore reading clob if it fails
+			logger.debug("toJsonOrString: failed to read Clob: {}", t.getMessage());
+		}
+		try {
+			return objectMapper.writeValueAsString(obj);
+		} catch (Exception e) {
+			return String.valueOf(obj);
+		}
+	}
+
+	private String objectToStringNoCast(Object obj) {
+		// similar to above but guarantees not to cast String->char[]
+		if (obj == null)
+			return null;
+		if (obj instanceof String)
+			return (String) obj;
+		if (obj instanceof char[])
+			return new String((char[]) obj);
+		if (obj instanceof byte[])
+			return new String((byte[]) obj);
+		try {
+			if (obj instanceof java.sql.Clob) {
+				java.sql.Clob cl = (java.sql.Clob) obj;
+				long len = cl.length();
+				return cl.getSubString(1, (int) Math.min(len, Integer.MAX_VALUE));
+			}
+		} catch (Throwable t) {
+			logger.debug("objectToStringNoCast: failed to read Clob: {}", t.getMessage());
+		}
+		try {
+			return objectMapper.writeValueAsString(obj);
+		} catch (Exception e) {
+			return String.valueOf(obj);
+		}
+	}
+
+	private String tryExtractXml(Map<String, Object> scenario, Map<String, Map<String, Object>> xmlDetailByScenario,
+			String key) {
+		// first check direct key
+		if (scenario != null && scenario.containsKey(key) && scenario.get(key) != null) {
+			Object o = scenario.get(key);
+			// log type to help debugging if it's something weird
+			logger.debug("tryExtractXml: scenario '{}' key '{}' runtime class = {}", scenario.get("scenarioName"), key,
+					o == null ? "null" : o.getClass().getName());
+			return objectToStringNoCast(o);
+		}
+		// then check xml detail mapping
+		if (scenario != null && scenario.get("scenarioName") != null) {
+			Map<String, Object> xmlDet = xmlDetailByScenario.get(String.valueOf(scenario.get("scenarioName")));
+			if (xmlDet != null && xmlDet.get(key) != null) {
+				Object o = xmlDet.get(key);
+				logger.debug("tryExtractXml: xmlDetail '{}' key '{}' runtime class = {}", scenario.get("scenarioName"),
+						key, o == null ? "null" : o.getClass().getName());
+				return objectToStringNoCast(o);
+			}
+		}
+		// fallback to TestContext
+		Object fromCtx = TestContext.get(key.equals("inputXml") ? "inputXmlContent" : "outputXmlContent");
+		if (fromCtx != null) {
+			logger.debug("tryExtractXml: from TestContext key '{}' runtime class = {}", key,
+					fromCtx.getClass().getName());
+			return objectToStringNoCast(fromCtx);
+		}
+		return null;
+	}
+
+	private ScenarioExampleRunDTO toDto(ScenarioExampleRun entity, boolean includeXml) {
+		ScenarioExampleRunDTO dto = new ScenarioExampleRunDTO();
+		dto.setId(entity.getId());
+		dto.setFeatureFileName(entity.getFeatureFileName());
+		dto.setFeatureFilePath(entity.getFeatureFilePath());
+		dto.setScenarioName(entity.getScenarioName());
+		dto.setScenarioType(entity.getScenarioType());
+		dto.setStatus(entity.getStatus());
+		dto.setDurationMs(entity.getDurationMs());
+
+		// parse exampleHeaderJson (List<String>)
+		List<String> headerList = null;
+		try {
+			String headerJson = toStringSafe(entity.getExampleHeaderJson());
+			if (headerJson != null && !headerJson.trim().isEmpty()) {
+				headerList = objectMapper.readValue(headerJson, new TypeReference<List<String>>() {
+				});
+				dto.setExampleHeader(headerList);
+			}
+		} catch (Exception ex) {
+			logger.warn("Failed to parse exampleHeaderJson for row {}: {}", entity.getId(), ex.getMessage());
+		}
+
+		// parse exampleValuesJson: SUPPORT both object and array shapes
+		try {
+			String valuesJson = toStringSafe(entity.getExampleValuesJson());
+			if (valuesJson != null && !valuesJson.trim().isEmpty()) {
+				// parse as generic Object first
+				Object parsed = objectMapper.readValue(valuesJson, Object.class);
+
+				if (parsed instanceof Map) {
+					// already the ideal shape
+					// noinspection unchecked
+					dto.setExampleValues((Map<String, Object>) parsed);
+				} else if (parsed instanceof List) {
+					List<?> rawList = (List<?>) parsed;
+					Map<String, Object> mapped = new LinkedHashMap<>();
+
+					// If headerList is available and sizes match, zip header->value
+					if (headerList != null && headerList.size() == rawList.size()) {
+						for (int i = 0; i < headerList.size(); i++) {
+							mapped.put(headerList.get(i), rawList.get(i));
+						}
+					} else {
+						// fallback: numeric keys so UI can still show values
+						for (int i = 0; i < rawList.size(); i++) {
+							mapped.put(String.valueOf(i), rawList.get(i));
+						}
+					}
+					dto.setExampleValues(mapped);
+				} else {
+					// primitive (string/number) — put under single key "value"
+					Map<String, Object> mapped = new LinkedHashMap<>();
+					mapped.put("value", parsed);
+					dto.setExampleValues(mapped);
+				}
+			}
+		} catch (Exception ex) {
+			logger.warn("Failed to parse exampleValuesJson for row {}: {}", entity.getId(), ex.getMessage());
+		}
+
+		// ---- differences (attempt to produce List<Map<String,Object>>) ----
+		try {
+			String diffsJson = toStringSafe(entity.getDifferencesJson());
+			if (diffsJson != null && !diffsJson.trim().isEmpty()) {
+				Object parsed = objectMapper.readValue(diffsJson, Object.class);
+
+				if (parsed instanceof List) {
+					List<?> rawList = (List<?>) parsed;
+					List<Map<String, Object>> mapped = new ArrayList<>();
+					for (Object o : rawList) {
+						if (o instanceof Map) {
+							// noinspection unchecked
+							mapped.add((Map<String, Object>) o);
+						} else {
+							Map<String, Object> m = new LinkedHashMap<>();
+							m.put("value", o);
+							mapped.add(m);
+						}
+					}
+					dto.setDifferences(mapped);
+				} else if (parsed instanceof Map) {
+					// noinspection unchecked
+					dto.setDifferences(Collections.singletonList((Map<String, Object>) parsed));
+				} else {
+					Map<String, Object> m = new LinkedHashMap<>();
+					m.put("value", parsed);
+					dto.setDifferences(Collections.singletonList(m));
+				}
+			}
+		} catch (Exception ex) {
+			logger.warn("Failed to parse differencesJson for row {}: {}", entity.getId(), ex.getMessage());
+		}
+
+		// ---- errors (attempt to produce List<String>) ----
+		try {
+			String errorsJson = toStringSafe(entity.getErrorsJson());
+			if (errorsJson != null && !errorsJson.trim().isEmpty()) {
+				Object parsed = objectMapper.readValue(errorsJson, Object.class);
+
+				if (parsed instanceof List) {
+					List<?> rawList = (List<?>) parsed;
+					List<String> out = new ArrayList<>();
+					for (Object o : rawList) {
+						out.add(o == null ? null : String.valueOf(o));
+					}
+					dto.setErrors(out);
+				} else if (parsed instanceof Map) {
+					dto.setErrors(Collections.singletonList(objectMapper.writeValueAsString(parsed)));
+				} else {
+					dto.setErrors(Collections.singletonList(String.valueOf(parsed)));
+				}
+			}
+		} catch (Exception ex) {
+			logger.warn("Failed to parse errorsJson for row {}: {}", entity.getId(), ex.getMessage());
+		}
+		dto.setXmlDiffStatus(entity.getXmlDiffStatus());
+
+		if (includeXml) {
+			dto.setInputXml(toStringSafe(entity.getInputXml()));
+			dto.setOutputXml(toStringSafe(entity.getOutputXml()));
+		}
+
+		return dto;
+	}
+
+	/**
+	 * Try to safely convert multiple possible JSON-storage types into a String.
+	 * Handles: null, String, char[], StringBuilder, StringBuffer, Clob, byte[].
+	 */
+	private String toStringSafe(Object obj) {
+		if (obj == null)
+			return null;
+		try {
+			if (obj instanceof String) {
+				return (String) obj;
+			}
+			if (obj instanceof char[]) {
+				return new String((char[]) obj);
+			}
+			if (obj instanceof StringBuilder) {
+				return obj.toString();
+			}
+			if (obj instanceof StringBuffer) {
+				return obj.toString();
+			}
+			if (obj instanceof byte[]) {
+				return new String((byte[]) obj, "UTF-8");
+			}
+			// handle java.sql.Clob
+			if (obj instanceof java.sql.Clob) {
+				java.sql.Clob clob = (java.sql.Clob) obj;
+				long len = clob.length();
+				// read in chunks if large
+				return clob.getSubString(1, (int) len);
+			}
+			// If it's any other object, fallback to object.toString()
+			return obj.toString();
+		} catch (Exception e) {
+			logger.warn("toStringSafe failed for object type {}: {}", obj.getClass().getName(), e.getMessage());
+			try {
+				return String.valueOf(obj);
+			} catch (Exception ignore) {
+				return null;
+			}
+		}
+	}
+
+	/**
+	 * Return DTOs for a given execution id
+	 */
+	public List<ScenarioExampleRunDTO> getExampleRowsForExecution(Long executionId, boolean includeXml) {
+		List<ScenarioExampleRun> rows = scenarioExampleRunRepository.findByExecutionIdOrderByIdAsc(executionId);
+		return rows.stream().map(r -> toDto(r, includeXml)).collect(Collectors.toList());
+	}
+
+	/**
+	 * Return DTOs for a given test case id
+	 */
+	public List<ScenarioExampleRunDTO> getExampleRowsForTestCase(Long testCaseId, boolean includeXml) {
+		List<ScenarioExampleRun> rows = scenarioExampleRunRepository.findByTestCase_IdTCOrderByIdDesc(testCaseId);
+		return rows.stream().map(r -> toDto(r, includeXml)).collect(Collectors.toList());
+	}
+
 	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) {
 		List<Map<String, Object>> results = new ArrayList<>();
 
@@ -121,16 +618,32 @@ public class TestCaseRunService {
 			result.put("testCaseName", testCase.getTcName());
 			result.put("runOn", executedOn);
 
-			try {
-				Map<String, Object> executionResult = runSingleTestCase(testCase);
-				result.putAll(executionResult);
+			Long runId = null; // will hold persisted history id (either from runSingleTestCase or fallback)
 
+			try {
+				// runSingleTestCase now persists header + detail rows and should return a map
+				// containing runId
+				Map<String, Object> executionResult = runSingleTestCase(testCase);
+				if (executionResult != null) {
+					result.putAll(executionResult);
+					if (executionResult.containsKey("runId")) {
+						try {
+							runId = executionResult.get("runId") == null ? null
+									: Long.valueOf(String.valueOf(executionResult.get("runId")));
+						} catch (Exception ignore) {
+							runId = null;
+						}
+					}
+				}
 			} catch (Exception e) {
-				// ✅ Capture error result instead of breaking
+				// Execution failure for this test case — build error result but continue the
+				// loop
 				logger.error("Execution failed for TestCase {}: {}", testCase.getTcId(), e.getMessage(), e);
+
 				result.put("tcStatus", "Execution Error");
 				result.put("xmlComparisonStatus", "Error");
 				result.put("xmlComparisonDetails", Collections.emptyList());
+
 				Map<String, Object> runSummary = new LinkedHashMap<>();
 				runSummary.put("totalExecutedScenarios", 0);
 				runSummary.put("passedScenarioDetails", Collections.emptyList());
@@ -142,44 +655,121 @@ public class TestCaseRunService {
 				result.put("xmlComparisonStatus", "N/A");
 				result.put("xmlComparisonDetails", Collections.emptyList());
 
+				// safe extraction of "first scenario name" using selections (preferred) or
+				// fallback to scenarios
+				String firstScenarioName = "N/A";
+				try {
+					if (testCase.getFeatureScenarios() != null && !testCase.getFeatureScenarios().isEmpty()) {
+						TestCaseDTO.FeatureScenario fs0 = testCase.getFeatureScenarios().get(0);
+						if (fs0.getSelections() != null && !fs0.getSelections().isEmpty()) {
+							String nm = fs0.getSelections().get(0).getScenarioName();
+							if (nm != null && !nm.isBlank())
+								firstScenarioName = nm;
+						} else if (fs0.getScenarios() != null && !fs0.getScenarios().isEmpty()) {
+							String nm = fs0.getScenarios().get(0);
+							if (nm != null && !nm.isBlank())
+								firstScenarioName = nm;
+						}
+					}
+				} catch (Exception ignore) {
+				}
+
 				Map<String, Object> errorDetail = new LinkedHashMap<>();
-				errorDetail.put("scenarioName",
-						testCase.getFeatureScenarios().isEmpty() ? "N/A"
-								: testCase.getFeatureScenarios().get(0).getScenarios().isEmpty() ? "N/A"
-										: testCase.getFeatureScenarios().get(0).getScenarios().get(0));
+				errorDetail.put("scenarioName", firstScenarioName);
 				errorDetail.put("errors", Collections.singletonList(e.getMessage()));
 				errorDetail.put("exception", e.getClass().getSimpleName());
 				result.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
 				result.put("diffSummary", Collections.emptyMap());
+
+				// Try to persist a failure history header + (possibly empty) per-example rows
+				// so caller can query details via runId
+				try {
+					TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
+					if (entity != null) {
+						entity.setLastRunOn(executedOn);
+						entity.setLastRunStatus("Execution Error");
+						testCaseRepository.save(entity);
+					}
+
+					TestCaseRunHistory history = new TestCaseRunHistory();
+					history.setTestCase(entity);
+					history.setRunTime(executedOn);
+					history.setRunStatus("Execution Error");
+					history.setXmlDiffStatus("N/A");
+					history.setOutputLog(objectMapper.writeValueAsString(result));
+					historyRepository.save(history);
+
+					// Persist detail rows (will be empty lists here but ensures runId exists)
+					try {
+						persistPerExampleRows(entity, history, Collections.emptyList(), Collections.emptyList(),
+								Collections.emptyList());
+					} catch (Exception persistEx) {
+						logger.error("Failed to persist per-example rows for failed history {}: {}", history.getId(),
+								persistEx.getMessage(), persistEx);
+					}
+
+					// attach runId so clients can query details
+					runId = history.getId();
+					result.put("runId", runId);
+
+				} catch (Exception dbEx) {
+					logger.error("⚠ Failed to persist fallback run history for TestCase {}: {}", testCase.getTcId(),
+							dbEx.getMessage(), dbEx);
+				}
+			}
+
+			// If runSingleTestCase succeeded but didn't provide a runId (unlikely), create
+			// run header now
+			if (runId == null) {
+				try {
+					if (!result.containsKey("runId")) {
+						TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
+						if (entity != null) {
+							entity.setLastRunOn(executedOn);
+							entity.setLastRunStatus(
+									result.containsKey("tcStatus") ? String.valueOf(result.get("tcStatus")) : null);
+							testCaseRepository.save(entity);
+						}
+
+						TestCaseRunHistory history = new TestCaseRunHistory();
+						history.setTestCase(entity);
+						history.setRunTime(executedOn);
+						history.setRunStatus(
+								result.containsKey("tcStatus") ? String.valueOf(result.get("tcStatus")) : null);
+						history.setXmlDiffStatus(result.containsKey("xmlComparisonStatus")
+								? String.valueOf(result.get("xmlComparisonStatus"))
+								: null);
+						history.setOutputLog(objectMapper.writeValueAsString(result));
+						historyRepository.save(history);
+
+						try {
+							List<Map<String, Object>> executedScenarios = (List<Map<String, Object>>) result
+									.getOrDefault("executedScenarios", Collections.emptyList());
+							List<Map<String, Object>> skippedScenarios = (List<Map<String, Object>>) result
+									.getOrDefault("unexecutedScenarios", Collections.emptyList());
+							List<Map<String, Object>> xmlComparisonDetails = (List<Map<String, Object>>) result
+									.getOrDefault("xmlComparisonDetails", Collections.emptyList());
+
+							persistPerExampleRows(entity, history, executedScenarios, skippedScenarios,
+									xmlComparisonDetails);
+						} catch (Exception persistEx) {
+							logger.warn("Failed to persist detail rows for fallback history {}: {}", history.getId(),
+									persistEx.getMessage());
+						}
+
+						runId = history.getId();
+						result.put("runId", runId);
+					}
+				} catch (Exception e) {
+					logger.error("Failed to persist fallback header for TestCase {}: {}", testCase.getTcId(),
+							e.getMessage(), e);
+				}
 			}
 
 			results.add(result);
-
-			// ✅ Always persist history, even if exception occurred
-			try {
-				TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
-				if (entity != null) {
-					entity.setLastRunOn(executedOn);
-					entity.setLastRunStatus((String) result.get("tcStatus"));
-					testCaseRepository.save(entity);
-				}
-
-				TestCaseRunHistory history = new TestCaseRunHistory();
-				history.setTestCase(entity);
-				history.setRunTime(executedOn);
-				history.setRunStatus((String) result.get("tcStatus"));
-				history.setXmlDiffStatus((String) result.get("xmlComparisonStatus"));
-				history.setOutputLog(objectMapper.writeValueAsString(result));
-				historyRepository.save(history);
-
-			} catch (Exception dbEx) {
-				logger.error("⚠ Failed to persist run history for TestCase {}: {}", testCase.getTcId(),
-						dbEx.getMessage(), dbEx);
-			}
-
+			// Clear context and continue
 			TestContext.clear();
 		}
-
 		return results;
 	}
 
@@ -214,7 +804,7 @@ public class TestCaseRunService {
 				Optional<Path> featurePathOpt = findFeatureFileRecursive(featureRoot, fs.getFeature());
 
 				boolean featureExists = featurePathOpt.isPresent();
-				String featureFilePath = featurePathOpt.map(Path::toString).orElse(null);
+				String featureFilePath = featurePathOpt.isPresent() ? featurePathOpt.get().toString() : null;
 
 				if (!featureExists) {
 					missingFeatures.add(fs.getFeature());
@@ -228,22 +818,41 @@ public class TestCaseRunService {
 				Map<String, List<String>> scenarioTagsByName = new LinkedHashMap<>();
 				Map<String, List<String>> exampleTagsByName = new LinkedHashMap<>();
 
-				for (String scenarioName : fs.getScenarios()) {
-					if (!featureExists)
+				// ---------------------------
+				// Build a safe list of scenario names to iterate
+				// prefer fs.getScenarios(); fallback to fs.getSelections() names if null
+				// ---------------------------
+				List<String> scenarioNames = new ArrayList<>();
+				if (fs.getScenarios() != null && !fs.getScenarios().isEmpty()) {
+					scenarioNames.addAll(fs.getScenarios());
+				} else if (fs.getSelections() != null && !fs.getSelections().isEmpty()) {
+					for (TestCaseDTO.ScenarioSelection sel : fs.getSelections()) {
+						if (sel != null && sel.getScenarioName() != null) {
+							scenarioNames.add(sel.getScenarioName());
+						}
+					}
+				}
+
+				// iterate safely over scenarioNames (may be empty)
+				for (String scenarioName : scenarioNames) {
+					if (!featureExists) {
+						// feature missing — nothing to extract from file
 						continue;
+					}
 
 					try {
 						featureToPathMap.put(fs.getFeature(), featureFilePath);
 
 						// normalize key used for extraction
-						String adjustedScenarioName = scenarioName.trim();
+						String adjustedScenarioName = scenarioName == null ? "" : scenarioName.trim();
 						if (!adjustedScenarioName.startsWith("-")) {
 							adjustedScenarioName = "- " + adjustedScenarioName;
 						}
 
 						ScenarioBlock sb = extractScenarioBlock(featureFilePath, adjustedScenarioName);
-						if (sb == null || sb.getContent() == null || sb.getContent().trim().isEmpty())
+						if (sb == null || sb.getContent() == null || sb.getContent().trim().isEmpty()) {
 							continue;
+						}
 
 						if (sb.isFromExampleWithTags()) {
 							logger.warn("Skipping scenario [{}] because it belongs to Examples with tags",
@@ -258,8 +867,7 @@ public class TestCaseRunService {
 						scenarioToFeatureMap.put(scenarioName.trim(), featureFileName);
 						scenarioToFeatureMap.put(adjustedScenarioName, featureFileName);
 
-						// ⬇️ Extract tags for THIS scenario only, then put into maps under the plain
-						// scenario name
+						// Extract tags for this scenario
 						List<String> scenarioTags = extractScenarioTags(featureFilePath, adjustedScenarioName);
 						if (scenarioTags != null && !scenarioTags.isEmpty()) {
 							scenarioTagsByName.put(scenarioName.trim(), scenarioTags);
@@ -339,7 +947,7 @@ public class TestCaseRunService {
 			// Always compile step defs from the current application project
 			String currentAppPath = Paths.get(".").toAbsolutePath().normalize().toString();
 			StepDefCompiler.compileStepDefs(Collections.singletonList(currentAppPath));
-			
+
 			// 3.1. Capture Cucumber stdout
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			PrintStream originalOut = System.out;
@@ -349,56 +957,35 @@ public class TestCaseRunService {
 			try {
 				// ✅ Gather stepDef paths (target/classes, test-classes)
 				List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
-				
-				// ✅ Gather stepDef paths (current application only)
-//				List<String> stepDefsPaths = Arrays.asList(
-//				    "target/test-classes",
-//				    "target/classes"
-//				);
 
 				List<URL> urls = new ArrayList<>();
 
 				for (String path : stepDefsPaths) {
-				    File f = new File(path);
-				    if (f.exists()) {
-				        urls.add(f.toURI().toURL());
-				    }
+					File f = new File(path);
+					if (f.exists()) {
+						urls.add(f.toURI().toURL());
+					}
 				}
 
 				// ✅ Add jars from target/dependency
 				File depDir = new File("target/dependency");
 				if (depDir.exists() && depDir.isDirectory()) {
-				    File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
-				    if (jars != null) {
-				        for (File jar : jars) {
-				            urls.add(jar.toURI().toURL());
-				        }
-				    }
+					File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
+					if (jars != null) {
+						for (File jar : jars) {
+							urls.add(jar.toURI().toURL());
+						}
+					}
 				}
 
 				// ✅ Now just run cucumber using the system classloader
 				// Create a URLClassLoader with stepDefs and dependency jars
-				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]), Thread.currentThread().getContextClassLoader())) {
+				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
+						Thread.currentThread().getContextClassLoader())) {
 					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
 					Main.run(argv, classLoader);
 				}
 
-
-				// 🔍 Log the resolved classpath entries
-//					logger.info("StepDefs + Dependency classpath URLs:");
-//					for (URL url : urls) {
-//						logger.info("  {}", url);
-//					}
-
-				// ✅ Dynamic Hybrid classloader (inherits app deps + adds stepDefs + jars)
-//				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
-//						Thread.currentThread().getContextClassLoader())) {
-//
-//					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-//					Main.run(argv, classLoader);
-//				}
-;
-				// ✅ Extract from the temp feature file BEFORE deleting it
 				exampleMap = extractExamplesFromFeature(featureFile);
 
 			} finally {
@@ -468,8 +1055,21 @@ public class TestCaseRunService {
 					.concat(trulyExecutedScenarios.stream(), skippedScenarios.stream())
 					.map(s -> String.valueOf(s.get("scenarioName")).trim()).collect(Collectors.toSet());
 
-			Set<String> declaredScenarioNames = testCase.getFeatureScenarios().stream()
-					.flatMap(fs -> fs.getScenarios().stream()).map(String::trim).collect(Collectors.toSet());
+			Set<String> declaredScenarioNames = new HashSet<>();
+			for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
+				if (fs.getScenarios() != null) {
+					for (String s : fs.getScenarios()) {
+						if (s != null)
+							declaredScenarioNames.add(s.trim());
+					}
+				} else if (fs.getSelections() != null) {
+					for (TestCaseDTO.ScenarioSelection sel : fs.getSelections()) {
+						if (sel != null && sel.getScenarioName() != null) {
+							declaredScenarioNames.add(sel.getScenarioName().trim());
+						}
+					}
+				}
+			}
 
 			// Java: Match scenario outlines by prefix
 			Set<String> unexecuted = declaredScenarioNames.stream()
@@ -547,6 +1147,20 @@ public class TestCaseRunService {
 				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
 						.orElse(0);
 				xmlDetail.put("diffCount", diffCount);
+				 
+				//Derive per-example XML diff status and attach to xmlDetail & scenario map
+				String perExampleStatus = derivePerExampleXmlStatus(
+				        String.valueOf(scenario.get("scenarioName")),
+				        (String) xmlDetail.get("inputXml"),   // or the inputXml you have available
+				        (String) xmlDetail.get("outputXml"),  // or the outputXml you have available
+				        toJsonOrString(xmlDetail.get("differences")),
+				        /* xmlDetailByScenario */ null,        // optional: pass a lookup map if you have one here
+				        /* skippedScenarios */ skippedScenarios // pass list so Unexecuted can be detected
+				);
+				xmlDetail.put("xmlDiffStatus", perExampleStatus);
+
+				// also add it back to the scenario map (so persistPerExampleRows may read from scenario if necessary)
+				scenario.put("xmlDiffStatus", perExampleStatus);
 
 				// Match unexecuted scenarios to feature
 				List<Map<String, Object>> unexecutedForFeature = unexecutedList.stream().filter(e -> {
@@ -757,8 +1371,23 @@ public class TestCaseRunService {
 			history.setInputXmlContent((String) TestContext.get("inputXmlContent"));
 			history.setOutputXmlContent((String) TestContext.get("outputXmlContent"));
 
+//			historyRepository.save(history);
+			// save header
 			historyRepository.save(history);
 
+			// Persist per-example/detail rows (bulk)
+			try {
+				// 'entity' is the TestCase entity you already fetched earlier
+				persistPerExampleRows(entity, history, trulyExecutedScenarios, skippedScenarios, xmlComparisonDetails);
+			} catch (Exception ex) {
+				logger.error("Failed to persist per-example rows for history {}: {}", history.getId(), ex.getMessage(),
+						ex);
+			}
+
+			// expose run id to client so they can fetch per-example details later
+			result.put("runId", history.getId());
+
+			// existing output population
 			result.put("testCaseId", testCase.getTcId());
 			result.put("testCaseName", testCase.getTcName());
 			result.put("runOn", executedOn);
@@ -776,11 +1405,13 @@ public class TestCaseRunService {
 
 			results.add(result);
 
+			// update test case entity last run info (unchanged)
 			if (entity != null) {
 				entity.setLastRunOn(executedOn);
 				entity.setLastRunStatus(finalStatus);
 				testCaseRepository.save(entity);
 			}
+
 			TestContext.remove("inputXmlContent");
 			TestContext.remove("outputXmlContent");
 
@@ -788,10 +1419,8 @@ public class TestCaseRunService {
 
 		} catch (Exception e) {
 			logger.error("Execution failed for TestCase {}: {}", testCase.getTcId(), e.getMessage(), e);
-//
-//			result.put("testCaseId", testCase.getTcId());
-//			result.put("testCaseName", testCase.getTcName());
-//			result.put("runOn", executedOn);
+
+			// mark status in response
 			result.put("tcStatus", "Execution Error");
 
 			// 🔹 Prepare runSummary even on failure
@@ -806,18 +1435,35 @@ public class TestCaseRunService {
 			result.put("xmlComparisonStatus", "N/A");
 			result.put("xmlComparisonDetails", Collections.emptyList());
 
+			// safe: extract a best-effort first scenario name from selections (avoid old
+			// getScenarios())
+			String firstScenarioName = "N/A";
+			try {
+				if (testCase.getFeatureScenarios() != null && !testCase.getFeatureScenarios().isEmpty()) {
+					TestCaseDTO.FeatureScenario fs0 = testCase.getFeatureScenarios().get(0);
+					if (fs0.getSelections() != null && !fs0.getSelections().isEmpty()) {
+						String nm = fs0.getSelections().get(0).getScenarioName();
+						if (nm != null && !nm.isBlank())
+							firstScenarioName = nm;
+					} else if (fs0.getScenarios() != null && !fs0.getScenarios().isEmpty()) {
+						// fallback if older DTO still present
+						String nm = fs0.getScenarios().get(0);
+						if (nm != null && !nm.isBlank())
+							firstScenarioName = nm;
+					}
+				}
+			} catch (Exception ignore) {
+			}
+
 			Map<String, Object> errorDetail = new LinkedHashMap<>();
-			errorDetail.put("scenarioName",
-					testCase.getFeatureScenarios().isEmpty() ? "N/A"
-							: testCase.getFeatureScenarios().get(0).getScenarios().isEmpty() ? "N/A"
-									: testCase.getFeatureScenarios().get(0).getScenarios().get(0));
+			errorDetail.put("scenarioName", firstScenarioName);
 			errorDetail.put("reason", Collections.singletonList(e.getMessage()));
 			errorDetail.put("exception", e.getClass().getSimpleName());
 
 			result.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
 			result.put("diffSummary", Collections.emptyMap());
 
-			// ✅ Save failure run history too
+			// ✅ Save failure run history too and persist per-example rows (even if empty)
 			try {
 				TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
 				if (entity != null) {
@@ -833,12 +1479,24 @@ public class TestCaseRunService {
 				history.setXmlDiffStatus("N/A");
 				history.setOutputLog(objectMapper.writeValueAsString(result));
 				historyRepository.save(history);
+
+				// persist per-example rows (will be empty lists here) so runId is available
+				try {
+					persistPerExampleRows(entity, history, Collections.emptyList(), Collections.emptyList(),
+							Collections.emptyList());
+				} catch (Exception persistEx) {
+					logger.error("Failed to persist per-example rows for failed history {}: {}", history.getId(),
+							persistEx.getMessage(), persistEx);
+				}
+
+				// expose run id to caller
+				result.put("runId", history.getId());
+
 			} catch (Exception dbEx) {
 				logger.error("⚠ Failed to persist run history for TestCase {}: {}", testCase.getTcId(),
 						dbEx.getMessage(), dbEx);
 			}
 		}
-
 		TestContext.clear();
 		return result;
 	}
@@ -1034,112 +1692,255 @@ public class TestCaseRunService {
 	private File generateTempFeatureFile(TestCaseDTO testCase) throws IOException {
 		StringBuilder out = new StringBuilder();
 
-		for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
-			// --- Feature-level tags ---
-			if (fs.getFeatureTags() != null && !fs.getFeatureTags().isEmpty()) {
-				out.append(String.join(" ", fs.getFeatureTags()).trim()).append("\n");
-			}
-
-			// --- Feature line ---
-			out.append("Feature: ").append(testCase.getTcName().trim()).append("\n\n");
-
-			// --- Background (once per feature) ---
-			if (fs.getBackgroundBlock() != null && !fs.getBackgroundBlock().isEmpty()) {
-				out.append("Background:\n");
-				for (String bgLine : fs.getBackgroundBlock()) {
-					String trimmed = bgLine.trim();
-					if (!trimmed.startsWith("Background:") && !trimmed.isEmpty()) {
-						out.append("  ").append(trimmed).append("\n"); // ✅ 2-space indent
+		// Build a quick lookup for selections: scenarioName -> ScenarioSelection
+		Map<String, TestCaseDTO.ScenarioSelection> selectionByScenario = new HashMap<>();
+		if (testCase.getFeatureScenarios() != null) {
+			for (TestCaseDTO.FeatureScenario f : testCase.getFeatureScenarios()) {
+				if (f != null && f.getSelections() != null) {
+					for (TestCaseDTO.ScenarioSelection sel : f.getSelections()) {
+						if (sel != null && sel.getScenarioName() != null) {
+							selectionByScenario.put(sel.getScenarioName().trim(), sel);
+						}
 					}
 				}
-				out.append("\n"); // ✅ exactly one blank line after background
-			}
-
-			String currentScenarioTitle = null;
-
-			for (ScenarioBlock block : fs.getScenarioBlocks()) {
-				String[] lines = block.getContent().split("\n");
-
-				for (int i = 0; i < lines.length; i++) {
-					String raw = lines[i];
-					String s = raw.trim();
-					if (s.isEmpty())
-						continue;
-
-					// 🚫 skip raw tags (we re-print them explicitly from DTO maps)
-					if (s.startsWith("@"))
-						continue;
-
-					// --- Scenario Outline / Scenario ---
-					if (s.startsWith("Scenario Outline:") || s.startsWith("Scenario:")) {
-						boolean isOutline = s.startsWith("Scenario Outline:");
-						String after = s.substring(isOutline ? "Scenario Outline:".length() : "Scenario:".length())
-								.trim();
-						if (after.startsWith("-"))
-							after = after.substring(1).trim();
-						currentScenarioTitle = after;
-
-						// scenario-level tags
-						if (fs.getScenarioTagsByName() != null) {
-							List<String> scenarioTags = fs.getScenarioTagsByName().get(currentScenarioTitle);
-							if (scenarioTags != null && !scenarioTags.isEmpty()) {
-								out.append(String.join(" ", scenarioTags).trim()).append("\n");
-							}
-						}
-
-						out.append(isOutline ? "Scenario Outline: " : "Scenario: ").append(after).append("\n");
-						continue;
-					}
-
-					// --- Examples ---
-					if (s.startsWith("Examples:")) {
-						if (currentScenarioTitle != null && fs.getExampleTagsByName() != null) {
-							List<String> exTags = fs.getExampleTagsByName().get(currentScenarioTitle);
-							if (exTags != null && !exTags.isEmpty()) {
-								out.append("\n") // ✅ ensure spacing before tags
-										.append(String.join(" ", exTags).trim()).append("\n");
-							} else {
-								out.append("\n"); // ✅ blank line before "Examples:" even without tags
-							}
-						} else {
-							out.append("\n"); // ✅ blank line before "Examples:"
-						}
-						out.append("Examples:\n");
-						continue;
-					}
-
-					// --- Tables (indent under Examples) ---
-					if (s.startsWith("|")) {
-						out.append("  ").append(s).append("\n");
-						continue;
-					}
-
-					// --- Steps ---
-					if (s.matches("^(Given|When|Then|And|But).*")) {
-						out.append("  ").append(s).append("\n");
-						continue;
-					}
-
-					// --- Fallback ---
-					out.append(s).append("\n");
-				}
-
-				out.append("\n"); // one blank line between scenarios
 			}
 		}
 
-		// ✅ Write to temp file (trim trailing whitespace globally)
-		List<String> cleanedLines = Arrays.stream(out.toString().split("\n")).map(String::trim)
-				.collect(Collectors.toList());
+		if (testCase.getFeatureScenarios() != null) {
+			for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
+				if (fs == null)
+					continue;
 
+				// --- Feature-level tags (preserve) ---
+				if (fs.getFeatureTags() != null && !fs.getFeatureTags().isEmpty()) {
+					out.append(String.join(" ", fs.getFeatureTags()).trim()).append("\n");
+				}
+
+				// --- Feature line (use test case name as feature title) ---
+				out.append("Feature: ").append(testCase.getTcName() == null ? "" : testCase.getTcName().trim())
+						.append("\n\n");
+
+				// --- Background (once per feature) ---
+				if (fs.getBackgroundBlock() != null && !fs.getBackgroundBlock().isEmpty()) {
+					out.append("Background:\n");
+					for (String bgLine : fs.getBackgroundBlock()) {
+						String trimmed = bgLine == null ? "" : bgLine.trim();
+						if (!trimmed.isEmpty() && !trimmed.startsWith("Background:")) {
+							out.append("  ").append(trimmed).append("\n");
+						}
+					}
+					out.append("\n");
+				}
+
+				String currentScenarioTitle = null;
+
+				if (fs.getScenarioBlocks() != null) {
+					for (ScenarioBlock block : fs.getScenarioBlocks()) {
+						if (block == null || block.getContent() == null) {
+							continue;
+						}
+						String[] lines = block.getContent().split("\n");
+
+						for (int i = 0; i < lines.length; i++) {
+							String raw = lines[i];
+							String s = raw == null ? "" : raw.trim();
+							if (s.isEmpty()) {
+								continue;
+							}
+
+							// skip original tag lines (we re-print tags from DTO maps)
+							if (s.startsWith("@")) {
+								continue;
+							}
+
+							// --- Scenario / Scenario Outline header ---
+							if (s.startsWith("Scenario Outline:") || s.startsWith("Scenario:")) {
+								boolean isOutline = s.startsWith("Scenario Outline:");
+								String after = s
+										.substring(isOutline ? "Scenario Outline:".length() : "Scenario:".length())
+										.trim();
+								if (after.startsWith("-")) {
+									after = after.substring(1).trim();
+								}
+								currentScenarioTitle = after;
+
+								// Re-print scenario-level tags from DTO (if present)
+								if (fs.getScenarioTagsByName() != null) {
+									List<String> scenarioTags = fs.getScenarioTagsByName().get(currentScenarioTitle);
+									if (scenarioTags != null && !scenarioTags.isEmpty()) {
+										out.append(String.join(" ", scenarioTags).trim()).append("\n");
+									}
+								}
+
+								out.append(isOutline ? "Scenario Outline: " : "Scenario: ").append(after).append("\n");
+								continue;
+							}
+
+							// --- Examples block start ---
+							if (s.startsWith("Examples:")) {
+								// Print example-level tags (if present in DTO)
+								if (currentScenarioTitle != null && fs.getExampleTagsByName() != null) {
+									List<String> exTags = fs.getExampleTagsByName().get(currentScenarioTitle);
+									if (exTags != null && !exTags.isEmpty()) {
+										out.append("\n").append(String.join(" ", exTags).trim()).append("\n");
+									} else {
+										out.append("\n");
+									}
+								} else {
+									out.append("\n");
+								}
+
+								out.append("Examples:\n");
+
+								// If we have a user selection for this scenario, write only those selected
+								// examples
+								TestCaseDTO.ScenarioSelection sel = null;
+								if (currentScenarioTitle != null) {
+									sel = selectionByScenario.get(currentScenarioTitle);
+								}
+
+								if (sel != null && sel.getSelectedExamples() != null) {
+									TestCaseDTO.ExampleTable et = sel.getSelectedExamples();
+
+									List<String> headers = et.getHeaders();
+									List<Map<String, String>> rows = et.getRows();
+
+									// If headers present, compute max width for each column
+									if (headers != null && !headers.isEmpty()) {
+										final int cols = headers.size();
+										int[] maxWidths = new int[cols];
+										// initial widths from headers
+										for (int c = 0; c < cols; c++) {
+											String h = headers.get(c) == null ? "" : headers.get(c).trim();
+											maxWidths[c] = h.length();
+										}
+										// update widths from rows
+										if (rows != null) {
+											for (Map<String, String> row : rows) {
+												for (int c = 0; c < cols; c++) {
+													String key = headers.get(c) == null ? "" : headers.get(c).trim();
+													String val = "";
+													if (row != null && row.containsKey(key) && row.get(key) != null) {
+														val = row.get(key).trim().replace("\\", "/");
+													}
+													if (val.length() > maxWidths[c]) {
+														maxWidths[c] = val.length();
+													}
+												}
+											}
+										}
+
+										// build header line with padded cells
+										StringBuilder headerLine = new StringBuilder();
+										headerLine.append("|");
+										for (int c = 0; c < cols; c++) {
+											String h = headers.get(c) == null ? "" : headers.get(c).trim();
+											headerLine.append(" ").append(padRight(h, maxWidths[c])).append(" ")
+													.append("|");
+										}
+										out.append("  ").append(headerLine.toString()).append("\n");
+
+										// build each row line
+										if (rows != null && !rows.isEmpty()) {
+											for (Map<String, String> row : rows) {
+												StringBuilder rowLine = new StringBuilder();
+												rowLine.append("|");
+												for (int c = 0; c < cols; c++) {
+													String key = headers.get(c) == null ? "" : headers.get(c).trim();
+													String val = "";
+													if (row != null && row.containsKey(key) && row.get(key) != null) {
+														val = row.get(key).trim().replace("\\", "/");
+													}
+													rowLine.append(" ").append(padRight(val, maxWidths[c])).append(" ")
+															.append("|");
+												}
+												out.append("  ").append(rowLine.toString()).append("\n");
+											}
+										}
+									} else {
+										// No headers -> print rows best-effort without alignment (fallback)
+										if (rows != null && !rows.isEmpty()) {
+											for (Map<String, String> row : rows) {
+												StringBuilder rowLine = new StringBuilder();
+												rowLine.append("|");
+												if (row != null) {
+													for (String v : row.values()) {
+														String vv = v == null ? "" : v.trim().replace("\\", "/");
+														rowLine.append(" ").append(vv).append(" ").append("|");
+													}
+												}
+												out.append("  ").append(rowLine.toString()).append("\n");
+											}
+										}
+									}
+
+									// Skip original table rows in the block (advance i while next lines start with
+									// '|')
+									while (i + 1 < lines.length && lines[i + 1] != null
+											&& lines[i + 1].trim().startsWith("|")) {
+										i++;
+									}
+
+									// continue outer processing (we already wrote the examples)
+									continue;
+								} else {
+									// No selection found: fall back to printing original table rows from the
+									// scenario block. The loop below (when it sees '|' lines) will print them
+									// as-is.
+									continue;
+								}
+							}
+
+							// --- Table rows (original) - print as-is but indented under Examples ---
+							if (s.startsWith("|")) {
+								out.append("  ").append(s).append("\n");
+								continue;
+							}
+
+							// --- Steps (Given/When/Then/And/But) ---
+							if (s.matches("^(Given|When|Then|And|But).*")) {
+								out.append("  ").append(s).append("\n");
+								continue;
+							}
+
+							// Fallback: print the trimmed line
+							out.append(s).append("\n");
+						} // end lines loop
+
+						out.append("\n"); // one blank line between scenarios
+					} // end scenarioBlocks loop
+				} // end scenarioBlocks null check
+			} // end featureScenarios loop
+		} // end featureScenarios null check
+
+		// Trim trailing whitespace from each line and write to temp file
+		String[] rawLines = out.toString().split("\n");
 		File temp = File.createTempFile("testcase_", ".feature");
 		try (BufferedWriter w = new BufferedWriter(new FileWriter(temp))) {
-			for (String line : cleanedLines) {
+			for (String line : rawLines) {
+				if (line == null) {
+					line = "";
+				}
+				// remove trailing spaces
+				line = line.replaceAll("\\s+$", "");
 				w.write(line);
 				w.newLine();
 			}
 		}
 		return temp;
+	}
+
+	/** Helper to pad a string to the right (Java 8). */
+	private static String padRight(String s, int n) {
+		if (s == null)
+			s = "";
+		if (s.length() >= n)
+			return s;
+		StringBuilder b = new StringBuilder(s);
+		for (int i = s.length(); i < n; i++) {
+			b.append(' ');
+		}
+		return b.toString();
 	}
 
 	public List<Map<String, Object>> extractXmlDifferences(String diffOutput) {
@@ -1180,6 +1981,177 @@ public class TestCaseRunService {
 		return diffs;
 	}
 
+//	public Set<Map<String, Object>> parseCucumberJson(File jsonFile,
+//			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleLookup,
+//			Map<String, String> featureFilePathMap) throws IOException {
+//
+//		Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
+//		List<Map<String, Object>> features = objectMapper.readValue(jsonFile, List.class);
+//
+//		for (Map<String, Object> feature : features) {
+//			String featureUri = (String) feature.get("uri");
+//			String featureFileName = new File(featureUri).getName();
+//			List<Map<String, Object>> elements = (List<Map<String, Object>>) feature.get("elements");
+//
+//			if (elements == null)
+//				continue;
+//
+//			// 🔑 Collect Background steps
+//			List<Map<String, Object>> backgroundSteps = new ArrayList<>();
+//			for (Map<String, Object> element : elements) {
+//				if ("background".equalsIgnoreCase((String) element.get("type"))) {
+//					List<Map<String, Object>> steps = (List<Map<String, Object>>) element.get("steps");
+//					if (steps != null)
+//						backgroundSteps.addAll(steps);
+//				}
+//			}
+//
+//			for (Map<String, Object> element : elements) {
+//				if ("background".equalsIgnoreCase((String) element.get("type"))) {
+//					continue; // ✅ skip treating background as scenario
+//				}
+//
+//				String scenarioName = (String) element.get("name");
+//				String originalId = (String) element.get("id");
+//				String id = originalId;
+//
+//				// 🔑 Fix example indices
+//				if (originalId != null && originalId.contains(";;")) {
+//					int splitIndex = originalId.lastIndexOf(";;");
+//					String scenarioNamePart = originalId.substring(0, splitIndex);
+//					String exampleIndexPart = originalId.substring(splitIndex + 2);
+//					try {
+//						int index = Integer.parseInt(exampleIndexPart.trim());
+//						id = scenarioNamePart + ";;" + (index - 1);
+//					} catch (NumberFormatException ignored) {
+//					}
+//				}
+//
+//				String exampleIndex = "";
+//				if (id != null && id.contains(";;")) {
+//					String[] parts = id.split(";;");
+//					if (parts.length > 1)
+//						exampleIndex = parts[1].trim();
+//				}
+//
+//				String fullScenarioName = scenarioName;
+//				if (!exampleIndex.isEmpty()) {
+//					fullScenarioName += " [example #" + exampleIndex + "]";
+//				}
+//
+//				// 🔑 Merge background + scenario steps
+//				List<Map<String, Object>> steps = new ArrayList<>(backgroundSteps);
+//				List<Map<String, Object>> scenarioSteps = (List<Map<String, Object>>) element.get("steps");
+//				if (scenarioSteps != null)
+//					steps.addAll(scenarioSteps);
+//
+//				boolean hasFailed = false;
+//				boolean hasUndefined = false;
+//				List<String> errors = new ArrayList<>();
+//				List<String> parsedDifferences = new ArrayList<>();
+//				Set<String> undefinedStepsSeen = new HashSet<>(); // 🚀 Track undefined steps per scenario
+//
+//				for (Map<String, Object> step : steps) {
+//					Map<String, Object> result = (Map<String, Object>) step.get("result");
+//					String keyword = step.get("keyword") != null ? step.get("keyword").toString() : "";
+//					String name = step.get("name") != null ? step.get("name").toString() : "";
+//					String stepName = keyword + name;
+//
+//					if (result != null) {
+//						String status = (String) result.get("status");
+//
+//						if ("failed".equalsIgnoreCase(status)) {
+//							hasFailed = true;
+//							String errorMessage = (String) result.get("error_message");
+//							if (errorMessage != null) {
+//								String trimmedError = errorMessage.split("\tat")[0].trim();
+//								trimmedError = trimmedError.replaceAll("java\\.lang\\.AssertionError:\\s*", "")
+//										.replaceAll("[\\r\\n]+", " ").trim();
+//
+//								String[] parts = trimmedError.split("Differences:", 2);
+//								errors.add(parts[0].trim());
+//
+//								if (parts.length > 1) {
+//									String differencesSection = parts[1].trim();
+//									Pattern pattern = Pattern.compile("(?=\\b[Ee]xpected )");
+//									Matcher matcher = pattern.matcher(differencesSection);
+//									int lastIndex = 0;
+//									while (matcher.find()) {
+//										if (lastIndex != matcher.start()) {
+//											String diff = differencesSection.substring(lastIndex, matcher.start())
+//													.trim();
+//											if (!diff.isEmpty()
+//													&& !diff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
+//												parsedDifferences.add(diff);
+//											}
+//										}
+//										lastIndex = matcher.start();
+//									}
+//									String lastDiff = differencesSection.substring(lastIndex).trim();
+//									if (!lastDiff.isEmpty()
+//											&& !lastDiff.matches("(?i)^expected \\[.*\\] but found \\[.*\\]$")) {
+//										parsedDifferences.add(lastDiff);
+//									}
+//								}
+//							}
+//
+//						} else if ("undefined".equalsIgnoreCase(status)) {
+//							hasUndefined = true;
+//							// ✅ Only add if not already recorded
+//							if (undefinedStepsSeen.add(stepName)) {
+//								errors.add(
+//										"Step undefined: " + stepName + " (check glue packages or step definitions)");
+//							}
+//
+//						} else if ("skipped".equalsIgnoreCase(status) && hasUndefined) {
+//							// ✅ Always keep skipped steps, even if duplicates
+//							errors.add("Step skipped: " + stepName + " (due to previous undefined step)");
+//						}
+//					}
+//				}
+//
+//				// Build scenario map (no skip classification here!)
+//				Map<String, Object> scenarioMap = new LinkedHashMap<>();
+//				scenarioMap.put("featureFileName", featureFileName);
+//				scenarioMap.put("scenarioName", fullScenarioName);
+//				scenarioMap.put("status", hasUndefined ? "Undefined" : hasFailed ? "Failed" : "Passed");
+//				if (!errors.isEmpty()) {
+////					scenarioMap.put("errors", errors);
+////					if (!parsedDifferences.isEmpty()) {
+////						scenarioMap.put("parsedDifferences", parsedDifferences);
+////						scenarioMap.put("parsedDiffCount", parsedDifferences.size());
+////					}
+//					List<String> uniqueErrors = errors.stream().distinct().collect(Collectors.toList());
+//					scenarioMap.put("errors", uniqueErrors);
+//					if (!parsedDifferences.isEmpty()) {
+//						scenarioMap.put("parsedDifferences", parsedDifferences);
+//						scenarioMap.put("parsedDiffCount", parsedDifferences.size());
+//					}
+//				}
+//
+//				if (id != null && exampleLookup.containsKey(featureFileName)) {
+//					Map<String, Pair<List<String>, List<String>>> examples = exampleLookup.get(featureFileName);
+//					String lookupId = id.contains(";;") ? id.substring(id.indexOf(';') + 1) : id;
+//					if (examples.containsKey(lookupId)) {
+//						Pair<List<String>, List<String>> example = examples.get(lookupId);
+//						scenarioMap.put("scenarioType", "Scenario Outline");
+//						scenarioMap.put("exampleHeader", example.getKey());
+//						scenarioMap.put("exampleValues", example.getValue());
+//					} else {
+//						scenarioMap.put("scenarioType", "Scenario");
+//					}
+//				} else {
+//					scenarioMap.put("scenarioType", "Scenario");
+//				}
+//
+//				executedScenarios.add(scenarioMap);
+//			}
+//		}
+//
+//		return executedScenarios;
+//	}
+
+	@SuppressWarnings("unchecked")
 	public Set<Map<String, Object>> parseCucumberJson(File jsonFile,
 			Map<String, Map<String, Pair<List<String>, List<String>>>> exampleLookup,
 			Map<String, String> featureFilePathMap) throws IOException {
@@ -1195,7 +2167,7 @@ public class TestCaseRunService {
 			if (elements == null)
 				continue;
 
-			// 🔑 Collect Background steps
+			// Collect Background steps
 			List<Map<String, Object>> backgroundSteps = new ArrayList<>();
 			for (Map<String, Object> element : elements) {
 				if ("background".equalsIgnoreCase((String) element.get("type"))) {
@@ -1207,14 +2179,14 @@ public class TestCaseRunService {
 
 			for (Map<String, Object> element : elements) {
 				if ("background".equalsIgnoreCase((String) element.get("type"))) {
-					continue; // ✅ skip treating background as scenario
+					continue; // skip treating background as scenario
 				}
 
 				String scenarioName = (String) element.get("name");
 				String originalId = (String) element.get("id");
 				String id = originalId;
 
-				// 🔑 Fix example indices
+				// Fix example indices
 				if (originalId != null && originalId.contains(";;")) {
 					int splitIndex = originalId.lastIndexOf(";;");
 					String scenarioNamePart = originalId.substring(0, splitIndex);
@@ -1238,7 +2210,7 @@ public class TestCaseRunService {
 					fullScenarioName += " [example #" + exampleIndex + "]";
 				}
 
-				// 🔑 Merge background + scenario steps
+				// Merge background + scenario steps
 				List<Map<String, Object>> steps = new ArrayList<>(backgroundSteps);
 				List<Map<String, Object>> scenarioSteps = (List<Map<String, Object>>) element.get("steps");
 				if (scenarioSteps != null)
@@ -1248,10 +2220,44 @@ public class TestCaseRunService {
 				boolean hasUndefined = false;
 				List<String> errors = new ArrayList<>();
 				List<String> parsedDifferences = new ArrayList<>();
-				Set<String> undefinedStepsSeen = new HashSet<>(); // 🚀 Track undefined steps per scenario
+				Set<String> undefinedStepsSeen = new HashSet<>(); // track undefined steps per scenario
+
+				// We'll try to compute start/finish/duration
+				Long explicitStartMillis = extractMillisFromElement(element, "start_timestamp", "start", "started_at",
+						"started", "timestamp");
+				Long explicitEndMillis = extractMillisFromElement(element, "end_timestamp", "end", "finished_at",
+						"finished", "stop_timestamp");
+				Long explicitDurationMs = extractDurationMsFromElement(element, "duration");
+
+				// fallback: aggregate from step-level durations / timestamps
+				Long stepStartMillis = null;
+				Long stepEndMillis = null;
+				long sumStepDurNs = 0L;
+				boolean anyStepDuration = false;
 
 				for (Map<String, Object> step : steps) {
+					// Step timestamps/duration handling (defensive)
+					Long stepTimestamp = extractMillisFromElement(step, "start_timestamp", "start", "timestamp",
+							"started_at", "started");
+					if (stepTimestamp != null) {
+						if (stepStartMillis == null || stepTimestamp < stepStartMillis)
+							stepStartMillis = stepTimestamp;
+						if (stepEndMillis == null || stepTimestamp > stepEndMillis)
+							stepEndMillis = stepTimestamp;
+					}
+					// some cucumber variants put duration under result.duration (often in ns)
 					Map<String, Object> result = (Map<String, Object>) step.get("result");
+					if (result != null) {
+						Object durObj = result.get("duration");
+						if (durObj != null) {
+							Long durNs = parseNumberToLong(durObj);
+							if (durNs != null) {
+								sumStepDurNs += durNs;
+								anyStepDuration = true;
+							}
+						}
+					}
+
 					String keyword = step.get("keyword") != null ? step.get("keyword").toString() : "";
 					String name = step.get("name") != null ? step.get("name").toString() : "";
 					String stepName = keyword + name;
@@ -1296,17 +2302,47 @@ public class TestCaseRunService {
 
 						} else if ("undefined".equalsIgnoreCase(status)) {
 							hasUndefined = true;
-							// ✅ Only add if not already recorded
 							if (undefinedStepsSeen.add(stepName)) {
 								errors.add(
 										"Step undefined: " + stepName + " (check glue packages or step definitions)");
 							}
 
 						} else if ("skipped".equalsIgnoreCase(status) && hasUndefined) {
-							// ✅ Always keep skipped steps, even if duplicates
 							errors.add("Step skipped: " + stepName + " (due to previous undefined step)");
 						}
 					}
+				} // end steps loop
+
+				// Decide final start/finish/duration using best available data:
+				Long finalStartMillis = explicitStartMillis != null ? explicitStartMillis : stepStartMillis;
+				Long finalEndMillis = explicitEndMillis != null ? explicitEndMillis : stepEndMillis;
+				Long finalDurationMs = null;
+
+				// explicit duration in element (maybe in ms or ns)
+				if (explicitDurationMs != null) {
+					finalDurationMs = explicitDurationMs;
+				} else if (anyStepDuration) {
+					// sumStepDurNs likely in nanoseconds -> convert to ms
+					finalDurationMs = sumStepDurNs / 1_000_000L;
+					// if we also have start & end from timestamps, prefer difference (more
+					// accurate)
+					if (finalStartMillis != null && finalEndMillis != null) {
+						long diff = finalEndMillis - finalStartMillis;
+						if (diff > 0)
+							finalDurationMs = diff;
+					}
+				} else if (finalStartMillis != null && finalEndMillis != null) {
+					finalDurationMs = finalEndMillis - finalStartMillis;
+				}
+
+				// Format timestamps to ISO strings (UTC) when present
+				String startedIso = null;
+				String finishedIso = null;
+				if (finalStartMillis != null) {
+					startedIso = Instant.ofEpochMilli(finalStartMillis).toString();
+				}
+				if (finalEndMillis != null) {
+					finishedIso = Instant.ofEpochMilli(finalEndMillis).toString();
 				}
 
 				// Build scenario map (no skip classification here!)
@@ -1315,11 +2351,6 @@ public class TestCaseRunService {
 				scenarioMap.put("scenarioName", fullScenarioName);
 				scenarioMap.put("status", hasUndefined ? "Undefined" : hasFailed ? "Failed" : "Passed");
 				if (!errors.isEmpty()) {
-//					scenarioMap.put("errors", errors);
-//					if (!parsedDifferences.isEmpty()) {
-//						scenarioMap.put("parsedDifferences", parsedDifferences);
-//						scenarioMap.put("parsedDiffCount", parsedDifferences.size());
-//					}
 					List<String> uniqueErrors = errors.stream().distinct().collect(Collectors.toList());
 					scenarioMap.put("errors", uniqueErrors);
 					if (!parsedDifferences.isEmpty()) {
@@ -1328,6 +2359,7 @@ public class TestCaseRunService {
 					}
 				}
 
+				// Example lookup handling (unchanged)
 				if (id != null && exampleLookup.containsKey(featureFileName)) {
 					Map<String, Pair<List<String>, List<String>>> examples = exampleLookup.get(featureFileName);
 					String lookupId = id.contains(";;") ? id.substring(id.indexOf(';') + 1) : id;
@@ -1348,6 +2380,124 @@ public class TestCaseRunService {
 		}
 
 		return executedScenarios;
+	}
+
+	/**
+	 * Utility: try a list of candidate keys on the map for a timestamp. Accepts ISO
+	 * strings or numeric epoch millis (String/Number). Returns epoch millis if
+	 * found, or null.
+	 */
+	private Long extractMillisFromElement(Map<String, Object> element, String... candidateKeys) {
+		if (element == null)
+			return null;
+		for (String k : candidateKeys) {
+			Object o = element.get(k);
+			if (o == null)
+				continue;
+			// If JSON library already produced a Number
+			if (o instanceof Number) {
+				long val = ((Number) o).longValue();
+				// Heuristic: if value looks like seconds (10 digits), convert to millis
+				if (val < 1_000_000_00000L) { // < ~Nov 2286 in millis
+					// if it's seconds (10 digits), convert
+					if (String.valueOf(val).length() <= 10) {
+						return val * 1000L;
+					} else {
+						return val;
+					}
+				} else {
+					return val;
+				}
+			}
+			// If it's a string, try parse
+			if (o instanceof String) {
+				String s = ((String) o).trim();
+				if (s.isEmpty())
+					continue;
+				// try parse as long
+				try {
+					long l = Long.parseLong(s);
+					if (String.valueOf(l).length() <= 10) {
+						return l * 1000L;
+					} else {
+						return l;
+					}
+				} catch (NumberFormatException ignored) {
+				}
+				// try ISO instant parse
+				try {
+					Instant inst = Instant.parse(s);
+					return inst.toEpochMilli();
+				} catch (DateTimeParseException ignored) {
+				}
+				// try common / alternative patterns (yyyy-MM-ddTHH:mm:ss[.SSS][Z/offset])
+				try {
+					Instant inst = Instant.parse(s.replace(" ", "T"));
+					return inst.toEpochMilli();
+				} catch (DateTimeParseException ignored) {
+				}
+				// last-ditch: try to extract digits
+				Matcher m = Pattern.compile("(\\d{10,13})").matcher(s);
+				if (m.find()) {
+					String digits = m.group(1);
+					try {
+						long l = Long.parseLong(digits);
+						if (digits.length() == 10)
+							return l * 1000L;
+						return l;
+					} catch (NumberFormatException ignored) {
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Utility: attempt to extract a duration (ms) from the element. Accepts numeric
+	 * duration that might be expressed in ms or ns.
+	 */
+	private Long extractDurationMsFromElement(Map<String, Object> element, String key) {
+		if (element == null)
+			return null;
+		Object o = element.get(key);
+		if (o == null)
+			return null;
+		Long numeric = parseNumberToLong(o);
+		if (numeric == null)
+			return null;
+		// Heuristic: durations are often reported in nanoseconds (very large) or
+		// milliseconds
+		if (numeric > 10_000_000_000L) { // >> typical ms (10 billion ms = 2777 hours) assume ns
+			return numeric / 1_000_000L;
+		}
+		// if numeric looks like seconds (<= 10_000), treat as seconds -> convert to ms
+		if (numeric > 0 && numeric <= 10_000L) {
+			return numeric * 1000L;
+		}
+		// otherwise treat as ms
+		return numeric;
+	}
+
+	/** Parse different number types to Long (defensive) */
+	private Long parseNumberToLong(Object o) {
+		if (o == null)
+			return null;
+		if (o instanceof Number) {
+			return ((Number) o).longValue();
+		}
+		if (o instanceof String) {
+			try {
+				return Long.parseLong(((String) o).trim());
+			} catch (NumberFormatException ignored) {
+				try {
+					Double d = Double.parseDouble(((String) o).trim());
+					return d.longValue();
+				} catch (NumberFormatException ignored2) {
+				}
+			}
+		}
+		return null;
 	}
 
 	private String customSlug(String scenarioName) {

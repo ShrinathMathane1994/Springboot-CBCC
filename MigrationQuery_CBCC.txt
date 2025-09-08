@@ -138,3 +138,40 @@ WHERE c.is_active = TRUE
   AND p.is_active = TRUE
 ORDER BY c.country_name, r.region_name, p.pod_name;
 
+--------------------------
+
+CREATE TABLE scenario_example_run (
+    id BIGSERIAL PRIMARY KEY,
+    test_execution_id BIGINT NOT NULL,
+    test_case_id BIGINT NOT NULL,
+    feature_file_name VARCHAR(512),
+    feature_file_path TEXT,
+    scenario_name VARCHAR(2000),
+    scenario_type VARCHAR(64),
+    example_header_json TEXT,
+    example_values_json TEXT,
+    status VARCHAR(64),
+    duration_ms BIGINT,
+    input_xml TEXT,
+    output_xml TEXT,
+    differences_json TEXT,
+    errors_json TEXT,
+    xml_diff_status VARCHAR(64),
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- foreign keys (adjust referenced table/column names if needed)
+ALTER TABLE scenario_example_run
+    ADD CONSTRAINT fk_scenario_example_run_execution
+    FOREIGN KEY (test_execution_id) REFERENCES test_case_run_history(id);
+
+ALTER TABLE scenario_example_run
+    ADD CONSTRAINT fk_scenario_example_run_test_case
+    FOREIGN KEY (test_case_id) REFERENCES test_case(id);
+
+-- helpful indexes for queries
+CREATE INDEX idx_scenario_example_run_execution ON scenario_example_run(test_execution_id);
+CREATE INDEX idx_scenario_example_run_test_case ON scenario_example_run(test_case_id);
+CREATE INDEX idx_scenario_example_run_created_at ON scenario_example_run(created_at);
+CREATE INDEX idx_scenario_example_run_xml_diff_status ON scenario_example_run(xml_diff_status);
+

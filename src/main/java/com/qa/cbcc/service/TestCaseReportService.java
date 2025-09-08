@@ -1,5 +1,8 @@
 package com.qa.cbcc.service;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -10,6 +13,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,6 +33,7 @@ import org.xmlunit.diff.Difference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qa.cbcc.dto.ScenarioExampleRunDTO;
 import com.qa.cbcc.dto.ScenarioLogGroupDTO;
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 
@@ -36,50 +41,51 @@ import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 public class TestCaseReportService {
 
 	private static final Logger logger = LoggerFactory.getLogger(TestCaseReportService.class);
+	ObjectMapper objectMapper;
+
 	// Central config for tags to skip
-	private static final Set<String> SKIPPED_TAGS = new LinkedHashSet<>(
-			Arrays.asList("CreDtTm", "TmStmpDetls", "EndToEndId"));
-	private static final String SKIPPED_TAGS_REGEX = buildSkippedTagsRegex(SKIPPED_TAGS);
+	private static final Set<String> SKIPPED_TAGS;
+	private static final String SKIPPED_TAGS_REGEX;
+	private static final Set<String> PLACEHOLDERS;
+	private static final Pattern PLACEHOLDER_TOKEN;
+
+
+	static {
+		Properties props = new Properties();
+		try (InputStream in = Thread.currentThread().getContextClassLoader()
+				.getResourceAsStream("sem-diff.properties")) {
+			if (in != null) {
+				props.load(in);
+			}
+		} catch (IOException e) {
+			// optional: log it, fallback to defaults
+		}
+
+		// fallback defaults if missing
+		String skipped = props.getProperty("skipped.tags", "CreDtTm,TmStmpDetls,EndToEndId");
+		String placeholders = props.getProperty("placeholders", "UETR");
+
+		SKIPPED_TAGS = Arrays.stream(skipped.split("[,;]")).map(String::trim).filter(s -> !s.isEmpty())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+
+		PLACEHOLDERS = Arrays.stream(placeholders.split("[,;]")).map(String::trim).filter(s -> !s.isEmpty())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+
+		SKIPPED_TAGS_REGEX = buildSkippedTagsRegex(SKIPPED_TAGS);
+
+		String joined = PLACEHOLDERS.stream().map(Pattern::quote).collect(Collectors.joining("|"));
+		PLACEHOLDER_TOKEN = Pattern.compile("\\$\\{(" + joined + ")\\}");
+	}
 
 	private static String buildSkippedTagsRegex(Set<String> tags) {
 		String joined = String.join("|", tags);
 		return ".*<(?:/?(?:" + joined + "))(?:\\s[^>]*)?>.*";
 	}
 
-	// Configurable placeholders
-	private static final Set<String> PLACEHOLDERS = new LinkedHashSet<>(Arrays.asList("UETR"));
-	// Add any names
-	private static final Pattern PLACEHOLDER_TOKEN = Pattern
-			.compile("\\$\\{(" + String.join("|", PLACEHOLDERS) + ")\\}");
-
-	private static final Set<String> SKIPPED_PLACEHOLDERS = new LinkedHashSet<>(Arrays.asList("UETR"));
-
-	private static String buildSkippedPlaceholderRegex(Set<String> keys) {
-		if (keys.isEmpty())
-			return "(?!x)x";
-		return "\\$\\{(?:" + String.join("|", keys) + ")\\}";
-	}
-
-	private static final String SKIPPED_PLACEHOLDER_REGEX = buildSkippedPlaceholderRegex(SKIPPED_PLACEHOLDERS);
-//	private static final Pattern PLACEHOLDER_TOKEN = Pattern.compile(SKIPPED_PLACEHOLDER_REGEX);
-	private static final Pattern PLACEHOLDER_ONLY_LINE = Pattern.compile("^\\s*" + SKIPPED_PLACEHOLDER_REGEX + "\\s*$");
+	private static final Pattern PLACEHOLDER_ONLY_LINE = Pattern.compile("^\\s*" + PLACEHOLDER_TOKEN + "\\s*$");
 
 	private static boolean isPlaceholderOnlyLine(String s) {
 		return s != null && PLACEHOLDER_ONLY_LINE.matcher(s).matches();
-	}
-
-	private static String maskSkippedPlaceholdersInCData(String text) {
-		if (text == null)
-			return "";
-
-		Matcher m = PLACEHOLDER_TOKEN.matcher(text);
-		StringBuffer sb = new StringBuffer();
-		while (m.find()) {
-			// Allow placeholder to consume anything, including newlines
-			m.appendReplacement(sb, "[\\\\s\\\\S]*?");
-		}
-		m.appendTail(sb);
-		return sb.toString();
 	}
 
 	public static boolean linesEqualWithPlaceholders(String expected, String actual) {
@@ -105,57 +111,6 @@ public class TestCaseReportService {
 
 		String expRegex = "^" + regex + "$";
 		return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
-	}
-
-//	public static boolean linesEqualWithPlaceholders(String expected, String actual) {
-//	    Matcher m = PLACEHOLDER_TOKEN.matcher(expected);
-//
-//	    if (!m.find()) {
-//	        // no placeholder → strict equality
-//	        return expected.equals(actual);
-//	    }
-//
-//	    StringBuilder regex = new StringBuilder();
-//	    int last = 0;
-//	    m.reset();
-//
-//	    while (m.find()) {
-//	        // quote everything before placeholder (preserve spaces & text strictly)
-//	        regex.append(Pattern.quote(expected.substring(last, m.start())));
-//
-//	        // placeholder: accept either UUID (36 chars with dashes) or 32-char UETR
-//	        regex.append("(?:[A-Z0-9]{32}|[0-9a-fA-F\\-]{36})");
-//
-//	        last = m.end();
-//	    }
-//
-//	    // append the rest after last placeholder
-//	    regex.append(Pattern.quote(expected.substring(last)));
-//
-//	    String expRegex = "^" + regex + "$";
-////	    logger.info("Final Built Regex = " + expRegex);
-//
-//	    return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
-//	}
-
-	// Helper: turns spaces into \s+
-	private static void appendWithWhitespaceNormalized(StringBuilder regex, String literal) {
-		for (int i = 0; i < literal.length();) {
-			if (Character.isWhitespace(literal.charAt(i))) {
-				// collapse consecutive whitespace into one regex
-				while (i < literal.length() && Character.isWhitespace(literal.charAt(i))) {
-					i++;
-				}
-				regex.append("\\s+");
-			} else {
-				int j = i;
-				while (j < literal.length() && !Character.isWhitespace(literal.charAt(j))) {
-					j++;
-				}
-				regex.append(Pattern.quote(literal.substring(i, j)));
-				i = j;
-			}
-		}
 	}
 
 	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
@@ -345,84 +300,226 @@ public class TestCaseReportService {
 		return sb.toString();
 	}
 
-	public String generateHtmlReport(TestCaseRunHistoryDTO dto) {
-		SimpleDateFormat sdf = new SimpleDateFormat("EEEE, dd MMMM yyyy hh:mm a");
+	private String removeBlankOnlyLines(String xml) {
+		if (xml == null || xml.isEmpty())
+			return "";
 
-		StringBuilder html = new StringBuilder();
-		html.append("<html><head><meta charset='UTF-8'><style>")
-		// container grid
-//				.append(".xml-ssb-wrap {").append("display: grid;").append("grid-template-columns: 40px 1fr 40px 1fr;")// actual
-//				.append("border:1px solid #ccc;").append("border-right:none;") // avoid double borders
-//				.append("}")
-				.append(".xml-ssb-wrap {").append("display: grid;").append("grid-template-columns: 40px 1fr 40px 1fr;")
-				.append("border:1px solid #ccc;") // ✅ keep full border
-				.append("box-sizing:border-box;").append("}")
+		// Split preserving line order
+		String[] lines = xml.split("\\r?\\n", -1);
+
+		List<String> kept = new ArrayList<>(lines.length);
+		for (String line : lines) {
+			// Keep the line only if it contains at least one non-whitespace character
+			if (line != null && !line.trim().isEmpty()) {
+				kept.add(line);
+			}
+		}
+
+		// If everything was blank, return empty string, otherwise join using \n
+		if (kept.isEmpty())
+			return "";
+
+		return String.join("\n", kept);
+	}
+
+	// Example-wise version
+	private String buildXmlSideBySide(ScenarioExampleRunDTO row) {
+		String original = row.getInputXml() == null ? "" : row.getInputXml();
+		String modified = row.getOutputXml() == null ? "" : row.getOutputXml();
+
+		// If both sides are missing
+		if (original.isEmpty() && modified.isEmpty()) {
+			return noScenarioAligned("No XML content available — both Expected and Actual files are empty or missing.",
+					5);
+		}
+		// If only Expected is missing
+		if (original.isEmpty()) {
+			return noScenarioAligned("Side-by-side view skipped — Expected XML is missing.", 5);
+		}
+		// If only Actual is missing
+		if (modified.isEmpty()) {
+			return noScenarioAligned("Side-by-side view skipped — Actual XML is missing.", 5);
+		}
+
+		// --- Remove blank-only lines at start, end and between nodes ---
+		original = removeBlankOnlyLines(original);
+		modified = removeBlankOnlyLines(modified);
+
+		// normalize CDATA for both
+		original = normalizeLargeCDataForDiff(original);
+		modified = normalizeLargeCDataForDiff(modified);
+
+		// align both Expected & Actual
+		Pair<String, String> aligned = alignExpectedWithSkippedTags(original, modified);
+		String[] expectedLines = aligned.getLeft().split("\\r?\\n");
+		String[] actualLines = aligned.getRight().split("\\r?\\n");
+
+		int maxLines = Math.max(expectedLines.length, actualLines.length);
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("<div class='xml-ssb-wrap'>");
+
+		for (int i = 0; i < maxLines; i++) {
+			sb.append("<div class='xml-row'>");
+
+			String leftLine = i < expectedLines.length ? expectedLines[i] : "";
+			String rightLine = i < actualLines.length ? actualLines[i] : "";
+
+			boolean leftSkipped = leftLine.trim().startsWith("<!-- skipped");
+			boolean rightSkipped = rightLine.trim().matches(SKIPPED_TAGS_REGEX)
+					|| rightLine.trim().startsWith("<!-- skipped");
+
+			// ---- Line number (Expected) ----
+			sb.append("<div class='").append(leftSkipped ? "line-num skipped" : "line-num").append("'>").append(i + 1)
+					.append("</div>");
+
+			// ---- Expected column ----
+			if (leftSkipped) {
+				sb.append("<div class='expected skipped'>").append(escapeHtml(leftLine)).append("</div>");
+			} else if (!linesEqualWithPlaceholders(leftLine, rightLine)) {
+				sb.append("<div class='expected'>").append(highlightExpected(leftLine, rightLine)).append("</div>");
+			} else {
+				sb.append("<div class='expected'>").append(escapeHtml(leftLine)).append("</div>");
+			}
+
+			// ---- Line number (Actual) ----
+			sb.append("<div class='").append(rightSkipped ? "line-num skipped" : "line-num").append("'>").append(i + 1)
+					.append("</div>");
+
+			// ---- Actual column ----
+			if (rightSkipped) {
+				sb.append("<div class='actual skipped'>").append(escapeHtml(rightLine)).append("</div>");
+			} else if (!linesEqualWithPlaceholders(leftLine, rightLine)) {
+				sb.append("<div class='actual'>").append(highlightActual(leftLine, rightLine)).append("</div>");
+			} else {
+				sb.append("<div class='actual'>").append(escapeHtml(rightLine)).append("</div>");
+			}
+
+			sb.append("</div>");
+		}
+
+		sb.append("</div>");
+		return sb.toString();
+	}
+
+	// render header list as "col1, col2, col3" (escaped)
+	private String renderExampleHeader(ScenarioExampleRunDTO ex) {
+		try {
+			List<String> header = ex.getExampleHeader();
+			if (header == null || header.isEmpty())
+				return "-";
+			return escapeHtml(String.join(", ", header));
+		} catch (Exception ignored) {
+			return "-";
+		}
+	}
+
+	/**
+	 * Render example values in a compact form. - If exampleValues is a Map ->
+	 * render values in header order if header present, otherwise render keyless
+	 * "value1, value2" from map.values() - If exampleValues is a List -> render
+	 * comma-separated list - If exampleValues is a String or primitive -> return it
+	 */
+	private String renderExampleValues(ScenarioExampleRunDTO ex) {
+		Object valuesObj = ex.getExampleValues();
+		List<String> header = ex.getExampleHeader(); // may be null
+
+		if (valuesObj == null) {
+			return "-";
+		}
+
+		try {
+			if (valuesObj instanceof Map) {
+				// Map: if header exists render values in that order, otherwise iterate map
+				// entries but only show values
+				@SuppressWarnings("unchecked")
+				Map<String, Object> map = (Map<String, Object>) valuesObj;
+				if (header != null && !header.isEmpty()) {
+					List<String> parts = new ArrayList<>();
+					for (String key : header) {
+						Object v = map.get(key);
+						parts.add(v == null ? "-" : String.valueOf(v));
+					}
+					return escapeHtml(String.join(", ", parts));
+				} else {
+					List<String> parts = map.values().stream().map(o -> o == null ? "-" : String.valueOf(o))
+							.collect(Collectors.toList());
+					return escapeHtml(String.join(", ", parts));
+				}
+			} else if (valuesObj instanceof List) {
+				@SuppressWarnings("unchecked")
+				List<Object> list = (List<Object>) valuesObj;
+				List<String> parts = list.stream().map(o -> o == null ? "-" : String.valueOf(o))
+						.collect(Collectors.toList());
+				return escapeHtml(String.join(", ", parts));
+			} else {
+				// primitive / string
+				return escapeHtml(String.valueOf(valuesObj));
+			}
+		} catch (Exception exn) {
+			// fallback
+			return escapeHtml(String.valueOf(valuesObj));
+		}
+	}
+
+	private String cssAndJs() {
+		StringBuilder s = new StringBuilder();
+		s.append("<html><head><meta charset='UTF-8'><style>")
+				// container grid
+				.append(".xml-ssb-wrap { display: grid; grid-template-columns: 40px 1fr 40px 1fr; border:1px solid #ccc; box-sizing:border-box; }")
 
 				// expected + actual + line numbers cells
-				.append(".xml-ssb-wrap .expected, .xml-ssb-wrap .actual {").append("white-space: pre-wrap;")
-				.append("word-break: break-word;") // ✅ don't break words mid-token
-				.append("overflow-wrap: anywhere;")// ✅ allow wrap only at safe points
-				.append("max-width: 100%;").append("padding:2px 6px;").append("border-bottom:1px solid #eee;")
-				.append("border-right:1px solid #ddd;").append("font-family: monospace;").append("}")
+				.append(".xml-ssb-wrap .expected, .xml-ssb-wrap .actual { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; max-width: 100%; padding:2px 6px; border-bottom:1px solid #eee; border-right:1px solid #ddd; font-family: monospace; }")
 
 				// line numbers styling (light mode)
-				.append(".xml-ssb-wrap .line-num {").append("text-align: right;").append("padding:2px 6px;")
-				.append("color:#888;").append("background:#f8f8f8;").append("border-right:1px solid #ddd;")
-				.append("user-select:none;").append("}")
-				.append(".xml-ssb-wrap .expected.skipped, .xml-ssb-wrap .actual.skipped, .xml-ssb-wrap .line-num.skipped {")
-				.append("color: gray !important;").append("font-style: italic;")
-				.append("background-color: #f2f4f7 !important;").append("}")
+				.append(".xml-ssb-wrap .line-num { text-align: right; padding:2px 6px; color:#888; background:#f8f8f8; border-right:1px solid #ddd; user-select:none; }")
+				.append(".xml-ssb-wrap .expected.skipped, .xml-ssb-wrap .actual.skipped, .xml-ssb-wrap .line-num.skipped { color: gray !important; font-style: italic; background-color: #f2f4f7 !important; }")
 
 				// skipped tags styling
-				.append(".xml-ssb-wrap .expected.skipped, .xml-ssb-wrap .actual.skipped {")
-				.append("color: gray !important;").append("font-style: italic;")
-				.append("background-color: #f2f4f7 !important;").append("}")
+				.append(".xml-ssb-wrap .expected.skipped, .xml-ssb-wrap .actual.skipped { color: gray !important; font-style: italic; background-color: #f2f4f7 !important; }")
 
 				// row structure
-				.append(".xml-row {display: contents;}")
+				.append(".xml-row { display: contents; }")
 
 				// remove border on last column
-				.append(".xml-row>div:last-child {border-right:none;}")
+				.append(".xml-row>div:last-child { border-right:none; }")
 
 				// base backgrounds
-				.append(".expected {background-color:#f9f9f9;}").append(".actual {background-color:#fdfdfd;}")
+				.append(".expected { background-color:#f9f9f9; } .actual { background-color:#fdfdfd; }")
 
 				// diff highlights
-				.append(".diff-green {background-color:#e6ffed;color:#22863a;}")
-				.append(".diff-red   {background-color:#ffecec;color:#cb2431;}")
+				.append(".diff-green { background-color:#e6ffed;color:#22863a; }")
+				.append(".diff-red   { background-color:#ffecec;color:#cb2431; }")
 
 				// dark mode support
-				.append("body.dark .xml-ssb-wrap .line-num {").append("color:#aaa;") // lighter gray for numbers
-				.append("background:#2a2a2a;") // dark background
-				.append("border-right:1px solid #444;").append("}")
-				.append("body.dark .xml-ssb-wrap{border-color:#555;}")
-				.append("body.dark .xml-row>div{border-bottom:1px solid #444;border-right:1px solid #444;}")
-				.append("body.dark .expected{background-color:#242424;color:#e0e0e0;}")
-				.append("body.dark .actual{background-color:#242424;color:#e0e0e0;}")
-				.append("body.dark .diff-green{background-color:#144d14;color:#b6fcb6;}")
-				.append("body.dark .diff-red{background-color:#5a1a1a;color:#ffb3b3;}")
-				.append("body.dark .expected.skipped, body.dark .actual.skipped {").append("color:#aaaaaa !important;")
-				.append("background-color:#3a3a3a !important;").append("}")
-				.append("body.dark .xml-ssb-wrap .expected.skipped, body.dark .xml-ssb-wrap .actual.skipped, body.dark .xml-ssb-wrap .line-num.skipped {")
-				.append("color:#aaaaaa !important;").append("background-color:#3a3a3a !important;").append("}")
+				.append("body.dark .xml-ssb-wrap .line-num { color:#aaa; background:#2a2a2a; border-right:1px solid #444; }")
+				.append("body.dark .xml-ssb-wrap{ border-color:#555; }")
+				.append("body.dark .xml-row>div{ border-bottom:1px solid #444; border-right:1px solid #444; }")
+				.append("body.dark .expected{ background-color:#242424; color:#e0e0e0; }")
+				.append("body.dark .actual{ background-color:#242424; color:#e0e0e0; }")
+				.append("body.dark .diff-green{ background-color:#144d14; color:#b6fcb6; }")
+				.append("body.dark .diff-red{ background-color:#5a1a1a; color:#ffb3b3; }")
+				.append("body.dark .expected.skipped, body.dark .actual.skipped { color:#aaaaaa !important; background-color:#3a3a3a !important; }")
+				.append("body.dark .xml-ssb-wrap .expected.skipped, body.dark .xml-ssb-wrap .actual.skipped, body.dark .xml-ssb-wrap .line-num.skipped { color:#aaaaaa !important; background-color:#3a3a3a !important; }")
 
-				.append(".xml-pane{border:1px solid #e6e6e6;border-radius:8px;overflow:auto;max-height:520px;background:#fff;}")
-				.append("body.dark .xml-pane{background:#2c2c2c;border-color:#444;}")
-				.append(".xml-header{padding:6px 10px;font-weight:600;background:#f2f4f7;border-bottom:1px solid #e6e6e6;position:sticky;top:0;}")
-				.append("body.dark .xml-header{background:#333;border-color:#444;}")
-				.append(".xml-code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", monospace;font-size:12px;line-height:1.45;padding:10px;white-space:pre;}")
-				.append(".xml-line{display:flex;}")
-				.append(".ln{min-width:48px;text-align:right;padding-right:8px;opacity:.6;user-select:none;}")
-				.append(".lc{flex:1;overflow:hidden;}")
+				.append(".xml-pane{ border:1px solid #e6e6e6; border-radius:8px; overflow:auto; max-height:520px; background:#fff; }")
+				.append("body.dark .xml-pane{ background:#2c2c2c; border-color:#444; }")
+				.append(".xml-header{ padding:6px 10px; font-weight:600; background:#f2f4f7; border-bottom:1px solid #e6e6e6; position:sticky; top:0; }")
+				.append("body.dark .xml-header{ background:#333; border-color:#444; }")
+				.append(".xml-code{ font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", monospace; font-size:12px; line-height:1.45; padding:10px; white-space:pre; }")
+				.append(".xml-line{ display:flex; }")
+				.append(".ln{ min-width:48px; text-align:right; padding-right:8px; opacity:.6; user-select:none; }")
+				.append(".lc{ flex:1; overflow:hidden; }")
 
 				/* FULL-line backgrounds */
-				.append(".diff-removed-line{background:#ffdddd;}").append(".diff-added-line{background:#ddffdd;}")
-				.append(".same-line{background:transparent;}")
+				.append(".diff-removed-line{ background:#ffdddd; }").append(".diff-added-line{ background:#ddffdd; }")
+				.append(".same-line{ background:transparent; }")
 
 				/* Inline word-level highlights */
-				.append(".diff-removed{background:#ffaaaa;border-radius:2px;padding:0 1px;}")
-				.append(".diff-added{background:#aaffaa;border-radius:2px;padding:0 1px;}")
+				.append(".diff-removed{ background:#ffaaaa; border-radius:2px; padding:0 1px; }")
+				.append(".diff-added{ background:#aaffaa; border-radius:2px; padding:0 1px; }")
 
+				// base page + header
 				.append("body { font-family: Arial, sans-serif; margin: 20px; background: #f6f8fa; color:#222; }")
 				.append("body.dark { background: #1e1e1e; color: #ddd; }")
 				.append("h1 { text-align:center; font-size:28px; margin-bottom:6px; position: relative; }")
@@ -432,15 +529,29 @@ public class TestCaseReportService {
 				.append(".badge { padding:4px 8px; border-radius:6px; font-size:13px; color:white; display:inline-block; }")
 				.append(".badge-pass { background:#28a745 } .badge-fail { background:#dc3545 } .badge-warn { background:#ffb703; color:#222 }")
 				.append(".badge-xml-pass { background:#2ecc71 } .badge-xml-fail { background:#e74c3c }")
-				.append(".section { border-radius:8px; background:white; box-shadow:0 2px 6px rgba(0,0,0,0.06); margin:16px 0; overflow:hidden; }")
+
+				// section base + tighten default margins
+				.append(".section { border-radius:8px; background:white; box-shadow:0 2px 6px rgba(0,0,0,0.06); margin:8px 0; overflow:hidden; }")
 				.append("body.dark .section { background:#2c2c2c; }")
-				.append(".section-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fbfbfb; cursor:pointer }")
-				.append("body.dark .section-header { background:#333; }").append(".section-title { font-weight:600; }")
-				.append(".chev { transition: transform .25s ease; font-size:14px; }")
-				.append(".section-content { padding:14px; display:none; }")
+
+				// header is flex row: title truncates OR wraps (we allow wrapping now)
+				.append(".section-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 12px; background:#fbfbfb; cursor:default; }")
+				.append("body.dark .section-header { background:#333; }")
+
+				// title now allowed to wrap so long names show fully; we keep min-width:0 to
+				// allow flex shrink
+				.append(".section-title { font-weight:600; flex:1 1 auto; min-width:0; white-space:normal; word-break:break-word; overflow-wrap:anywhere; }")
+
+				// status + button controls area kept on one line (no wrap) and compact
+				.append(".section-controls { flex:0 0 auto; display:flex; gap:8px; flex-wrap:nowrap; align-items:center; }")
+				.append(".section-subtitle { font-size:12px; color:#999; margin-right:6px; white-space:nowrap; }")
+
+				// smaller content spacing; will be overridden by inline styles if present but
+				// default is tighter
+				.append(".section-content { padding:10px 12px; display:none;}")
 
 				// Unified table style with fixed column widths
-				.append(".scenario-table { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }.tbl thead th:first-child{width:40%;}.tbl thead th:nth-child(2){width:30%;}.tbl thead th:nth-child(3){width:30%;}")
+				.append(".scenario-table { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }")
 				.append(".scenario-table th, .scenario-table td { border:1px solid #e6e6e6; padding:8px 10px; text-align:left; vertical-align:top; overflow-wrap:break-word; }")
 
 				// Light mode table colors
@@ -472,30 +583,151 @@ public class TestCaseReportService {
 				.append(".empty-row td { background: #fafafa; }")
 				.append("body.dark .empty-row td { background: #3a3a3a; }")
 
+				// Buttons and small utilities
+				.append(".toggle-btn, .view-btn { padding:6px 12px; background:#1976d2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; transition:background 0.15s; white-space:nowrap; }")
+				.append(".toggle-btn:hover, .view-btn:hover { background:#0b5ed7; }")
+				.append(".diff-badge { margin-left:6px; padding:3px 6px; font-size:11px; border-radius:10px; color:#fff; vertical-align:middle; }")
+				.append(".diff-badge.fail { background:#dc3545; } .diff-badge.pass { background:#28a745; }")
+
+				.append(".log-box { background:#f7f7f9; border:1px solid #e8e8e8; padding:8px; border-radius:6px; font-family:monospace; white-space:pre-wrap; margin:6px 0; }")
+				.append("body.dark .log-box { background:#2a2a2a; border:1px solid #444; }")
+
 				.append(".row-pass { background:#eafaf0 } .row-fail { background:#fff2f2 }")
 				.append(".inner-row { display:none; }")
 				.append(".inner-table { width:100%; border-collapse:collapse; margin:0; table-layout:auto; }")
 				.append(".inner-table th, .inner-table td { border:1px solid #ccc; padding:6px 8px; vertical-align:top; }")
-				.append(".view-btn { padding:4px 12px; background:#1976d2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; transition:background 0.3s;}")
-				.append(".view-btn:hover { background:#0b5ed7; }")
-				.append(".diff-badge { margin-left:6px; padding:3px 6px; font-size:11px; border-radius:10px; color:#fff; vertical-align:middle; }")
-				.append(".diff-badge.fail { background:#dc3545; } .diff-badge.pass { background:#28a745; }")
-				.append(".log-box { background:#f7f7f9; border:1px solid #e8e8e8; padding:10px; border-radius:6px; font-family:monospace; white-space:pre-wrap }")
-				.append("body.dark .log-box { background:#2a2a2a; border:1px solid #444; }")
-				.append(".toggle-btn { background:#0d6efd; color:#fff; padding:4px 6px; border-radius:6px; border:none; cursor:pointer; font-size:12px }")
+
+				// overrides to neutralize inline margins & gaps emitted by generateHtmlReport
+				.append(".section > div[id^='xmlDiffEx'], .section > div[id^='ssbEx'], .section > div[id^='semEx'] { margin:6px 0 !important; padding:6px 0 !important; }")
+				.append("/* reduce visual gap within the examples container (if you use inline gap:12px this helps) */")
+				.append(".examples-group { display:flex; flex-direction:column; gap:8px; margin-top:6px; }")
+
+				// ----------------------------
+				// NEW: compact pill badge styles
+				// ----------------------------
+				.append("/* Compact pill badges used in example header */")
+				.append(".badge-pill { padding: 3px 8px; font-size:12px; border-radius:999px; min-height:20px; line-height:1; box-shadow:none; border:1px solid rgba(0,0,0,0.06); display:inline-flex; align-items:center; gap:6px; }")
+				.append(".badge-pill.compact { padding:2px 6px; font-size:11px; min-height:18px; gap:4px; }")
+				.append(".badge-pill .icon-left { width:14px; height:14px; font-size:11px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; }")
+				.append(".badge-pill.small { padding:2px 6px; font-size:11px; min-height:18px; }")
+				.append(".badge-pill.success { background: linear-gradient(180deg,#2ecc71,#28a745); color:#fff; }")
+				.append(".badge-pill.fail    { background: linear-gradient(180deg,#ff6b6b,#dc3545); color:#fff; }")
+				.append(".badge-pill.warn    { background: linear-gradient(180deg,#ffd166,#ffb703); color:#111; }")
+				.append(".badge-pill.outline { background: transparent; color: inherit; border: 1px solid rgba(255,255,255,0.06); box-shadow:none; }")
+				.append("body.dark .badge-pill.outline { border-color: rgba(255,255,255,0.08); }")
+				.append(".section-controls > * { display:inline-flex; align-items:center; }")
+
+				// -------------------------------------------------
+				// LIGHT MODE REFINEMENTS (to match dark-mode polish)
+				// Only apply where body is NOT .dark
+				// -------------------------------------------------
+				.append("body:not(.dark) { background: #f4f6f8; color: #222; }")
+				// card look for light
+				.append("body:not(.dark) .section { background: #fbfcfd; border: 1px solid #e3e6ea; box-shadow: 0 1px 2px rgba(16,24,40,0.04); }")
+				.append("body:not(.dark) .section-header { background: linear-gradient(180deg,#f7f9fb,#f2f6fa); border-bottom: 1px solid #e8edf2; }")
+				// Slightly smaller header padding in light
+				.append("body:not(.dark) .section-header { padding:10px 14px; }")
+				// tables in light look slightly raised
+				.append("body:not(.dark) .scenario-table th { background:#f6f8fb; border-bottom:2px solid #e6e9ed; }")
+				.append("body:not(.dark) .scenario-table td { background: #ffffff; }")
+				.append("body:not(.dark) .scenario-table tr:nth-child(even) td { background: #fbfbfd; }")
+				.append("body:not(.dark) .scenario-table tr:hover td { background: #f0f7ff; transition: background 0.15s ease; }")
+				// badges: slightly toned down in light mode
+				.append("body:not(.dark) .badge-pass { background: #37b24d; }")
+				.append("body:not(.dark) .badge-fail { background: #d64545; }")
+				.append("body:not(.dark) .badge-warn { background: #ffb703; color:#111; }")
+				// pill badges outline variant for light small icons
+				.append("body:not(.dark) .badge-pill.outline { border-color: rgba(16,24,40,0.06); }")
+				// make example header controls smaller to blend
+				.append("body:not(.dark) .section-controls .toggle-btn { padding:6px 10px; font-size:12px; }")
+				.append("body:not(.dark) .toggle-btn, body:not(.dark) .view-btn { box-shadow: 0 1px 2px rgba(16,24,40,0.04); }")
+				// compact the example card title slightly in light mode
+				.append("body:not(.dark) .example-card .section-title { font-size:13px; }")
+				.append("body:not(.dark) .example-card { padding:8px; }")
+
+				// Accessibility helper: reduce motion
+				.append("@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }")
+
 				.append("</style>")
 
-				// JS
+				// JS (unchanged)
 				.append("<script>").append("function toggle(id){var el=document.getElementById(id);if(!el)return;")
 				.append("var isHidden=(el.style.display==='none'||el.style.display==='');")
 				.append("var tag=(el.tagName||'').toLowerCase();")
 				.append("if(tag==='tr'||el.classList.contains('inner-row')){el.style.display=isHidden?'table-row':'none';}")
 				.append("else{el.style.display=isHidden?'block':'none';}}")
-				.append("function toggleDark(){\r\n" + "    document.body.classList.toggle('dark');\r\n"
-						+ "    if (window.monaco) {\r\n"
-						+ "        monaco.editor.setTheme(document.body.classList.contains('dark') ? 'vs-dark' : 'vs');\r\n"
-						+ "    }\r\n" + "}")
+				.append("function toggleDark(){ document.body.classList.toggle('dark'); if (window.monaco) { monaco.editor.setTheme(document.body.classList.contains('dark') ? 'vs-dark' : 'vs'); } }")
 				.append("</script></head><body>");
+		return s.toString();
+	}
+
+	// Helper: render run status (Passed/Failed/Partially Passed/Unexecuted/etc.)
+	private String renderStatusBadge(String statusRaw) {
+		if (statusRaw == null)
+			statusRaw = "N/A";
+		String s = statusRaw.trim().toLowerCase();
+		String cls = "badge-pill outline";
+		String icon = "";
+		String text = escapeHtml(statusRaw);
+
+		if ("passed".equalsIgnoreCase(s) || "pass".equalsIgnoreCase(s)) {
+			cls = "badge-pill compact success";
+			icon = "<span class='icon-left'>✓</span> ";
+		} else if ("failed".equalsIgnoreCase(s) || "fail".equalsIgnoreCase(s) || "failed".equals(s)) {
+			cls = "badge-pill compact fail";
+			icon = "<span class='icon-left'>&#10006;</span> ";
+		} else if (s.contains("part") || s.contains("partial")) {
+			cls = "badge-pill compact warn";
+			icon = "<span class='icon-left'>!</span> ";
+		} else if ("unexecuted".equalsIgnoreCase(s) || "n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s)) {
+			cls = "badge-pill compact outline";
+			icon = "";
+		} else {
+			cls = "badge-pill compact outline";
+		}
+
+		return "<span class='" + cls + "'>" + icon + "<span style='font-weight:600;'>" + text + "</span></span>";
+	}
+
+	private String renderXmlBadge(String xmlStatusRaw) {
+		if (xmlStatusRaw == null)
+			xmlStatusRaw = "N/A";
+		String s = xmlStatusRaw.trim().toLowerCase();
+		String cls = "badge-pill outline";
+		String text = escapeHtml(xmlStatusRaw);
+
+		if ("matched".equalsIgnoreCase(s) || "match".equalsIgnoreCase(s) || "equal".equalsIgnoreCase(s)
+				|| "✅ xml files are equal.".equalsIgnoreCase(s)) {
+			cls = "badge-pill compact success";
+		} else if ("mismatched".equalsIgnoreCase(s) || "mismatch".equalsIgnoreCase(s) || "mismatched".equals(s)) {
+			cls = "badge-pill compact fail";
+		} else if ("partially unexecuted".equalsIgnoreCase(s) || s.contains("part")) {
+			cls = "badge-pill compact warn";
+		} else if ("n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s) || "n/a".equals(s)) {
+			cls = "badge-pill compact outline";
+		} else {
+			cls = "badge-pill compact outline";
+		}
+
+		return "<span class='" + cls + "'>" + text + "</span>";
+	}
+
+	@SuppressWarnings("unchecked")
+	public String generateHtmlReport(TestCaseRunHistoryDTO dto, ScenarioExampleRunDTO scDTO,
+			List<ScenarioExampleRunDTO> exampleRows) {
+		SimpleDateFormat sdf = new SimpleDateFormat("EEEE, dd MMMM yyyy hh:mm a");
+
+		StringBuilder html = new StringBuilder();
+
+		// Preserve original CSS/JS (use the updated cssAndJs() you applied earlier)
+		html.append(cssAndJs());
+
+		// Small extra helpers (re-using existing toggle function from cssAndJs)
+		html.append("<style>")
+				// keep example container compact
+				.append(".examples-group{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }")
+				.append(".example-card { margin:6px 0; padding:8px; border:1px solid #e6e6e6; border-radius:6px; background:transparent; }")
+				.append("</style>");
 
 		// Header
 		html.append("<h1><span class='icon'>📋</span>Test Case Execution Report")
@@ -508,17 +740,16 @@ public class TestCaseReportService {
 						: runStatus.toLowerCase().contains("unex") ? "badge-warn"
 								: runStatus.toLowerCase().contains("part") ? "badge-warn" : "badge-pass";
 		html.append("<p style='text-align:center;margin:6px 0'><b>TC Status:</b> <span class='badge ")
-				.append(runBadgeClass).append("'>").append(runStatus).append("</span></p>");
+				.append(runBadgeClass).append("'>").append(escapeHtml(runStatus)).append("</span></p>");
 
 		String xmlStatus = dto.getXmlDiffStatus() == null ? "N/A" : dto.getXmlDiffStatus();
 		String xmlBadgeClass = "Matched".equalsIgnoreCase(xmlStatus) ? "badge-xml-pass" : "badge-xml-fail";
 		html.append("<p style='text-align:center;margin:6px 0'><b>XML Difference:</b> <span class='badge ")
-				.append(xmlBadgeClass).append("'>").append(xmlStatus).append("</span></p>");
+				.append(xmlBadgeClass).append("'>").append(escapeHtml(xmlStatus)).append("</span></p>");
 
-		String runTimeFormatted = (dto.getRunTime() != null) ? sdf.format(java.sql.Timestamp.valueOf(dto.getRunTime()))
-				: "N/A";
-		html.append("<p style='text-align:center;margin:6px 0'><b>Executed On:</b> ").append(runTimeFormatted)
-				.append("</p>");
+		String runTimeFormatted = (dto.getRunTime() != null) ? sdf.format(Timestamp.valueOf(dto.getRunTime())) : "N/A";
+		html.append("<p style='text-align:center;margin:6px 0'><b>Executed On:</b> ")
+				.append(escapeHtml(runTimeFormatted)).append("</p>");
 
 		// Counts
 		int passedCount = 0, failedCount = 0, unexecutedCount = 0;
@@ -527,29 +758,322 @@ public class TestCaseReportService {
 			Object runSummaryObj = output.get("runSummary");
 			if (runSummaryObj instanceof Map) {
 				Map<String, Object> summary = (Map<String, Object>) runSummaryObj;
-				passedCount = Integer.parseInt(summary.getOrDefault("totalPassedScenarios", 0).toString());
-				failedCount = Integer.parseInt(summary.getOrDefault("totalFailedScenarios", 0).toString());
-				unexecutedCount = Integer.parseInt(summary.getOrDefault("totalUnexecutedScenarios", 0).toString());
+				try {
+					passedCount = Integer.parseInt(summary.getOrDefault("totalPassedScenarios", 0).toString());
+				} catch (Exception ignore) {
+				}
+				try {
+					failedCount = Integer.parseInt(summary.getOrDefault("totalFailedScenarios", 0).toString());
+				} catch (Exception ignore) {
+				}
+				try {
+					unexecutedCount = Integer.parseInt(summary.getOrDefault("totalUnexecutedScenarios", 0).toString());
+				} catch (Exception ignore) {
+				}
 			}
 		}
 
+		// Top-level lists (unchanged)
 		html.append(buildSection("Passed Scenarios", passedCount, "passedScenarios", buildPassedScenarios(dto),
 				passedCount == 0));
 		html.append(buildSection("Failed Scenarios", failedCount, "failedScenarios", buildFailedScenarios(dto),
 				failedCount == 0));
 		html.append(buildSection("Unexecuted Scenarios", unexecutedCount, "unexecutedScenarios",
 				buildUnexecutedScenarios(dto), unexecutedCount == 0));
-		html.append(buildSection("XML Differences", -1, "xmlDiff", buildXmlDifferencesFixed(dto), false));
 
-		html.append(buildSection("Expected Vs Actual", -1, "xmlDomDiff", buildXmlSideBySide(dto), false));
-		html.append(buildSection("Semantic XML Differences", -1, "xmlSemantic", buildSemanticXmlDiff(dto), true));
+		// === Examples grouped under single XML Differences section ===
+		if (exampleRows == null || exampleRows.isEmpty()) {
+			// fallback to history-level output
+			html.append(buildSection("XML Differences", -1, "xmlDiff", buildXmlDifferencesFixed(dto), false));
+			html.append(buildSection("Expected Vs Actual", -1, "xmlDomDiff", buildXmlSideBySide(dto), false));
+			html.append(buildSection("Semantic XML Differences", -1, "xmlSemantic", buildSemanticXmlDiff(dto), true));
+		} else {
+			StringBuilder xmlGroup = new StringBuilder();
+			xmlGroup.append("<div class='examples-group'>");
 
+			int idx = 0;
+			for (ScenarioExampleRunDTO ex : exampleRows) {
+				String title = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
+				String status = ex.getStatus() == null ? "N/A" : ex.getStatus();
+				String xmlStatusSce = ex.getXmlDiffStatus() == null ? "N/A" : ex.getXmlDiffStatus();
+
+				xmlGroup.append("<div class='section example-card' id='exampleCard").append(idx).append("'>");
+				xmlGroup.append("<div class='section-header'>");
+
+				// left: title
+				xmlGroup.append("<div class='section-title' style='font-size:14px;'>").append(escapeHtml(title))
+						.append("</div>");
+
+				// right: controls (badges + buttons)
+				xmlGroup.append("<div class='section-controls'>");
+
+				// status badge (run status)
+//				xmlGroup.append("<div class='section-subtitle'>").append(renderStatusBadge(status)).append("</div>");
+
+				// xml badge (example-wise xml result)
+				xmlGroup.append("<div class='section-subtitle'>").append(renderXmlBadge(xmlStatusSce)).append("</div>");
+
+				// toggle buttons
+				xmlGroup.append("<div style='display:flex;gap:6px;'>")
+						.append("<button class='toggle-btn' onclick=\"toggle('xmlDiffEx").append(idx)
+						.append("')\">Toggle XML Differences</button>")
+						.append("<button class='toggle-btn' onclick=\"toggle('ssbEx").append(idx)
+						.append("')\">Toggle Expected Vs Actual</button>")
+						.append("<button class='toggle-btn' onclick=\"toggle('semEx").append(idx)
+						.append("')\">Toggle Semantic XML Differences</button>").append("</div>");
+
+				xmlGroup.append("</div>"); // end section-controls
+				xmlGroup.append("</div>"); // end section-header
+
+				try {
+					String xmlDiffHtml = buildXmlDifferencesFixed(ex, dto);
+					xmlGroup.append((xmlDiffHtml == null || xmlDiffHtml.trim().isEmpty())
+							? "<div class='log-box'>No XML differences or unexecuted scenarios found</div>"
+							: xmlDiffHtml);
+				} catch (Exception e) {
+					logger.warn("buildXmlDifferencesFixed threw for example {}: {}", idx, e.getMessage());
+					xmlGroup.append("<div class='log-box'>Error rendering XML Differences.</div>");
+				}
+				xmlGroup.append("</div>");
+
+				// Expected Vs Actual (open by default) with header
+				xmlGroup.append("<div id='ssbEx").append(idx)
+						.append("' style='display:block;margin:6px 0;padding:6px 0;'>")
+						.append("<div style='font-weight:600;margin-bottom:6px;'>Expected Vs Actual</div>");
+				try {
+					String ssbHtml = buildXmlSideBySide(ex);
+					xmlGroup.append((ssbHtml == null || ssbHtml.trim().isEmpty())
+							? "<div class='log-box'>No XML content available — both Expected and Actual files are empty or missing.</div>"
+							: ssbHtml);
+				} catch (Exception e) {
+					logger.warn("buildXmlSideBySide threw for example {}: {}", idx, e.getMessage());
+					xmlGroup.append("<div class='log-box'>Error rendering Expected Vs Actual.</div>");
+				}
+				xmlGroup.append("</div>");
+
+				// Semantic (collapsed by default) with header
+				xmlGroup.append("<div id='semEx").append(idx)
+						.append("' style='display:none;margin:6px 0;padding:6px 0;'>")
+						.append("<div style='font-weight:600;margin-bottom:6px;'>Semantic XML Differences</div>");
+				try {
+					String semHtml = buildSemanticXmlDiff(ex);
+					xmlGroup.append((semHtml == null || semHtml.trim().isEmpty())
+							? "<div class='log-box'>Semantic comparison skipped — both Expected and Actual XML are empty or missing.</div>"
+							: semHtml);
+				} catch (Exception e) {
+					logger.warn("buildSemanticXmlDiff threw for example {}: {}", idx, e.getMessage());
+					xmlGroup.append("<div class='log-box'>Error rendering Semantic XML Differences.</div>");
+				}
+				xmlGroup.append("</div>");
+
+				xmlGroup.append("</div>"); // end example-card
+				idx++;
+			}
+
+			xmlGroup.append("</div>"); // end examples-group
+			html.append(buildSection("XML Differences", -1, "xmlDiffPerExample", xmlGroup.toString(), false));
+		}
+
+		// Raw logs / summary
 		html.append(buildSection("Raw Cucumber Logs", -1, "rawLogs", buildRawLogs(dto), false));
 		html.append(buildSection("Raw Cucumber Summary", -1, "rawSummary", buildRawSummary(dto), false));
 
 		html.append("</body></html>");
 		return html.toString();
 	}
+
+	@SuppressWarnings("unchecked")
+	public String generateHtmlReport3(TestCaseRunHistoryDTO dto, ScenarioExampleRunDTO scDTO,
+			List<ScenarioExampleRunDTO> exampleRows) {
+		SimpleDateFormat sdf = new SimpleDateFormat("EEEE, dd MMMM yyyy hh:mm a");
+
+		StringBuilder html = new StringBuilder();
+		html.append(cssAndJs());
+		// Header
+		html.append("<h1><span class='icon'>📋</span>Test Case Execution Report")
+				.append("<span class='pdf-icon' onclick='expandAllAndPrint()'>🖨️</span>")
+				.append("<span class='dark-toggle' onclick='toggleDark()'>🌙</span></h1>");
+
+		String runStatus = dto.getRunStatus() == null ? "N/A" : dto.getRunStatus();
+		String runBadgeClass = runStatus.toLowerCase().contains("fail") ? "badge-fail"
+				: runStatus.toLowerCase().contains("error") ? "badge-fail"
+						: runStatus.toLowerCase().contains("unex") ? "badge-warn"
+								: runStatus.toLowerCase().contains("part") ? "badge-warn" : "badge-pass";
+		html.append("<p style='text-align:center;margin:6px 0'><b>TC Status:</b> <span class='badge ")
+				.append(runBadgeClass).append("'>").append(escapeHtml(runStatus)).append("</span></p>");
+
+		String xmlStatus = dto.getXmlDiffStatus() == null ? "N/A" : dto.getXmlDiffStatus();
+		String xmlBadgeClass = "Matched".equalsIgnoreCase(xmlStatus) ? "badge-xml-pass" : "badge-xml-fail";
+		html.append("<p style='text-align:center;margin:6px 0'><b>XML Difference:</b> <span class='badge ")
+				.append(xmlBadgeClass).append("'>").append(escapeHtml(xmlStatus)).append("</span></p>");
+
+		String runTimeFormatted = (dto.getRunTime() != null) ? sdf.format(java.sql.Timestamp.valueOf(dto.getRunTime()))
+				: "N/A";
+		html.append("<p style='text-align:center;margin:6px 0'><b>Executed On:</b> ")
+				.append(escapeHtml(runTimeFormatted)).append("</p>");
+
+		// Counts (unchanged logic)
+		int passedCount = 0, failedCount = 0, unexecutedCount = 0;
+		if (dto.getOutputLog() instanceof Map) {
+			Map<String, Object> output = (Map<String, Object>) dto.getOutputLog();
+			Object runSummaryObj = output.get("runSummary");
+			if (runSummaryObj instanceof Map) {
+				Map<String, Object> summary = (Map<String, Object>) runSummaryObj;
+				try {
+					passedCount = Integer.parseInt(summary.getOrDefault("totalPassedScenarios", 0).toString());
+				} catch (Exception ignore) {
+				}
+				try {
+					failedCount = Integer.parseInt(summary.getOrDefault("totalFailedScenarios", 0).toString());
+				} catch (Exception ignore) {
+				}
+				try {
+					unexecutedCount = Integer.parseInt(summary.getOrDefault("totalUnexecutedScenarios", 0).toString());
+				} catch (Exception ignore) {
+				}
+			}
+		}
+
+		// Keep top-level Passed/Failed/Unexecuted sections (same builders you already
+		// have)
+		html.append(buildSection("Passed Scenarios", passedCount, "passedScenarios", buildPassedScenarios(dto),
+				passedCount == 0));
+		html.append(buildSection("Failed Scenarios", failedCount, "failedScenarios", buildFailedScenarios(dto),
+				failedCount == 0));
+		html.append(buildSection("Unexecuted Scenarios", unexecutedCount, "unexecutedScenarios",
+				buildUnexecutedScenarios(dto), unexecutedCount == 0));
+
+		// === New behavior: prefer per-example display when exampleRows available ===
+		if (exampleRows == null || exampleRows.isEmpty()) {
+			// fallback to history-level output (unchanged)
+			html.append(buildSection("XML Differences", -1, "xmlDiff", buildXmlDifferencesFixed(dto), false));
+			html.append(buildSection("Expected Vs Actual", -1, "xmlDomDiff", buildXmlSideBySide(dto), false));
+			html.append(buildSection("Semantic XML Differences", -1, "xmlSemantic", buildSemanticXmlDiff(dto), true));
+		} else {
+			// Build per-example differences table fragment
+			StringBuilder diffTableBuilder = new StringBuilder();
+			diffTableBuilder.append("<div style='margin-top:10px;'>");
+			diffTableBuilder
+					.append("<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>");
+			diffTableBuilder.append("<thead><tr>").append("<th>Scenario</th>").append("<th>Scenario Type</th>")
+					.append("<th>Example Header</th>").append("<th>Example Values</th>").append("<th>Differences</th>")
+					.append("</tr></thead><tbody>");
+
+			int idx = 0;
+			for (ScenarioExampleRunDTO ex : exampleRows) {
+				// defensive parse of differences
+				List<Map<String, Object>> diffs = new ArrayList<>();
+				Object diffsObj = ex.getDifferences();
+				if (diffsObj instanceof List) {
+					for (Object o : (List<?>) diffsObj) {
+						if (o instanceof Map)
+							diffs.add((Map<String, Object>) o);
+					}
+				}
+				int diffCount = diffs.size();
+
+				String scenario = ex.getScenarioName() == null ? "-" : ex.getScenarioName();
+				String scenarioType = ex.getScenarioType() == null ? "-" : ex.getScenarioType();
+				String headerRendered = renderExampleHeader(ex); // lists -> comma
+				String valuesRendered = renderExampleValues(ex); // values-only CSV or list
+
+				diffTableBuilder.append("<tr class='")
+						.append("Passed".equalsIgnoreCase(ex.getStatus()) ? "row-pass" : "row-fail").append("'><td>")
+						.append(escapeHtml(scenario)).append("</td>").append("<td>").append(escapeHtml(scenarioType))
+						.append("</td>").append("<td>").append(headerRendered).append("</td>").append("<td>")
+						.append(valuesRendered).append("</td>").append("<td style='white-space:nowrap'>");
+
+				if (diffCount > 0) {
+					diffTableBuilder.append("<button class='view-btn' onclick=\"toggle('diffInner").append(idx)
+							.append("')\">View</button>").append("<span class='diff-badge fail'>").append(diffCount)
+							.append("</span>");
+				} else {
+					diffTableBuilder.append("-");
+				}
+				diffTableBuilder.append("</td></tr>");
+
+				// inner details
+				if (diffCount > 0) {
+					diffTableBuilder.append("<tr id='diffInner").append(idx)
+							.append("' class='inner-row' style='display:none'><td colspan='5'>")
+							.append("<table class='inner-table'><thead><tr><th>XPath</th><th>Node</th><th>Type</th><th>Details</th></tr></thead><tbody>");
+					for (Map<String, Object> d : diffs) {
+						String xpath = String.valueOf(d.getOrDefault("xpath", "-"));
+						String node = String.valueOf(d.getOrDefault("node", "-"));
+						String type = String.valueOf(d.getOrDefault("differenceType", d.getOrDefault("type", "-")));
+						String details = formatMismatchDetails(d);
+						diffTableBuilder.append("<tr><td>").append(escapeHtml(xpath)).append("</td><td>")
+								.append(escapeHtml(node)).append("</td><td>").append(escapeHtml(type))
+								.append("</td><td>").append(escapeHtml(details)).append("</td></tr>");
+					}
+					diffTableBuilder.append("</tbody></table></td></tr>");
+				}
+
+				idx++;
+			}
+
+			diffTableBuilder.append("</tbody></table></div>");
+			html.append(buildSection("XML Differences", -1, "xmlDiffPerExample", diffTableBuilder.toString(), false));
+
+			// Expected Vs Actual - per example (wrap each fragment in section content)
+			StringBuilder ssbFrag = new StringBuilder();
+			ssbFrag.append("<div style='margin-top:10px;'>");
+			idx = 0;
+			for (ScenarioExampleRunDTO ex : exampleRows) {
+				String label = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
+				ssbFrag.append("<div style='margin-top:10px;padding:8px;border:1px solid #eee;border-radius:6px;'>");
+				ssbFrag.append("<div style='display:flex;justify-content:space-between;align-items:center'>")
+						.append("<div style='font-size: 14px'>").append(escapeHtml(label)).append("</div>")
+						.append("<div><button class='view-btn' onclick=\"toggle('ssb").append(idx)
+						.append("')\">Toggle Side-by-side</button></div>").append("</div>");
+
+				ssbFrag.append("<div id='ssb").append(idx).append("' style='display:none;margin-top:8px;'>");
+				ssbFrag.append(buildXmlSideBySide(ex)); // fragment expected
+				ssbFrag.append("</div></div>");
+				idx++;
+			}
+			ssbFrag.append("</div>");
+			html.append(buildSection("Expected Vs Actual", -1, "xmlDomDiffPerExample", ssbFrag.toString(), true));
+
+			// --- Per-example Semantic Differences (grouped inside a section) ---
+			StringBuilder semBuilder = new StringBuilder();
+			semBuilder.append("<div style='margin-top:10px;'>");
+			idx = 0;
+			for (ScenarioExampleRunDTO ex : exampleRows) {
+				String label = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
+				semBuilder.append("<div style='margin-top:10px;padding:8px;border:1px solid #eee;border-radius:6px;'>");
+				semBuilder.append("<div style='font-size: 14px;margin-block: 8px'>").append(escapeHtml(label))
+						.append("</div>");
+				semBuilder.append(buildSemanticXmlDiff(ex)); // must return fragment-only HTML
+				semBuilder.append("</div>");
+				idx++;
+			}
+			semBuilder.append("</div>");
+			html.append(
+					buildSection("Semantic XML Differences", -1, "xmlSemanticPerExample", semBuilder.toString(), true)); // Size
+		} // end per-example block
+
+		// Raw logs / summary (unchanged)
+		html.append(buildSection("Raw Cucumber Logs", -1, "rawLogs", buildRawLogs(dto), false));
+		html.append(buildSection("Raw Cucumber Summary", -1, "rawSummary", buildRawSummary(dto), false));
+
+		html.append("</body></html>");
+		return html.toString();
+	}
+
+//	private String formatMismatchDetails(Map<String, Object> d) {
+//		if (d == null)
+//			return "-";
+//		if (d.get("description") != null)
+//			return String.valueOf(d.get("description"));
+//		if (d.get("message") != null)
+//			return String.valueOf(d.get("message"));
+//		StringBuilder sb = new StringBuilder();
+//		for (Map.Entry<String, Object> e : d.entrySet()) {
+//			sb.append(e.getKey()).append(": ").append(String.valueOf(e.getValue())).append("; ");
+//		}
+//		return sb.toString();
+//	}
 
 	private String preprocessXml(String xml) {
 		if (xml == null)
@@ -695,99 +1219,6 @@ public class TestCaseReportService {
 			matcher.appendReplacement(sb, Matcher.quoteReplacement(collapsed));
 		}
 		matcher.appendTail(sb);
-
-		return sb.toString();
-	}
-
-	private String buildXmlSideBySide2(TestCaseRunHistoryDTO dto) {
-		final boolean SWAP_COLORS = true; // true = original is red, modified is green
-
-		String expected = dto.getInputXmlContent() == null ? ""
-				: normalizeLargeCDataForDiff(dto.getInputXmlContent().trim());
-
-		String actual = dto.getOutputXmlContent() == null ? ""
-				: normalizeLargeCDataForDiff(dto.getOutputXmlContent().trim());
-
-		// String expected = alignExpectedWithSkippedTags(expectedRaw, actual);
-
-		// Remove runtime-only tags from Actual XML before diff
-		actual = preprocessXml(actual);
-
-		String o = jsEscapeForJsLiteral(expected);
-		String m = jsEscapeForJsLiteral(actual);
-
-		StringBuilder sb = new StringBuilder();
-		sb.append(
-				"<div id='container' style='border:1px solid var(--border-color,#555); border-radius:6px; overflow:hidden;'>")
-				.append("<div id='diffEditor' style='width:100%; height:auto;'></div>")
-				.append("<script src='https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js'></script>")
-				.append("<script>")
-				.append("require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});")
-				.append("require(['vs/editor/editor.main'], function() {")
-				.append("  function isDarkMode(){return document.body.classList.contains('dark');}")
-				.append("  function applyDiffColors(){")
-				.append("    var s=document.getElementById('diffColorStyles'); if(s) s.remove();")
-				.append("    s=document.createElement('style'); s.id='diffColorStyles';")
-
-				// ===== DARK MODE COLORS =====
-				.append("    if(isDarkMode()){").append("      s.innerHTML=`").append(SWAP_COLORS
-						// SWAPPED: Original red, Modified green
-						? "        .monaco-editor .line-insert,.monaco-editor .line-insert td{background-color:rgba(255,0,0,0.20)!important}\n" // RED
-								+ "        .monaco-editor .line-delete,.monaco-editor .line-delete td{background-color:rgba(50,205,50,0.20)!important}\n" // GREEN
-								+ "        .monaco-editor .char-insert{background-color:rgba(255,0,0,0.40)!important}\n"
-								+ "        .monaco-editor .char-delete{background-color:rgba(50,205,50,0.40)!important}"
-						// DEFAULT: Original green, Modified red
-						: "        .monaco-editor .line-insert,.monaco-editor .line-insert td{background-color:rgba(50,205,50,0.20)!important}\n"
-								+ "        .monaco-editor .line-delete,.monaco-editor .line-delete td{background-color:rgba(255,0,0,0.20)!important}\n"
-								+ "        .monaco-editor .char-insert{background-color:rgba(50,205,50,0.40)!important}\n"
-								+ "        .monaco-editor .char-delete{background-color:rgba(255,0,0,0.40)!important}")
-				.append("`;")
-
-				// ===== LIGHT MODE COLORS =====
-				.append("    } else {").append("      s.innerHTML=`").append(SWAP_COLORS
-						// SWAPPED: Original red, Modified green
-						? "        .monaco-editor .line-insert,.monaco-editor .line-insert td{background-color:rgba(255,0,0,0.35)!important}\n" // RED
-								+ "        .monaco-editor .line-delete,.monaco-editor .line-delete td{background-color:rgba(144,238,144,0.35)!important}\n" // GREEN
-								+ "        .monaco-editor .char-insert{background-color:rgba(255,0,0,0.60)!important}\n"
-								+ "        .monaco-editor .char-delete{background-color:rgba(144,238,144,0.60)!important}"
-						// DEFAULT: Original green, Modified red
-						: "        .monaco-editor .line-insert,.monaco-editor .line-insert td{background-color:rgba(144,238,144,0.35)!important}\n"
-								+ "        .monaco-editor .line-delete,.monaco-editor .line-delete td{background-color:rgba(255,0,0,0.35)!important}\n"
-								+ "        .monaco-editor .char-insert{background-color:rgba(144,238,144,0.60)!important}\n"
-								+ "        .monaco-editor .char-delete{background-color:rgba(255,0,0,0.60)!important}")
-				.append("`;")
-
-				.append("    } document.head.appendChild(s); }")
-
-				// Monaco editor init
-				.append("  var theme=isDarkMode()?'vs-dark':'vs';")
-				.append("  var originalModel=monaco.editor.createModel(\"").append(o).append("\", 'xml');")
-				.append("  var modifiedModel=monaco.editor.createModel(\"").append(m).append("\", 'xml');")
-				.append("  window.diffEditor=monaco.editor.createDiffEditor(document.getElementById('diffEditor'),{")
-				.append("    readOnly:true, renderSideBySide:true, automaticLayout:true, scrollBeyondLastLine:false,")
-				.append("    renderFinalNewline:false, minimap:{enabled:false}, renderIndicators:false,")
-				.append("    overviewRulerBorder:false, renderOverviewRuler:false});")
-				.append("  diffEditor.setModel({original:originalModel, modified:modifiedModel});")
-				.append("  var oe=diffEditor.getOriginalEditor(); var me=diffEditor.getModifiedEditor();")
-				.append("  oe.updateOptions({wordWrap:'on', maxTokenizationLineLength:200000, renderWhitespace:'none'});")
-				.append("  me.updateOptions({wordWrap:'on', maxTokenizationLineLength:200000, renderWhitespace:'none'});")
-				.append("  monaco.editor.setTheme(theme); applyDiffColors();")
-				.append("  new MutationObserver(applyDiffColors).observe(document.body,{attributes:true,attributeFilter:['class']});")
-				.append("  setTimeout(function(){ var lineCount=me.getModel().getLineCount();")
-				.append("    var h=(lineCount*19)+20; document.getElementById('diffEditor').style.height=h+'px'; diffEditor.layout();")
-				.append("    document.querySelectorAll('.decorationsOverviewRuler, .overviewRuler, .original.diffOverviewRuler, .modified.diffOverviewRuler')")
-				.append("      .forEach(function(r){r.style.display='none'; r.style.width='0'; r.style.overflow='hidden';});")
-				.append("    document.querySelectorAll('.monaco-editor .margin,.monaco-editor .glyph-margin').forEach(function(m){m.style.background='transparent'});")
-				.append("  },250); });</script>").append("<style>")
-				.append(".monaco-diff-editor .monaco-sash.vertical{background-color:#666!important;opacity:1!important;width:4px!important}")
-				.append(".monaco-diff-editor .monaco-sash.vertical:hover{background-color:#999!important}")
-				.append(".monaco-diff-editor .monaco-sash.horizontal{background-color:#666!important;opacity:1!important;height:4px!important}")
-				.append(".monaco-diff-editor .scroll-decoration{display:none!important}")
-				.append(".monaco-editor .decorationsOverviewRuler, .monaco-editor .overviewRuler,")
-				.append(".monaco-diff-editor .original.diffOverviewRuler, .monaco-diff-editor .modified.diffOverviewRuler ")
-				.append("{display:none!important; width:0!important; overflow:hidden!important}")
-				.append(".monaco-editor .token.comment color: gray !important; font-style: italic;background-color: rgba(128,128,128,0.15) !important;}")
-				.append("</style></div>");
 
 		return sb.toString();
 	}
@@ -1015,9 +1446,8 @@ public class TestCaseReportService {
 
 		if (rows.isEmpty()) {
 			StringBuilder html = new StringBuilder();
-			html.append("<style>")
-					.append(".sem-xml{font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif;padding:12px;}")
-					.append(".same-box{border:1px solid #ccc;border-radius:6px;padding:12px;"
+			html.append("<style>").append(".sem-xml{font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif;}")
+					.append(".same-box{border:1px solid #ccc;"
 							+ "background:#f6ffed;color:#1a531b;font-size:14px;font-weight:500;}")
 					.append("body.dark .same-box{background:#1a2a1a;color:#b7f7b7;border-color:#335533;}")
 					.append("</style>");
@@ -1255,6 +1685,740 @@ public class TestCaseReportService {
 		return html.toString();
 	}
 
+	// Example-wise version
+	private String buildSemanticXmlDiffOld(ScenarioExampleRunDTO row) {
+		final boolean NEW_IS_RED = true;
+
+		// Use row id for stable unique prefix, fallback to identityHashCode
+		String uid = (row != null && row.getId() != null) ? "sem" + row.getId()
+				: "sem" + Integer.toHexString(System.identityHashCode(row));
+
+		String expected = row.getInputXml() == null ? "" : row.getInputXml().trim();
+		String actual = row.getOutputXml() == null ? "" : row.getOutputXml().trim();
+
+		// Guard clause: missing XML content
+		if (expected.isEmpty() || actual.isEmpty()) {
+			StringBuilder msg = new StringBuilder("Semantic comparison skipped — ");
+			if (expected.isEmpty() && actual.isEmpty()) {
+				msg.append("both Expected and Actual XML are empty or missing.");
+			} else if (expected.isEmpty()) {
+				msg.append("Expected XML is missing, so comparison could not be performed.");
+			} else if (actual.isEmpty()) {
+				msg.append("Actual XML is missing, so comparison could not be performed.");
+			}
+			return noScenarioAligned(msg.toString(), 5);
+		}
+
+		Diff diff = DiffBuilder.compare(Input.fromString(expected)).withTest(Input.fromString(actual))
+				.ignoreWhitespace().checkForSimilar().build();
+
+		Map<String, String> friendly = new LinkedHashMap<>();
+		friendly.put("TEXT_VALUE", "Text changed");
+		friendly.put("CHILD_NODELIST_LENGTH", "Number of child elements changed");
+		friendly.put("ELEMENT_TAG_NAME", "Tag name changed");
+		friendly.put("NAMESPACE_URI", "Namespace changed");
+		friendly.put("NAMESPACE_PREFIX", "Namespace prefix changed");
+		friendly.put("ATTR_VALUE", "Attribute value changed");
+		friendly.put("ATTR_NAME_LOOKUP", "Attribute presence/lookup changed");
+		friendly.put("ATTR_NAME", "Attribute name changed");
+		friendly.put("ATTR_PREFIX", "Attribute prefix changed");
+		friendly.put("SCHEMA_LOCATION", "Schema location changed");
+		friendly.put("NO_NAMESPACE_SCHEMA_LOCATION", "No-namespace schema location changed");
+		friendly.put("XML_VERSION", "XML version changed");
+		friendly.put("XML_STANDALONE", "XML standalone flag changed");
+		friendly.put("HAS_DOCTYPE_DECLARATION", "Doctype declaration changed");
+		friendly.put("DOCTYPE_NAME", "Doctype name changed");
+		friendly.put("DOCTYPE_PUBLIC_ID", "Doctype publicId changed");
+		friendly.put("DOCTYPE_SYSTEM_ID", "Doctype systemId changed");
+		friendly.put("PROCESSING_INSTRUCTION_TARGET", "Processing-instruction target changed");
+		friendly.put("PROCESSING_INSTRUCTION_DATA", "Processing-instruction data changed");
+		friendly.put("COMMENT_VALUE", "Comment changed");
+		friendly.put("CHILD_LOOKUP", "Child lookup changed");
+		friendly.put("CHILD_NODELIST_SEQUENCE", "Child order changed");
+		friendly.put("ELEMENT_NUM_ATTRIBUTES", "Attribute count changed");
+
+		class Row {
+			String typeKey, typeFriendly, topGroup, subPath, left, right;
+		}
+
+		// --- Pass 1: collect differences ---
+		List<Difference> all = new ArrayList<>();
+		for (Difference d : diff.getDifferences()) {
+			all.add(d);
+		}
+
+		// --- Pass 2: pick the shallowest XPath for each namespace change ---
+		Map<String, Difference> bestNamespaceDiffs = new LinkedHashMap<>();
+		for (Difference d : all) {
+			Comparison c = d.getComparison();
+			ComparisonType type = c.getType();
+			if (type == ComparisonType.NAMESPACE_URI || type == ComparisonType.NAMESPACE_PREFIX) {
+				String control = String.valueOf(c.getControlDetails().getValue());
+				String test = String.valueOf(c.getTestDetails().getValue());
+				String key = type.name() + ":" + control + "→" + test;
+
+				String xp = c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
+						: c.getTestDetails().getXPath();
+				int depth = (xp == null) ? Integer.MAX_VALUE : xp.split("/").length;
+
+				Difference currentBest = bestNamespaceDiffs.get(key);
+				if (currentBest == null) {
+					bestNamespaceDiffs.put(key, d);
+				} else {
+					String oldXp = currentBest.getComparison().getControlDetails().getXPath();
+					if (oldXp == null)
+						oldXp = currentBest.getComparison().getTestDetails().getXPath();
+					int oldDepth = (oldXp == null) ? Integer.MAX_VALUE : oldXp.split("/").length;
+					if (depth < oldDepth) {
+						bestNamespaceDiffs.put(key, d);
+					}
+				}
+			}
+		}
+
+		// --- Pass 3: build rows, skipping duplicate/inherited namespace diffs ---
+		List<Row> rows = new ArrayList<>();
+		for (Difference d : all) {
+			Comparison c = d.getComparison();
+			ComparisonType type = c.getType();
+
+			if (type == ComparisonType.NAMESPACE_URI || type == ComparisonType.NAMESPACE_PREFIX) {
+				String control = String.valueOf(c.getControlDetails().getValue());
+				String test = String.valueOf(c.getTestDetails().getValue());
+				String key = type.name() + ":" + control + "→" + test;
+				if (bestNamespaceDiffs.get(key) != d) {
+					continue;
+				}
+			}
+
+			Row r = new Row();
+			r.typeKey = type.name();
+			r.typeFriendly = friendly.containsKey(r.typeKey) ? friendly.get(r.typeKey) : "Other change";
+			r.left = String.valueOf(c.getControlDetails().getValue());
+			r.right = String.valueOf(c.getTestDetails().getValue());
+
+			String xp = c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
+					: c.getTestDetails().getXPath();
+			if (xp == null)
+				xp = "/";
+			String[] parts = xp.split("(?=\\/[^\\/]+\\[\\d+\\])");
+			r.topGroup = parts.length > 1 ? parts[0] + parts[1] : parts[0];
+			r.subPath = xp;
+
+			rows.add(r);
+		}
+
+		if (rows.isEmpty()) {
+			StringBuilder html = new StringBuilder();
+			html.append("<style>")
+					.append(".sem-xml{font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif;padding:12px;}")
+					.append(".same-box{border:1px solid #ccc;border-radius:6px;padding:12px;"
+							+ "background:#f6ffed;color:#1a531b;font-size:14px;font-weight:500;}")
+					.append("body.dark .same-box{background:#1a2a1a;color:#b7f7b7;border-color:#335533;}")
+					.append("</style>");
+			html.append("<div class='sem-xml'>")
+					.append("<div class='same-box'>✅ No semantic differences found — XMLs are identical.</div>")
+					.append("</div>");
+			return html.toString();
+		}
+
+		// grouping & counts
+		Map<String, Long> typeCounts = rows.stream()
+				.collect(Collectors.groupingBy(r -> r.typeFriendly, LinkedHashMap::new, Collectors.counting()));
+		Map<String, List<Row>> byGroup = rows.stream()
+				.collect(Collectors.groupingBy(r -> r.topGroup, LinkedHashMap::new, Collectors.toList()));
+		List<String> parentOrder = new ArrayList<>(byGroup.keySet());
+
+		Map<String, Integer> typeHue = new LinkedHashMap<>();
+		for (String t : typeCounts.keySet())
+			typeHue.put(t, positiveHue(t));
+		Map<String, Integer> tagHue = new LinkedHashMap<>();
+		for (String g : parentOrder)
+			tagHue.put(g, positiveHue("TAG|" + g));
+
+		// colors (kept)
+		final String GREEN_LIGHT_BG = "#e6ffec", GREEN_LIGHT_FG = "#1f3321";
+		final String RED_LIGHT_BG = "#ffe6e6", RED_LIGHT_FG = "#331f1f";
+		final String GREEN_DARK_BG = "#1f3321", GREEN_DARK_FG = "#d9f3db";
+		final String RED_DARK_BG = "#331f1f", RED_DARK_FG = "#ffd6d6";
+
+		String expectedLightBg = NEW_IS_RED ? GREEN_LIGHT_BG : RED_LIGHT_BG;
+		String expectedLightFg = NEW_IS_RED ? GREEN_LIGHT_FG : RED_LIGHT_FG;
+		String actualLightBg = NEW_IS_RED ? RED_LIGHT_BG : GREEN_LIGHT_BG;
+		String actualLightFg = NEW_IS_RED ? RED_LIGHT_FG : GREEN_LIGHT_FG;
+
+		String expectedDarkBg = NEW_IS_RED ? GREEN_DARK_BG : RED_DARK_BG;
+		String expectedDarkFg = NEW_IS_RED ? GREEN_DARK_FG : RED_DARK_FG;
+		String actualDarkBg = NEW_IS_RED ? RED_DARK_BG : GREEN_DARK_BG;
+		String actualDarkFg = NEW_IS_RED ? RED_DARK_FG : GREEN_DARK_FG;
+
+		StringBuilder html = new StringBuilder();
+
+		// CSS block (kept) - no id collisions because JS selectors below are namespaced
+		html.append("<style>").append(":root{--hdr-bg:#f5f7fa;--hdr-fg:#222;--border:#d0d7de;")
+				.append("--tbl-head-bg:#f0f2f5;--tbl-head-fg:#222;--tbl-row-bg:#fff;--tbl-row-alt:#fafafa;")
+				.append("--chip-fg:#000;").append("--expected-bg:").append(expectedLightBg).append(";--expected-fg:")
+				.append(expectedLightFg).append(";").append("--actual-bg:").append(actualLightBg)
+				.append(";--actual-fg:").append(actualLightFg).append(";")
+				.append("--type-s:55%;--type-l:88%;--type-text-s:45%;--type-text-l:28%;")
+				.append("--tag-s:50%;--tag-l:90%;--tag-text-s:40%;--tag-text-l:26%;")
+				.append("--grp-tint-light:12%;--type-tint-light:10%;")
+				.append("--icon-fg:#4a5568;--icon-bg:transparent;--icon-hover-bg:rgba(0,0,0,0.05);")
+				.append("--diff-font:12.5px;}").append("body.dark{--hdr-bg:#2f333a;--hdr-fg:#ddd;--border:#4a4f55;")
+				.append("--tbl-head-bg:#1f2228;--tbl-head-fg:#ddd;--tbl-row-bg:#2a2d33;--tbl-row-alt:#26292f;--chip-fg:#fff;")
+				.append("--expected-bg:").append(expectedDarkBg).append(";--expected-fg:").append(expectedDarkFg)
+				.append(";").append("--actual-bg:").append(actualDarkBg).append(";--actual-fg:").append(actualDarkFg)
+				.append(";").append("--type-s:35%;--type-l:26%;--type-text-s:35%;--type-text-l:78%;")
+				.append("--tag-s:32%;--tag-l:28%;--tag-text-s:35%;--tag-text-l:80%;")
+				.append("--grp-tint-dark:18%;--type-tint-dark:15%;--icon-fg:#cbd5e1;--icon-bg:transparent;--icon-hover-bg:rgba(255,255,255,0.08);--diff-font:12px;}")
+				.append(".valL{background:var(--expected-bg)!important;color:var(--expected-fg)!important;}")
+				.append(".valR{background:var(--actual-bg)!important;color:var(--actual-fg)!important;}")
+				.append(".sem-xml{font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif}")
+				.append(".toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--border)}")
+				.append(".toolbar .spacer{flex:1}")
+				.append(".bar-title{font-weight:600;color:var(--hdr-fg);margin-right:4px;font-size:13px;opacity:.9}")
+				.append(".chip{border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600;color:var(--chip-fg);border:1px solid rgba(0,0,0,.04);}")
+				.append(".chip[data-on='0']{opacity:.45;filter:grayscale(25%)}")
+				.append(".type-chip{background:hsl(var(--chip-h), var(--type-s), var(--type-l));}")
+				.append(".tag-chip{background:hsl(var(--chip-h), var(--tag-s), var(--tag-l));}")
+				.append(".iconbtn{border:none;background:var(--icon-bg);color:var(--icon-fg);font-size:14px;border-radius:6px;cursor:pointer;padding:4px 8px;transition:background 0.2s;display:flex;align-items:center;gap:4px}")
+				.append(".iconbtn:hover{background:var(--icon-hover-bg)}")
+				.append(".iconbtn svg{width:14px;height:14px;display:inline-block;}")
+				.append(".tbl{width:100%;border-collapse:collapse;margin-top:8px}")
+				.append(".tbl th,.tbl td{border:1px solid var(--border);padding:6px 8px;vertical-align:top}")
+				.append(".tbl thead th{color:var(--tbl-head-fg);background:#f2f4f7;text-align:left}")
+				.append("body.dark .tbl thead th{color:var(--tbl-head-fg);background:#333;text-align:left}")
+				.append(".grp{cursor:pointer;font-weight:600;color:var(--hdr-fg);background:hsl(var(--chip-h), var(--tag-s), calc(var(--tag-l) - var(--grp-tint-light)));}")
+				.append("body.dark .grp{background:hsl(var(--chip-h), var(--tag-s), calc(var(--tag-l) + var(--grp-tint-dark)));}")
+				.append(".row td:first-child{background:hsl(var(--chip-h), var(--type-s), calc(var(--type-l) - var(--type-tint-light)));}")
+				.append("body.dark .row td:first-child{background:hsl(var(--chip-h), var(--type-s), calc(var(--type-l) + var(--type-tint-dark)));}")
+				.append(".tbl tbody tr:nth-child(even):not(.grp){background:#f4f4f4;} ")
+				.append("body.dark .tbl tbody tr:nth-child(even):not(.grp){background:#383838;} ")
+				.append(".path{font-family:monospace;font-size:12px;opacity:.8;color:var(--hdr-fg)}")
+				.append(".type-tint{background:hsl(var(--chip-h), var(--type-s), var(--type-l));color:var(--chip-fg);font-weight:700;font-size:smaller;padding:2px 6px;border-radius:6px;display:inline-block}")
+				.append(".tag-tint{background:hsl(var(--chip-h), var(--tag-s), var(--tag-l));color:var(--chip-fg);font-weight:700;;font-size:smaller;padding:2px 6px;border-radius:6px;display:inline-block}")
+				.append(".valL,.valR{display:inline-block;white-space:pre-wrap;border-radius:6px;padding:3px 7px;font-size:var(--diff-font)}")
+				.append(".valL{background:var(--expected-bg);color:var(--expected-fg)}")
+				.append(".valR{background:var(--actual-bg);color:var(--actual-fg)}")
+				.append(".toggle-icon{display:inline-block;width:0;height:0;margin-right:6px;border-left:8px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent;cursor:pointer;vertical-align:middle;transition:transform 0.18s ease;}")
+				.append(".grp[data-collapsed='0'] .toggle-icon{transform:rotate(90deg);} ").append("</style>");
+
+		// Build HTML with namespaced IDs
+		html.append("<div class='sem-xml' id='").append(uid).append("'>");
+
+		// Tag Filter Bar
+		html.append("<div class='toolbar' id='").append(uid)
+				.append("-tagBar'><span class='bar-title'>Parent Tag Filter</span>");
+		for (String p : parentOrder) {
+			int hue = tagHue.get(p);
+			html.append("<span class='chip tag-chip' style='--chip-h:").append(hue)
+					.append("' data-kind='tag' data-key=\"").append(escapeHtmlAttr(p)).append("\" data-on='1'>")
+					.append(escapeHtml(p)).append("</span>");
+		}
+		html.append("<span class='spacer'></span>").append("<button class='iconbtn' id='").append(uid)
+				.append("-expAll' title='Expand all'>")
+				.append("<svg viewBox='0 0 24 24'><path fill='currentColor' d='M8 5l8 7-8 7z'/></svg> Expand</button>")
+				.append("<button class='iconbtn' id='").append(uid).append("-colAll' title='Collapse all'>")
+				.append("<svg viewBox='0 0 24 24' style='transform:rotate(180deg);'><path fill='currentColor' d='M8 5l8 7-8 7z'/></svg> Collapse</button>")
+				.append("</div>");
+
+		// Type Filter Bar
+		html.append("<div class='toolbar' id='").append(uid)
+				.append("-typeBar'><span class='bar-title'>Type Filter</span>");
+		for (Map.Entry<String, Long> e : typeCounts.entrySet()) {
+			String label = e.getKey();
+			int hue = typeHue.get(label);
+			html.append("<span class='chip type-chip' style='--chip-h:").append(hue)
+					.append("' data-kind='type' data-key=\"").append(escapeHtmlAttr(label)).append("\" data-on='1'>")
+					.append(escapeHtml(label)).append(" <span style='opacity:.8'></span></span>");
+		}
+		html.append("</div>");
+
+		// Table (namespaced id)
+		String tableId = uid + "-semTbl";
+		html.append("<table class='tbl' id='").append(tableId)
+				.append("'><thead><tr><th>Type</th><th>Expected</th><th>Actual</th></tr></thead><tbody>");
+		int gid = 0;
+		for (Map.Entry<String, List<Row>> g : byGroup.entrySet()) {
+			String groupKey = g.getKey();
+			String groupId = uid + "-g" + (++gid);
+			int ghue = tagHue.get(groupKey);
+
+			html.append("<tr class='grp' data-group='").append(groupId).append("' data-collapsed='0'>")
+					.append("<td colspan='3'><span class='toggle-icon'></span>")
+					.append("<span class='path'>Element: </span>").append("<span class='tag-tint' style='--chip-h:")
+					.append(ghue).append("'>").append(escapeHtml(groupKey)).append("</span></td></tr>");
+
+			for (Row r : g.getValue()) {
+				int thue = typeHue.get(r.typeFriendly);
+				html.append("<tr class='row' data-group='").append(groupId).append("' data-type=\"")
+						.append(escapeHtmlAttr(r.typeFriendly)).append("\" data-parent=\"")
+						.append(escapeHtmlAttr(groupKey)).append("\">")
+						.append("<td><span class='type-tint' style='--chip-h:").append(thue).append("'>")
+						.append(escapeHtml(r.typeFriendly)).append("</span><div class='path'>")
+						.append(escapeHtml(r.subPath)).append("</div></td>").append("<td><span class='valL'>")
+						.append(escapeHtml(r.left)).append("</span></td>").append("<td><span class='valR'>")
+						.append(escapeHtml(r.right)).append("</span></td></tr>");
+			}
+		}
+		html.append("</tbody></table></div>");
+
+		// Namespaced JS for filtering/expand/collapse (operates only within this UID)
+		html.append("<script>(function(){")
+				// helper to query inside specific container
+				.append("var root=document.getElementById('").append(uid).append("');")
+				.append("function q(sel){return Array.prototype.slice.call(root.querySelectorAll(sel));}")
+				.append("function applyFilters(){").append("var activeTypes=new Set(q('#").append(uid)
+				.append("-typeBar .chip[data-on=\"1\"]').map(function(c){return c.getAttribute('data-key');}));")
+				.append("var activeTags=new Set(q('#").append(uid)
+				.append("-tagBar .chip[data-on=\"1\"]').map(function(c){return c.getAttribute('data-key');}));")
+				.append("var parentCounts={}, typeCounts={};").append("q('#").append(tableId)
+				.append(" tbody tr.row').forEach(function(r){")
+				.append("var t=r.getAttribute('data-type'); var p=r.getAttribute('data-parent');")
+				.append("var visible=(activeTypes.has(t) && activeTags.has(p));")
+				.append("r.style.display = visible ? 'table-row' : 'none';")
+				.append("if(visible){ parentCounts[p]=(parentCounts[p]||0)+1; typeCounts[t]=(typeCounts[t]||0)+1; }")
+				.append("});")
+				// parent group visibility
+				.append("q('#").append(tableId).append(" tbody tr.grp').forEach(function(g){")
+				.append("var parentKey=(g.querySelector('.tag-tint')||{}).textContent; parentKey=parentKey?parentKey.trim():'';")
+				.append("var hasVisible=(parentCounts[parentKey]||0)>0;")
+				.append("g.style.display = (activeTags.has(parentKey) && hasVisible) ? 'table-row' : 'none';")
+				.append("});")
+				// update tag counts
+				.append("q('#").append(uid)
+				.append("-tagBar .chip').forEach(function(ch){ var key=ch.getAttribute('data-key'); var count=parentCounts[key]||0; var span=ch.querySelector('.count'); if(!span){ span=document.createElement('span'); span.className='count'; span.style.opacity='0.8'; span.style.marginLeft='4px'; ch.appendChild(span);} span.textContent='('+count+')'; });")
+				// update type counts
+				.append("q('#").append(uid)
+				.append("-typeBar .chip').forEach(function(ch){ var key=ch.getAttribute('data-key'); var count=typeCounts[key]||0; var span=ch.querySelector('.count'); if(!span){ span=document.createElement('span'); span.className='count'; span.style.opacity='0.8'; span.style.marginLeft='4px'; ch.appendChild(span);} span.textContent='('+count+')'; });")
+				.append("}") // end applyFilters
+
+				// chip toggle
+				.append("q('#").append(uid)
+				.append(" .chip').forEach(function(ch){ ch.addEventListener('click', function(){ ch.setAttribute('data-on', ch.getAttribute('data-on')==='1'?'0':'1'); applyFilters(); }); });")
+
+				// expand all
+				.append("document.getElementById('").append(uid)
+				.append("-expAll').onclick=function(){ applyFilters(); q('#").append(tableId)
+				.append(" tbody tr.grp').forEach(function(g){ var id=g.getAttribute('data-group'); var rows=q('#")
+				.append(tableId)
+				.append(" tbody tr.row[data-group=\"'+id+'\"]'); rows.forEach(function(r){ if(r.style.display!=='none') r.style.display='table-row'; }); g.setAttribute('data-collapsed','0'); }); };")
+
+				// collapse all
+				.append("document.getElementById('").append(uid).append("-colAll').onclick=function(){ q('#")
+				.append(tableId)
+				.append(" tbody tr.grp').forEach(function(g){ var id=g.getAttribute('data-group'); var rows=q('#")
+				.append(tableId)
+				.append(" tbody tr.row[data-group=\"'+id+'\"]'); rows.forEach(function(r){ if(r.style.display!=='none') r.style.display='none'; }); g.setAttribute('data-collapsed','1'); }); };")
+
+				// parent row toggle
+				.append("q('#").append(tableId)
+				.append(" tbody tr.grp').forEach(function(g){ g.addEventListener('click', function(){ var id=g.getAttribute('data-group'); var rows=q('#")
+				.append(tableId)
+				.append(" tbody tr.row[data-group=\"'+id+'\"]'); var isCollapsed=g.getAttribute('data-collapsed')==='1'; if(isCollapsed){ rows.forEach(function(r){ r.style.display='table-row'; }); g.setAttribute('data-collapsed','0'); } else { rows.forEach(function(r){ r.style.display='none'; }); g.setAttribute('data-collapsed','1'); } }); });");
+
+		// init
+		html.append("applyFilters();");
+		html.append("})();</script>");
+
+		return html.toString();
+	}
+
+	private String buildSemanticXmlDiff(ScenarioExampleRunDTO row) {
+		final boolean NEW_IS_RED = true;
+
+		// Use row id for stable unique prefix, fallback to identityHashCode
+		String uid = (row != null && row.getId() != null) ? "sem" + row.getId()
+				: "sem" + Integer.toHexString(System.identityHashCode(row));
+
+		// raw xml (may be null)
+		String expectedRaw = row.getInputXml() == null ? "" : row.getInputXml().trim();
+		String actualRaw = row.getOutputXml() == null ? "" : row.getOutputXml().trim();
+
+		// Guard clause: missing XML content
+		if (expectedRaw.isEmpty() || actualRaw.isEmpty()) {
+			StringBuilder msg = new StringBuilder("Semantic comparison skipped — ");
+			if (expectedRaw.isEmpty() && actualRaw.isEmpty()) {
+				msg.append("both Expected and Actual XML are empty or missing.");
+			} else if (expectedRaw.isEmpty()) {
+				msg.append("Expected XML is missing, so comparison could not be performed.");
+			} else if (actualRaw.isEmpty()) {
+				msg.append("Actual XML is missing, so comparison could not be performed.");
+			}
+			return noScenarioAligned(msg.toString(), 5);
+		}
+
+		// === NEW: remove all SKIPPED_TAGS from both XML strings BEFORE comparing ===
+		// This removes elements like:
+		// <CreDtTm>...</CreDtTm>
+		// <ns:CreDtTm attr="...">...</ns:CreDtTm>
+		// <EndToEndId/>
+		// It uses the SKIPPED_TAGS set defined at class-level.
+		String expected = expectedRaw;
+		String actual = actualRaw;
+		try {
+			if (SKIPPED_TAGS != null && !SKIPPED_TAGS.isEmpty()) {
+				for (String tag : SKIPPED_TAGS) {
+					if (tag == null || tag.trim().isEmpty())
+						continue;
+					// remove full element with content (multi-line, namespace prefix tolerant)
+					// (?s) makes '.' match newlines
+					String openCloseRegex = "(?s)<(?:[^:\\s>]+:)?" + Pattern.quote(tag)
+							+ "\\b[^>]*>.*?</(?:[^:\\s>]+:)?" + Pattern.quote(tag) + "\\s*>";
+					expected = expected.replaceAll(openCloseRegex, "");
+					actual = actual.replaceAll(openCloseRegex, "");
+
+					// remove self-closing forms: <ns:EndToEndId .../> or <EndToEndId/>
+					String selfCloseRegex = "(?s)<(?:[^:\\s>]+:)?" + Pattern.quote(tag) + "\\b[^>]*/\\s*>"; // allow
+																											// attributes
+																											// and
+																											// whitespace
+																											// before />
+					expected = expected.replaceAll(selfCloseRegex, "");
+					actual = actual.replaceAll(selfCloseRegex, "");
+				}
+			}
+		} catch (Exception ex) {
+			// defensive: if something goes wrong with regex processing, fall back to raw
+			// inputs
+			expected = expectedRaw;
+			actual = actualRaw;
+		}
+
+		// Trim again after removals
+		expected = expected.trim();
+		actual = actual.trim();
+
+		// If removing skipped tags makes one side empty, proceed — diff will handle it.
+		// Build the diff from the sanitized XMLs.
+		Diff diff = DiffBuilder.compare(Input.fromString(expected)).withTest(Input.fromString(actual))
+				.ignoreWhitespace().checkForSimilar().build();
+
+		Map<String, String> friendly = new LinkedHashMap<>();
+		friendly.put("TEXT_VALUE", "Text changed");
+		friendly.put("CHILD_NODELIST_LENGTH", "Number of child elements changed");
+		friendly.put("ELEMENT_TAG_NAME", "Tag name changed");
+		friendly.put("NAMESPACE_URI", "Namespace changed");
+		friendly.put("NAMESPACE_PREFIX", "Namespace prefix changed");
+		friendly.put("ATTR_VALUE", "Attribute value changed");
+		friendly.put("ATTR_NAME_LOOKUP", "Attribute presence/lookup changed");
+		friendly.put("ATTR_NAME", "Attribute name changed");
+		friendly.put("ATTR_PREFIX", "Attribute prefix changed");
+		friendly.put("SCHEMA_LOCATION", "Schema location changed");
+		friendly.put("NO_NAMESPACE_SCHEMA_LOCATION", "No-namespace schema location changed");
+		friendly.put("XML_VERSION", "XML version changed");
+		friendly.put("XML_STANDALONE", "XML standalone flag changed");
+		friendly.put("HAS_DOCTYPE_DECLARATION", "Doctype declaration changed");
+		friendly.put("DOCTYPE_NAME", "Doctype name changed");
+		friendly.put("DOCTYPE_PUBLIC_ID", "Doctype publicId changed");
+		friendly.put("DOCTYPE_SYSTEM_ID", "Doctype systemId changed");
+		friendly.put("PROCESSING_INSTRUCTION_TARGET", "Processing-instruction target changed");
+		friendly.put("PROCESSING_INSTRUCTION_DATA", "Processing-instruction data changed");
+		friendly.put("COMMENT_VALUE", "Comment changed");
+		friendly.put("CHILD_LOOKUP", "Child lookup changed");
+		friendly.put("CHILD_NODELIST_SEQUENCE", "Child order changed");
+		friendly.put("ELEMENT_NUM_ATTRIBUTES", "Attribute count changed");
+
+		class Row {
+			String typeKey, typeFriendly, topGroup, subPath, left, right;
+		}
+
+		// --- Pass 1: collect differences ---
+		List<Difference> all = new ArrayList<>();
+		for (Difference d : diff.getDifferences()) {
+			all.add(d);
+		}
+
+		// --- Pass 2: pick the shallowest XPath for each namespace change ---
+		Map<String, Difference> bestNamespaceDiffs = new LinkedHashMap<>();
+		for (Difference d : all) {
+			Comparison c = d.getComparison();
+			ComparisonType type = c.getType();
+			if (type == ComparisonType.NAMESPACE_URI || type == ComparisonType.NAMESPACE_PREFIX) {
+				String control = String.valueOf(c.getControlDetails().getValue());
+				String test = String.valueOf(c.getTestDetails().getValue());
+				String key = type.name() + ":" + control + "→" + test;
+
+				String xp = c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
+						: c.getTestDetails().getXPath();
+				int depth = (xp == null) ? Integer.MAX_VALUE : xp.split("/").length;
+
+				Difference currentBest = bestNamespaceDiffs.get(key);
+				if (currentBest == null) {
+					bestNamespaceDiffs.put(key, d);
+				} else {
+					String oldXp = currentBest.getComparison().getControlDetails().getXPath();
+					if (oldXp == null)
+						oldXp = currentBest.getComparison().getTestDetails().getXPath();
+					int oldDepth = (oldXp == null) ? Integer.MAX_VALUE : oldXp.split("/").length;
+					if (depth < oldDepth) {
+						bestNamespaceDiffs.put(key, d);
+					}
+				}
+			}
+		}
+
+		// prepare placeholder pattern (class-level PLACEHOLDER_TOKEN assumed)
+		Pattern placeholderPattern = PLACEHOLDER_TOKEN;
+
+		// --- Pass 3: build rows, skipping duplicate/inherited namespace diffs and
+		// honoring placeholders ---
+		List<Row> rows = new ArrayList<>();
+		for (Difference d : all) {
+			Comparison c = d.getComparison();
+			ComparisonType type = c.getType();
+
+			if (type == ComparisonType.NAMESPACE_URI || type == ComparisonType.NAMESPACE_PREFIX) {
+				String control = String.valueOf(c.getControlDetails().getValue());
+				String test = String.valueOf(c.getTestDetails().getValue());
+				String key = type.name() + ":" + control + "→" + test;
+				if (bestNamespaceDiffs.get(key) != d) {
+					continue;
+				}
+			}
+
+			Row r = new Row();
+			r.typeKey = type.name();
+			r.typeFriendly = friendly.containsKey(r.typeKey) ? friendly.get(r.typeKey) : "Other change";
+			r.left = String.valueOf(c.getControlDetails().getValue());
+			r.right = String.valueOf(c.getTestDetails().getValue());
+
+			String xp = c.getControlDetails().getXPath() != null ? c.getControlDetails().getXPath()
+					: c.getTestDetails().getXPath();
+			if (xp == null)
+				xp = "/";
+			String[] parts = xp.split("(?=\\/[^\\/]+\\[\\d+\\])");
+			r.topGroup = parts.length > 1 ? parts[0] + parts[1] : parts[0];
+			r.subPath = xp;
+
+			// --- skip differences involving placeholder tokens (existing behavior) ---
+			boolean leftHasPlaceholder = r.left != null && placeholderPattern.matcher(r.left).find();
+			boolean rightHasPlaceholder = r.right != null && placeholderPattern.matcher(r.right).find();
+			if (leftHasPlaceholder || rightHasPlaceholder) {
+				continue;
+			}
+
+			rows.add(r);
+		}
+
+		if (rows.isEmpty()) {
+			StringBuilder html = new StringBuilder();
+			html.append("<style>")
+					.append(".sem-xml{font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif;padding:12px;}")
+					.append(".same-box{border:1px solid #ccc;border-radius:6px;padding:12px;"
+							+ "background:#f6ffed;color:#1a531b;font-size:14px;font-weight:500;}")
+					.append("body.dark .same-box{background:#1a2a1a;color:#b7f7b7;border-color:#335533;}")
+					.append("</style>");
+			html.append("<div class='sem-xml'>")
+					.append("<div class='same-box'>✅ No semantic differences found — XMLs are identical.</div>")
+					.append("</div>");
+			return html.toString();
+		}
+
+		// grouping & counts
+		Map<String, Long> typeCounts = rows.stream()
+				.collect(Collectors.groupingBy(r -> r.typeFriendly, LinkedHashMap::new, Collectors.counting()));
+		Map<String, List<Row>> byGroup = rows.stream()
+				.collect(Collectors.groupingBy(r -> r.topGroup, LinkedHashMap::new, Collectors.toList()));
+		List<String> parentOrder = new ArrayList<>(byGroup.keySet());
+
+		Map<String, Integer> typeHue = new LinkedHashMap<>();
+		for (String t : typeCounts.keySet())
+			typeHue.put(t, positiveHue(t));
+		Map<String, Integer> tagHue = new LinkedHashMap<>();
+		for (String g : parentOrder)
+			tagHue.put(g, positiveHue("TAG|" + g));
+
+		// colors (kept)
+		final String GREEN_LIGHT_BG = "#e6ffec", GREEN_LIGHT_FG = "#1f3321";
+		final String RED_LIGHT_BG = "#ffe6e6", RED_LIGHT_FG = "#331f1f";
+		final String GREEN_DARK_BG = "#1f3321", GREEN_DARK_FG = "#d9f3db";
+		final String RED_DARK_BG = "#331f1f", RED_DARK_FG = "#ffd6d6";
+
+		String expectedLightBg = NEW_IS_RED ? GREEN_LIGHT_BG : RED_LIGHT_BG;
+		String expectedLightFg = NEW_IS_RED ? GREEN_LIGHT_FG : RED_LIGHT_FG;
+		String actualLightBg = NEW_IS_RED ? RED_LIGHT_BG : GREEN_LIGHT_BG;
+		String actualLightFg = NEW_IS_RED ? RED_LIGHT_FG : GREEN_LIGHT_FG;
+
+		String expectedDarkBg = NEW_IS_RED ? GREEN_DARK_BG : RED_DARK_BG;
+		String expectedDarkFg = NEW_IS_RED ? GREEN_DARK_FG : RED_DARK_FG;
+		String actualDarkBg = NEW_IS_RED ? RED_DARK_BG : GREEN_DARK_BG;
+		String actualDarkFg = NEW_IS_RED ? RED_DARK_FG : GREEN_DARK_FG;
+
+		StringBuilder html = new StringBuilder();
+
+		// CSS block (kept) - no id collisions because JS selectors below are namespaced
+		html.append("<style>").append(":root{--hdr-bg:#f5f7fa;--hdr-fg:#222;--border:#d0d7de;")
+				.append("--tbl-head-bg:#f0f2f5;--tbl-head-fg:#222;--tbl-row-bg:#fff;--tbl-row-alt:#fafafa;")
+				.append("--chip-fg:#000;").append("--expected-bg:").append(expectedLightBg).append(";--expected-fg:")
+				.append(expectedLightFg).append(";").append("--actual-bg:").append(actualLightBg)
+				.append(";--actual-fg:").append(actualLightFg).append(";")
+				.append("--type-s:55%;--type-l:88%;--type-text-s:45%;--type-text-l:28%;")
+				.append("--tag-s:50%;--tag-l:90%;--tag-text-s:40%;--tag-text-l:26%;")
+				.append("--grp-tint-light:12%;--type-tint-light:10%;")
+				.append("--icon-fg:#4a5568;--icon-bg:transparent;--icon-hover-bg:rgba(0,0,0,0.05);")
+				.append("--diff-font:12.5px;}").append("body.dark{--hdr-bg:#2f333a;--hdr-fg:#ddd;--border:#4a4f55;")
+				.append("--tbl-head-bg:#1f2228;--tbl-head-fg:#ddd;--tbl-row-bg:#2a2d33;--tbl-row-alt:#26292f;--chip-fg:#fff;")
+				.append("--expected-bg:").append(expectedDarkBg).append(";--expected-fg:").append(expectedDarkFg)
+				.append(";").append("--actual-bg:").append(actualDarkBg).append(";--actual-fg:").append(actualDarkFg)
+				.append(";").append("--type-s:35%;--type-l:26%;--type-text-s:35%;--type-text-l:78%;")
+				.append("--tag-s:32%;--tag-l:28%;--tag-text-s:35%;--tag-text-l:80%;")
+				.append("--grp-tint-dark:18%;--type-tint-dark:15%;--icon-fg:#cbd5e1;--icon-bg:transparent;--icon-hover-bg:rgba(255,255,255,0.08);--diff-font:12px;}")
+				.append(".valL{background:var(--expected-bg)!important;color:var(--expected-fg)!important;}")
+
+				.append(".valR{background:var(--actual-bg)!important;color:var(--actual-fg)!important;}")
+
+				.append(".sem-xml{font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif}")
+				.append(".toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--border)}")
+				.append(".toolbar .spacer{flex:1}")
+				.append(".bar-title{font-weight:600;color:var(--hdr-fg);margin-right:4px;font-size:13px;opacity:.9}")
+				.append(".chip{border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600;color:var(--chip-fg);border:1px solid rgba(0,0,0,.04);}")
+				.append(".chip[data-on='0']{opacity:.45;filter:grayscale(25%)}")
+				.append(".type-chip{background:hsl(var(--chip-h), var(--type-s), var(--type-l));}")
+				.append(".tag-chip{background:hsl(var(--chip-h), var(--tag-s), var(--tag-l));}")
+				.append(".iconbtn{border:none;background:var(--icon-bg);color:var(--icon-fg);font-size:14px;border-radius:6px;cursor:pointer;padding:4px 8px;transition:background 0.2s;display:flex;align-items:center;gap:4px}")
+				.append(".iconbtn:hover{background:var(--icon-hover-bg)}")
+				.append(".iconbtn svg{width:14px;height:14px;display:inline-block;}")
+				.append(".tbl{width:100%;border-collapse:collapse;margin-top:8px}")
+				.append(".tbl th,.tbl td{border:1px solid var(--border);padding:6px 8px;vertical-align:top}")
+				.append(".tbl thead th{color:var(--tbl-head-fg);background:#f2f4f7;text-align:left}")
+				.append("body.dark .tbl thead th{color:var(--tbl-head-fg);background:#333;text-align:left}")
+				.append(".grp{cursor:pointer;font-weight:600;color:var(--hdr-fg);background:hsl(var(--chip-h), var(--tag-s), calc(var(--tag-l) - var(--grp-tint-light)));}")
+				.append("body.dark .grp{background:hsl(var(--chip-h), var(--tag-s), calc(var(--tag-l) + var(--grp-tint-dark)));}")
+				.append(".row td:first-child{background:hsl(var(--chip-h), var(--type-s), calc(var(--type-l) - var(--type-tint-light)));}")
+				.append("body.dark .row td:first-child{background:hsl(var(--chip-h), var(--type-s), calc(var(--type-l) + var(--type-tint-dark)));}")
+				.append(".tbl tbody tr:nth-child(even):not(.grp){background:#f4f4f4;} ")
+				.append("body.dark .tbl tbody tr:nth-child(even):not(.grp){background:#383838;} ")
+				.append(".path{font-family:monospace;font-size:12px;opacity:.8;color:var(--hdr-fg)}")
+				.append(".type-tint{background:hsl(var(--chip-h), var(--type-s), var(--type-l));color:var(--chip-fg);font-weight:700;font-size:smaller;padding:2px 6px;border-radius:6px;display:inline-block}")
+				.append(".tag-tint{background:hsl(var(--chip-h), var(--tag-s), var(--tag-l));color:var(--chip-fg);font-weight:700;;font-size:smaller;padding:2px 6px;border-radius:6px;display:inline-block}")
+				.append(".valL,.valR{display:inline-block;white-space:pre-wrap;border-radius:6px;padding:3px 7px;font-size:var(--diff-font)}")
+				.append(".valL{background:var(--expected-bg);color:var(--expected-fg)}")
+				.append(".valR{background:var(--actual-bg);color:var(--actual-fg)}")
+				.append(".toggle-icon{display:inline-block;width:0;height:0;margin-right:6px;border-left:8px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent;cursor:pointer;vertical-align:middle;transition:transform 0.18s ease;}")
+				.append(".grp[data-collapsed='0'] .toggle-icon{transform:rotate(90deg);} ").append("</style>");
+
+		// Build HTML with namespaced IDs
+		html.append("<div class='sem-xml' id='").append(uid).append("'>");
+
+		// Tag Filter Bar
+		html.append("<div class='toolbar' id='").append(uid)
+				.append("-tagBar'><span class='bar-title'>Parent Tag Filter</span>");
+		for (String p : parentOrder) {
+			int hue = tagHue.get(p);
+			html.append("<span class='chip tag-chip' style='--chip-h:").append(hue)
+					.append("' data-kind='tag' data-key=\"").append(escapeHtmlAttr(p)).append("\" data-on='1'>")
+					.append(escapeHtml(p)).append("</span>");
+		}
+		html.append("<span class='spacer'></span>").append("<button class='iconbtn' id='").append(uid)
+				.append("-expAll' title='Expand all'>")
+				.append("<svg viewBox='0 0 24 24'><path fill='currentColor' d='M8 5l8 7-8 7z'/></svg> Expand</button>")
+				.append("<button class='iconbtn' id='").append(uid).append("-colAll' title='Collapse all'>")
+				.append("<svg viewBox='0 0 24 24' style='transform:rotate(180deg);'><path fill='currentColor' d='M8 5l8 7-8 7z'/></svg> Collapse</button>")
+				.append("</div>");
+
+		// Type Filter Bar
+		html.append("<div class='toolbar' id='").append(uid)
+				.append("-typeBar'><span class='bar-title'>Type Filter</span>");
+		for (Map.Entry<String, Long> e : typeCounts.entrySet()) {
+			String label = e.getKey();
+			int hue = typeHue.get(label);
+			html.append("<span class='chip type-chip' style='--chip-h:").append(hue)
+					.append("' data-kind='type' data-key=\"").append(escapeHtmlAttr(label)).append("\" data-on='1'>")
+					.append(escapeHtml(label)).append(" <span style='opacity:.8'></span></span>");
+		}
+		html.append("</div>");
+
+		// Table (namespaced id)
+		String tableId = uid + "-semTbl";
+		html.append("<table class='tbl' id='").append(tableId)
+				.append("'><thead><tr><th>Type</th><th>Expected</th><th>Actual</th></tr></thead><tbody>");
+		int gid = 0;
+		for (Map.Entry<String, List<Row>> g : byGroup.entrySet()) {
+			String groupKey = g.getKey();
+			String groupId = uid + "-g" + (++gid);
+			int ghue = tagHue.get(groupKey);
+
+			html.append("<tr class='grp' data-group='").append(groupId).append("' data-collapsed='0'>")
+					.append("<td colspan='3'><span class='toggle-icon'></span>")
+					.append("<span class='path'>Element: </span>").append("<span class='tag-tint' style='--chip-h:")
+					.append(ghue).append("'>").append(escapeHtml(groupKey)).append("</span></td></tr>");
+
+			for (Row r : g.getValue()) {
+				int thue = typeHue.get(r.typeFriendly);
+				html.append("<tr class='row' data-group='").append(groupId).append("' data-type=\"")
+						.append(escapeHtmlAttr(r.typeFriendly)).append("\" data-parent=\"")
+						.append(escapeHtmlAttr(groupKey)).append("\">")
+						.append("<td><span class='type-tint' style='--chip-h:").append(thue).append("'>")
+						.append(escapeHtml(r.typeFriendly)).append("</span><div class='path'>")
+						.append(escapeHtml(r.subPath)).append("</div></td>").append("<td><span class='valL'>")
+						.append(escapeHtml(r.left)).append("</span></td>").append("<td><span class='valR'>")
+						.append(escapeHtml(r.right)).append("</span></td></tr>");
+			}
+		}
+		html.append("</tbody></table></div>");
+
+		// Namespaced JS for filtering/expand/collapse (operates only within this UID)
+		html.append("<script>(function(){")
+				// helper to query inside specific container
+				.append("var root=document.getElementById('").append(uid).append("');")
+				.append("function q(sel){return Array.prototype.slice.call(root.querySelectorAll(sel));}")
+				.append("function applyFilters(){").append("var activeTypes=new Set(q('#").append(uid)
+				.append("-typeBar .chip[data-on=\"1\"]').map(function(c){return c.getAttribute('data-key');}));")
+				.append("var activeTags=new Set(q('#").append(uid)
+				.append("-tagBar .chip[data-on=\"1\"]').map(function(c){return c.getAttribute('data-key');}));")
+				.append("var parentCounts={}, typeCounts={};").append("q('#").append(tableId)
+				.append(" tbody tr.row').forEach(function(r){")
+				.append("var t=r.getAttribute('data-type'); var p=r.getAttribute('data-parent');")
+				.append("var visible=(activeTypes.has(t) && activeTags.has(p));")
+				.append("r.style.display = visible ? 'table-row' : 'none';")
+				.append("if(visible){ parentCounts[p]=(parentCounts[p]||0)+1; typeCounts[t]=(typeCounts[t]||0)+1; }")
+				.append("});")
+				// parent group visibility
+				.append("q('#").append(tableId).append(" tbody tr.grp').forEach(function(g){")
+				.append("var parentKey=(g.querySelector('.tag-tint')||{}).textContent; parentKey=parentKey?parentKey.trim():'';")
+				.append("var hasVisible=(parentCounts[parentKey]||0)>0;")
+				.append("g.style.display = (activeTags.has(parentKey) && hasVisible) ? 'table-row' : 'none';")
+				.append("});")
+				// update tag counts
+				.append("q('#").append(uid)
+				.append("-tagBar .chip').forEach(function(ch){ var key=ch.getAttribute('data-key'); var count=parentCounts[key]||0; var span=ch.querySelector('.count'); if(!span){ span=document.createElement('span'); span.className='count'; span.style.opacity='0.8'; span.style.marginLeft='4px'; ch.appendChild(span);} span.textContent='('+count+')'; });")
+				// update type counts
+				.append("q('#").append(uid)
+				.append("-typeBar .chip').forEach(function(ch){ var key=ch.getAttribute('data-key'); var count=typeCounts[key]||0; var span=ch.querySelector('.count'); if(!span){ span=document.createElement('span'); span.className='count'; span.style.opacity='0.8'; span.style.marginLeft='4px'; ch.appendChild(span);} span.textContent='('+count+')'; });")
+				.append("}") // end applyFilters
+
+				// chip toggle
+				.append("q('#").append(uid)
+				.append(" .chip').forEach(function(ch){ ch.addEventListener('click', function(){ ch.setAttribute('data-on', ch.getAttribute('data-on')==='1'?'0':'1'); applyFilters(); }); });")
+
+				// expand all
+				.append("document.getElementById('").append(uid)
+				.append("-expAll').onclick=function(){ applyFilters(); q('#").append(tableId)
+				.append(" tbody tr.grp').forEach(function(g){ var id=g.getAttribute('data-group'); var rows=q('#")
+				.append(tableId)
+				.append(" tbody tr.row[data-group=\"'+id+'\"]'); rows.forEach(function(r){ if(r.style.display!=='none') r.style.display='table-row'; }); g.setAttribute('data-collapsed','0'); }); };")
+
+				// collapse all
+				.append("document.getElementById('").append(uid).append("-colAll').onclick=function(){ q('#")
+				.append(tableId)
+				.append(" tbody tr.grp').forEach(function(g){ var id=g.getAttribute('data-group'); var rows=q('#")
+				.append(tableId)
+				.append(" tbody tr.row[data-group=\"'+id+'\"]'); rows.forEach(function(r){ if(r.style.display!=='none') r.style.display='none'; }); g.setAttribute('data-collapsed','1'); }); };")
+
+				// parent row toggle
+				.append("q('#").append(tableId)
+				.append(" tbody tr.grp').forEach(function(g){ g.addEventListener('click', function(){ var id=g.getAttribute('data-group'); var rows=q('#")
+				.append(tableId)
+				.append(" tbody tr.row[data-group=\"'+id+'\"]'); var isCollapsed=g.getAttribute('data-collapsed')==='1'; if(isCollapsed){ rows.forEach(function(r){ r.style.display='table-row'; }); g.setAttribute('data-collapsed','0'); } else { rows.forEach(function(r){ r.style.display='none'; }); g.setAttribute('data-collapsed','1'); } }); });");
+
+		// init
+		html.append("applyFilters();");
+		html.append("})();</script>");
+
+		return html.toString();
+	}
+
 	private static int positiveHue(String s) {
 		if (s == null)
 			return 0;
@@ -1308,7 +2472,7 @@ public class TestCaseReportService {
 		List<?> diffsList = (List<?>) dto.getXmlParsedDifferencesJson();
 
 		// Parse unexecutedScenarios JSON string
-		List<Map<String, Object>> unexecuted = java.util.Collections.emptyList();
+		List<Map<String, Object>> unexecuted = Collections.emptyList();
 		try {
 			String rawJson = dto.getUnexecutedScenarios();
 			if (rawJson != null && !rawJson.trim().isEmpty()) {
@@ -1384,6 +2548,99 @@ public class TestCaseReportService {
 			index++;
 		}
 		sb.append("</table>");
+		return sb.toString();
+	}
+
+	@SuppressWarnings("unchecked")
+	private String buildXmlDifferencesFixed(ScenarioExampleRunDTO dto, TestCaseRunHistoryDTO dto2) {
+		// Defensive: dto may be null
+		if (dto == null) {
+			return noScenarioAligned("No example provided", 5);
+		}
+
+		// If differences property isn't a list, still allow showing headers/values
+		List<Map<String, Object>> differences = new ArrayList<>();
+		Object diffsObj = dto.getDifferences();
+		if (diffsObj instanceof List) {
+			for (Object o : (List<?>) diffsObj) {
+				if (o instanceof Map) {
+					// noinspection unchecked
+					differences.add((Map<String, Object>) o);
+				}
+			}
+		}
+
+		// parse unexecutedScenarios JSON from dto2 defensively (kept from your earlier
+		// implementation)
+		List<Map<String, Object>> unexecuted = Collections.emptyList();
+		try {
+			String rawJson = dto2 == null ? null : dto2.getUnexecutedScenarios();
+			if (rawJson != null && !rawJson.trim().isEmpty()) {
+				ObjectMapper mapper = new ObjectMapper();
+				unexecuted = mapper.readValue(rawJson, new TypeReference<List<Map<String, Object>>>() {
+				});
+			}
+		} catch (Exception e) {
+			logger.warn("Failed to parse unexecutedScenarios JSON: {}", e.getMessage());
+		}
+
+		// Combined empty check
+		if (differences.isEmpty() && (unexecuted == null || unexecuted.isEmpty())) {
+			return noScenarioAligned("No XML differences or unexecuted scenarios found", 5);
+		}
+
+		// Build the table with the requested columns:
+		// Scenario | Scenario Type | Example Header | Example Values | Differences
+		StringBuilder sb = new StringBuilder();
+		sb.append("<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>")
+				.append("<thead><tr>").append("<th>Scenario</th>").append("<th>Scenario Type</th>")
+				.append("<th>Example Header</th>").append("<th>Example Values</th>").append("<th>Differences</th>")
+				.append("</tr></thead><tbody>");
+
+		// Single row from given dto
+		String scenarioName = dto.getScenarioName() == null ? "-" : dto.getScenarioName();
+		String scenarioType = dto.getScenarioType() == null ? "-" : dto.getScenarioType();
+
+		// Example header: use your helper (renders "col1, col2, col3")
+		String exampleHeader = renderExampleHeader(dto);
+
+		// Example values: use your helper (renders just values in header order or list)
+		String exampleValues = renderExampleValues(dto);
+
+		int diffCount = differences.size();
+
+		sb.append("<tr class='").append("Passed".equalsIgnoreCase(dto.getStatus()) ? "row-pass" : "row-fail")
+				.append("'><td>").append(escapeHtml(scenarioName)).append("</td>").append("<td>")
+				.append(escapeHtml(scenarioType)).append("</td>").append("<td>").append(exampleHeader).append("</td>")
+				.append("<td>").append(exampleValues).append("</td>").append("<td style='white-space:nowrap'>");
+
+		if (diffCount > 0) {
+			String innerId = "diffInner-single-" + (dto.getId() == null ? "0" : dto.getId());
+			sb.append("<button class='view-btn' onclick=\"toggle('").append(innerId).append("')\">View</button>")
+					.append("<span class='diff-badge fail' style='margin-left:6px;'>").append(diffCount)
+					.append("</span>");
+
+			// inner details (hidden)
+			sb.append("</td></tr>"); // close the row first (we'll add the inner row next)
+			sb.append("<tr id='").append(innerId).append("' class='inner-row' style='display:none'><td colspan='5'>")
+					.append("<table class='inner-table'><thead><tr><th>XPath</th><th>Node</th><th>Type</th><th>Details</th></tr></thead><tbody>");
+			for (Map<String, Object> d : differences) {
+				if (d == null)
+					continue;
+				String xpath = escapeHtml(String.valueOf(d.getOrDefault("xpath", "-")));
+				String node = escapeHtml(String.valueOf(d.getOrDefault("node", d.getOrDefault("name", "-"))));
+				String type = escapeHtml(String.valueOf(d.getOrDefault("differenceType", d.getOrDefault("type", "-"))));
+				String details = formatMismatchDetails(d);
+				sb.append("<tr><td>").append(xpath).append("</td>").append("<td>").append(node).append("</td>")
+						.append("<td>").append(type).append("</td>").append("<td>").append(escapeHtml(details))
+						.append("</td></tr>");
+			}
+			sb.append("</tbody></table></td></tr>");
+		} else {
+			sb.append("-</td></tr>");
+		}
+
+		sb.append("</tbody></table>");
 		return sb.toString();
 	}
 

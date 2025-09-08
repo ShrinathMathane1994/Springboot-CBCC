@@ -117,18 +117,76 @@ Payload: multipart/form-data
 
 Example data (Text):
 {
-  "tcName": "XML Scenario-1",
-  "description": "XML Comparison-1",
+  "tcName": "TC22 - CBCC Regression – Mixed",
+  "description": "Selected Outline examples",
+  "country": "UK",
+  "region": "EMEA",
+  "pod": "Pod-01",
   "featureScenarios": [
     {
-      "feature": "compareXml.feature",
-      "scenarios": ["XML files have differences", "XML files are identical"]
+      "feature": "compareXmlLocalSrc.feature",
+      "selections": [
+        {
+          "scenarioName": "UKPT PRS_ISV Message Validation in PDP Payload Results:<Scenario>",
+          "type": "Scenario Outline",
+          "selectedExamples": {
+            "headers": ["BizSvc","Scenario","RuleId_Desc","RequestPath","Path","Headers","MessageStatus"],
+            "rows": [
+              {
+                "BizSvc":"swift.cbprplus.03",
+                "Scenario":"U1-POD_PRS_ISV_LIQ_GB_CBPR_OB_rule-48445_Pacs.008_GPE_Rule Validation_Pos",
+                "RuleId_Desc":"rule-48445",
+                "RequestPath":"UKPT_PRS_XSSL_Pacs.008.xml",
+                "Path":"/prs/isv/initiation",
+                "Headers":"UKPT_XSSL_PRS_Headers.json",
+                "MessageStatus":"SENT_TO_PROCESSOR"
+              },
+              {
+                "BizSvc":"swift.cbprplus.03",
+                "Scenario":"U1-POD_PRS_ISV_ODY_GB_CBPR_OB_rule-48480_Pacs.008_GPE_Rule Validation_Pos",
+                "RuleId_Desc":"rule-48480",
+                "RequestPath":"UKPT_PRS_XSSL_Pacs.008.xml",
+                "Path":"/prs/isv/initiation",
+                "Headers":"UKPT_XSSL_PRS_Headers.json",
+                "MessageStatus":"SENT_TO_PROCESSOR"
+              }
+            ]
+          }
+        }
+      ]
     }
-  ],
-  "country": "USA",
-  "region": "North America",
-  "pod": "Pod-01"
+  ]
 }
+-----
+{
+  "tcName": "TC23 - CBCC Regression – Mixed",
+  "description": "Selected Outline examples",
+  "country": "UK",
+  "region": "EMEA",
+  "pod": "Pod-01",
+  "featureScenarios": [
+    {
+      "feature": "compareXmlLocalSrc2.feature",
+      "selections": [
+        {
+          "scenarioName": "Compare two XML files for equality",
+          "type": "Scenario Outline",
+          "selectedExamples": {
+            "headers": ["file1","file2","result"],
+            "rows": [
+              {
+                "file1":"input.xml",
+                "file2":"output.xml",
+                "result":"equal"              
+             }            
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+-----
 
 📥 Get Test Cases
 GET /api/test-cases

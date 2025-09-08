@@ -1,85 +1,138 @@
 package com.qa.cbcc.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 public class TestCaseResponseDTO {
-    private Long id;
-    private String tcName;
-    private String description;
-    private String featureScenarioJson;
-    private String inputFile;
-    private String outputFile;
-    private LocalDateTime createdOn;
-    private LocalDateTime modifiedOn;
-    private Boolean isActive;
-    private String country;
-    private String region;
-    private String pod;
-    private LocalDateTime executionOn;
-    private String executionStatus;
+	private Long id;
+	private String tcName;
+	private String description;
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	private List<TestCaseDTO.FeatureScenario> featureScenarioJson;
+	private String inputFile;
+	private String outputFile;
+	private LocalDateTime createdOn;
+	private LocalDateTime modifiedOn;
+	private Boolean isActive;
+	private String country;
+	private String region;
+	private String pod;
+	private LocalDateTime executionOn;
+	private String executionStatus;
 
-
-
-    public String getCountry() {
+	public String getCountry() {
 		return country;
 	}
+
 	public void setCountry(String country) {
 		this.country = country;
 	}
+
 	public String getRegion() {
 		return region;
 	}
+
 	public void setRegion(String region) {
 		this.region = region;
 	}
+
 	public String getPod() {
 		return pod;
 	}
+
 	public void setPod(String pod) {
 		this.pod = pod;
 	}
+
 	// Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+	public Long getId() {
+		return id;
+	}
 
-    public String getTcName() { return tcName; }
-    public void setTcName(String tcName) { this.tcName = tcName; }
+	public void setId(Long id) {
+		this.id = id;
+	}
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+	public String getTcName() {
+		return tcName;
+	}
 
-    public String getFeatureScenarioJson() { return featureScenarioJson; }
-    public void setFeatureScenarioJson(String featureScenarioJson) { this.featureScenarioJson = featureScenarioJson; }
+	public void setTcName(String tcName) {
+		this.tcName = tcName;
+	}
 
-    public String getInputFile() { return inputFile; }
-    public void setInputFile(String inputFile) { this.inputFile = inputFile; }
+	public String getDescription() {
+		return description;
+	}
 
-    public String getOutputFile() { return outputFile; }
-    public void setOutputFile(String outputFile) { this.outputFile = outputFile; }
+	public void setDescription(String description) {
+		this.description = description;
+	}
 
-    public LocalDateTime getCreatedOn() { return createdOn; }
-    public void setCreatedOn(LocalDateTime createdOn) { this.createdOn = createdOn; }
+	public List<TestCaseDTO.FeatureScenario> getFeatureScenarioJson() {
+		return featureScenarioJson;
+	}
 
-    public LocalDateTime getModifiedOn() { return modifiedOn; }
-    public void setModifiedOn(LocalDateTime modifiedOn) { this.modifiedOn = modifiedOn; }
+	public void setFeatureScenarioJson(List<TestCaseDTO.FeatureScenario> featureScenarioJson) {
+		this.featureScenarioJson = featureScenarioJson;
+	}
 
-    public Boolean getIsActive() { return isActive; }
-    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
-    
-    public LocalDateTime getExecutionOn() {
-        return executionOn;
-    }
+	public String getInputFile() {
+		return inputFile;
+	}
 
-    public void setExecutionOn(LocalDateTime executionOn) {
-        this.executionOn = executionOn;
-    }
+	public void setInputFile(String inputFile) {
+		this.inputFile = inputFile;
+	}
 
-    public String getExecutionStatus() {
-        return executionStatus;
-    }
+	public String getOutputFile() {
+		return outputFile;
+	}
 
-    public void setExecutionStatus(String executionStatus) {
-        this.executionStatus = executionStatus;
-    }
+	public void setOutputFile(String outputFile) {
+		this.outputFile = outputFile;
+	}
+
+	public LocalDateTime getCreatedOn() {
+		return createdOn;
+	}
+
+	public void setCreatedOn(LocalDateTime createdOn) {
+		this.createdOn = createdOn;
+	}
+
+	public LocalDateTime getModifiedOn() {
+		return modifiedOn;
+	}
+
+	public void setModifiedOn(LocalDateTime modifiedOn) {
+		this.modifiedOn = modifiedOn;
+	}
+
+	public Boolean getIsActive() {
+		return isActive;
+	}
+
+	public void setIsActive(Boolean isActive) {
+		this.isActive = isActive;
+	}
+
+	public LocalDateTime getExecutionOn() {
+		return executionOn;
+	}
+
+	public void setExecutionOn(LocalDateTime executionOn) {
+		this.executionOn = executionOn;
+	}
+
+	public String getExecutionStatus() {
+		return executionStatus;
+	}
+
+	public void setExecutionStatus(String executionStatus) {
+		this.executionStatus = executionStatus;
+	}
 
 }

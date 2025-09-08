@@ -22,11 +22,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.qa.cbcc.dto.ScenarioExampleRunDTO;
 import com.qa.cbcc.dto.TestCaseRunHistoryDTO;
 import com.qa.cbcc.model.TestCaseRunHistory;
 import com.qa.cbcc.repository.TestCaseRunHistoryRepository;
@@ -186,15 +188,69 @@ public class TestCaseRunController {
 		return ResponseEntity.ok(dto);
 	}
 
+//	@GetMapping("/{tcId}/html-latest")
+//	public ResponseEntity<String> getLatestExecutionHtml(@PathVariable Long tcId) throws IOException {
+//		ResponseEntity<TestCaseRunHistoryDTO> latestExecution = getLatestExecution(tcId);
+//
+//		if (!latestExecution.getStatusCode().is2xxSuccessful() || latestExecution.getBody() == null) {
+//			return ResponseEntity.notFound().build();
+//		}
+//
+//		String html = caseReportService.generateHtmlReport(latestExecution.getBody());
+//
+//		HttpHeaders headers = new HttpHeaders();
+//		headers.setContentType(MediaType.TEXT_HTML);
+//		return new ResponseEntity<>(html, headers, HttpStatus.OK);
+//	}
+
 	@GetMapping("/{tcId}/html-latest")
-	public ResponseEntity<String> getLatestExecutionHtml(@PathVariable Long tcId) throws IOException {
+	public ResponseEntity<String> getLatestExecutionHtml(@PathVariable Long tcId,
+			@RequestParam(name = "exampleId", required = false) Long exampleId // optional: focus on a specific example
+	) throws IOException {
+
 		ResponseEntity<TestCaseRunHistoryDTO> latestExecution = getLatestExecution(tcId);
 
 		if (!latestExecution.getStatusCode().is2xxSuccessful() || latestExecution.getBody() == null) {
 			return ResponseEntity.notFound().build();
 		}
 
-		String html = caseReportService.generateHtmlReport(latestExecution.getBody());
+		TestCaseRunHistoryDTO historyDto = latestExecution.getBody();
+
+		// Determine run/execution id from history DTO — adjust getter if field named
+		// differently
+		Long runId = historyDto.getId(); // or historyDto.getRunId()
+		if (runId == null) {
+			// guard — if there is no run id, return history-level report without examples
+			String html = caseReportService.generateHtmlReport(historyDto, (ScenarioExampleRunDTO) null,
+					Collections.emptyList());
+			HttpHeaders headers = new HttpHeaders();
+			headers.setContentType(MediaType.TEXT_HTML);
+			return new ResponseEntity<>(html, headers, HttpStatus.OK);
+		}
+
+		// Fetch example rows for this execution with full XML content
+		List<ScenarioExampleRunDTO> exampleRows = testCaseRunService.getExampleRowsForExecution(runId, true);
+
+		// Pick scDTO:
+		ScenarioExampleRunDTO scDTO = null;
+		if (exampleId != null) {
+			// prefer explicit exampleId if provided
+			for (ScenarioExampleRunDTO e : exampleRows) {
+				if (e.getId() != null && e.getId().equals(exampleId)) {
+					scDTO = e;
+					break;
+				}
+			}
+		}
+		if (scDTO == null && !exampleRows.isEmpty()) {
+			// default to the first example row
+			scDTO = exampleRows.get(0);
+		}
+
+		// Pass history dto, the chosen single-example DTO (may be null), and the full
+		// list
+		String html = caseReportService.generateHtmlReport(historyDto, scDTO,
+				exampleRows == null ? Collections.emptyList() : exampleRows);
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.TEXT_HTML);

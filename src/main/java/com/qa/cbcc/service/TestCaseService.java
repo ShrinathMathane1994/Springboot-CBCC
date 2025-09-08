@@ -4,14 +4,18 @@ import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qa.cbcc.dto.TestCaseDTO;
@@ -25,6 +29,8 @@ import com.qa.cbcc.repository.TestCaseRepository;
 @Service
 public class TestCaseService {
 
+	private static final Logger logger = LoggerFactory.getLogger(TestCaseService.class);
+	
 	@Autowired
 	private TestCaseRepository repository;
 
@@ -34,10 +40,41 @@ public class TestCaseService {
 	private final ObjectMapper objectMapper;
 
 	public TestCaseService() {
-	    this.objectMapper = new ObjectMapper();
-	    this.objectMapper.registerModule(new JavaTimeModule());
-	    //To Not Include ScenarioBlock as null in test case
-	    objectMapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+		this.objectMapper = new ObjectMapper();
+		this.objectMapper.registerModule(new JavaTimeModule());
+		// To Not Include ScenarioBlock as null in test case
+		objectMapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+	}
+
+	private void validateFeatureScenarios(List<TestCaseDTO.FeatureScenario> features) {
+		if (features == null)
+			return;
+
+		for (TestCaseDTO.FeatureScenario fs : features) {
+			if (fs.getSelections() == null)
+				continue;
+
+			for (TestCaseDTO.ScenarioSelection sel : fs.getSelections()) {
+				if (sel.getType() == TestCaseDTO.ScenarioType.SCENARIO_OUTLINE) {
+					if (sel.getSelectedExamples() == null || sel.getSelectedExamples().getHeaders() == null
+							|| sel.getSelectedExamples().getHeaders().isEmpty()
+							|| sel.getSelectedExamples().getRows() == null
+							|| sel.getSelectedExamples().getRows().isEmpty()) {
+						throw new IllegalArgumentException("Scenario Outline '" + sel.getScenarioName()
+								+ "' must include selected examples (headers + at least one row).");
+					}
+
+					// Optional: every row must have all headers
+					List<String> headers = sel.getSelectedExamples().getHeaders();
+					for (Map<String, String> row : sel.getSelectedExamples().getRows()) {
+						if (!row.keySet().containsAll(headers)) {
+							throw new IllegalArgumentException("Row in Scenario Outline '" + sel.getScenarioName()
+									+ "' is missing one or more headers: " + headers);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	@Transactional
@@ -47,18 +84,21 @@ public class TestCaseService {
 			testCase.setTcName(dto.getTcName());
 			testCase.setDescription(dto.getDescription());
 
+//			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+			validateFeatureScenarios(dto.getFeatureScenarios());
 			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+
 			testCase.setFeatureScenarioJson(json);
 
 			LocalDateTime now = LocalDateTime.now();
 			testCase.setCreatedOn(now);
 			testCase.setModifiedOn(now);
 			testCase.setIsActive(true);
-			
-			 // New fields
-		    testCase.setCountry(dto.getCountry());
-		    testCase.setRegion(dto.getRegion());
-		    testCase.setPod(dto.getPod());
+
+			// New fields
+			testCase.setCountry(dto.getCountry());
+			testCase.setRegion(dto.getRegion());
+			testCase.setPod(dto.getPod());
 
 			TestCase saved = repository.save(testCase);
 
@@ -84,7 +124,7 @@ public class TestCaseService {
 	}
 
 	public TestCase getTestCaseById(Long id) {
-	    return repository.findByIdTCAndIsActiveTrue(id).orElse(null);
+		return repository.findByIdTCAndIsActiveTrue(id).orElse(null);
 	}
 
 	public List<TestCase> getAllTestCases() {
@@ -103,27 +143,24 @@ public class TestCaseService {
 			repository.save(tc);
 		}
 	}
-	
+
 	public void storeTestFiles(Long testCaseId, MultipartFile inputFile, MultipartFile outputFile) throws IOException {
-	    String baseDir = System.getProperty("user.dir") + File.separator +
-	                     "src" + File.separator +
-	                     "main" + File.separator +
-	                     "resources" + File.separator +
-	                     "testData";
+		String baseDir = System.getProperty("user.dir") + File.separator + "src" + File.separator + "main"
+				+ File.separator + "resources" + File.separator + "testData";
 
-	    File dir = new File(baseDir + File.separator + testCaseId);
-	    if (!dir.exists()) {
-	        dir.mkdirs();
-	    }
+		File dir = new File(baseDir + File.separator + testCaseId);
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
 
-	    String inputFileName = inputFile.getOriginalFilename();
-	    String outputFileName = outputFile.getOriginalFilename();
+		String inputFileName = inputFile.getOriginalFilename();
+		String outputFileName = outputFile.getOriginalFilename();
 
-	    File inputDest = new File(dir, inputFileName);
-	    File outputDest = new File(dir, outputFileName);
+		File inputDest = new File(dir, inputFileName);
+		File outputDest = new File(dir, outputFileName);
 
-	    inputFile.transferTo(inputDest);
-	    outputFile.transferTo(outputDest);
+		inputFile.transferTo(inputDest);
+		outputFile.transferTo(outputDest);
 	}
 
 	@Transactional
@@ -136,13 +173,14 @@ public class TestCaseService {
 
 			existing.setTcName(dto.getTcName());
 			existing.setDescription(dto.getDescription());
+//			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+			validateFeatureScenarios(dto.getFeatureScenarios());
 			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
 			existing.setFeatureScenarioJson(json);
 			existing.setModifiedOn(LocalDateTime.now());
 			existing.setCountry(dto.getCountry());
 			existing.setRegion(dto.getRegion());
 			existing.setPod(dto.getPod());
-
 
 			// Update files and set new paths
 			String inputFileName = inputFile.getOriginalFilename();
@@ -198,66 +236,73 @@ public class TestCaseService {
 	}
 
 	public TestCaseHistoryDTO toHistoryDTO(TestCaseHistory history) {
-	    TestCaseHistoryDTO dto = new TestCaseHistoryDTO();
-	    dto.setId(history.getId());
-	    dto.setTcName(history.getTcName());
-	    dto.setDescription(history.getDescription());
-	    dto.setFeatureScenarioJson(history.getFeatureScenarioJson());
-	    dto.setInputFile(history.getInputFile());
-	    dto.setOutputFile(history.getOutputFile());
-	    dto.setModifiedOn(history.getModifiedOn());
-	    dto.setChangeType(history.getChangeType());
-	    dto.setCountry(history.getCountry());
-	    dto.setRegion(history.getRegion());
-	    dto.setPod(history.getPod());
-	    return dto;
+		TestCaseHistoryDTO dto = new TestCaseHistoryDTO();
+		dto.setId(history.getId());
+		dto.setTcName(history.getTcName());
+		dto.setDescription(history.getDescription());
+		dto.setFeatureScenarioJson(history.getFeatureScenarioJson());
+		dto.setInputFile(history.getInputFile());
+		dto.setOutputFile(history.getOutputFile());
+		dto.setModifiedOn(history.getModifiedOn());
+		dto.setChangeType(history.getChangeType());
+		dto.setCountry(history.getCountry());
+		dto.setRegion(history.getRegion());
+		dto.setPod(history.getPod());
+		return dto;
 	}
 
 	public List<TestCaseHistoryDTO> getTestCaseHistoryDTOs(Long testCaseId) {
-	    List<TestCaseHistory> historyList = historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
-	    return historyList.stream()
-	            .map(this::toHistoryDTO)
-	            .collect(Collectors.toList());
+		List<TestCaseHistory> historyList = historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
+		return historyList.stream().map(this::toHistoryDTO).collect(Collectors.toList());
 	}
-	
-	//Old Way to get History
+
+	// Old Way to get History
 	public List<TestCaseHistory> getTestCaseHistory(Long testCaseId) {
-	    return historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
+		return historyRepository.findByTestCase_IdTCOrderByModifiedOnDesc(testCaseId);
 	}
 
 	public List<TestCase> getDeletedTestCases() {
 		return repository.findByIsActiveFalse();
 	}
-	
+
 	public TestCase getTestCaseByIdIncludingInactive(Long idTC) {
-	    return repository.findByIdTC(idTC).orElse(null);
+		return repository.findByIdTC(idTC).orElse(null);
 	}
 
 	public TestCaseResponseDTO toResponseDTO(TestCase testCase) {
-	    TestCaseResponseDTO dto = new TestCaseResponseDTO();
-	    dto.setId(testCase.getIdTC());
-	    dto.setTcName(testCase.getTcName());
-	    dto.setDescription(testCase.getDescription());
-	    dto.setFeatureScenarioJson(testCase.getFeatureScenarioJson());
-	    dto.setInputFile(testCase.getInputFile());
-	    dto.setOutputFile(testCase.getOutputFile());
-	    dto.setCreatedOn(testCase.getCreatedOn());
-	    dto.setModifiedOn(testCase.getModifiedOn());
-	    dto.setExecutionOn(testCase.getLastRunOn());          // ✅ now included
-	    dto.setExecutionStatus(testCase.getLastRunStatus());  // ✅ now included
-	    dto.setIsActive(testCase.getIsActive());
-	    dto.setCountry(testCase.getCountry());
-	    dto.setRegion(testCase.getRegion());
-	    dto.setPod(testCase.getPod());
-	    return dto;
+		TestCaseResponseDTO dto = new TestCaseResponseDTO();
+		dto.setId(testCase.getIdTC());
+		dto.setTcName(testCase.getTcName());
+		dto.setDescription(testCase.getDescription());
+		// Parse the stored string into the typed field
+		List<TestCaseDTO.FeatureScenario> parsed = null;
+		String raw = testCase.getFeatureScenarioJson();
+		if (raw != null && !raw.isBlank()) {
+			try {
+				parsed = objectMapper.readValue(raw,
+						new TypeReference<List<TestCaseDTO.FeatureScenario>>() {
+						});
+			} catch (Exception ex) {
+				logger.info(ex.getMessage());
+			}
+		}
+		dto.setFeatureScenarioJson(parsed);
+		dto.setInputFile(testCase.getInputFile());
+		dto.setOutputFile(testCase.getOutputFile());
+		dto.setCreatedOn(testCase.getCreatedOn());
+		dto.setModifiedOn(testCase.getModifiedOn());
+		dto.setExecutionOn(testCase.getLastRunOn()); // ✅ now included
+		dto.setExecutionStatus(testCase.getLastRunStatus()); // ✅ now included
+		dto.setIsActive(testCase.getIsActive());
+		dto.setCountry(testCase.getCountry());
+		dto.setRegion(testCase.getRegion());
+		dto.setPod(testCase.getPod());
+		return dto;
 	}
-	
+
 	public List<TestCaseResponseDTO> getFilteredTestCases(String country, String region, String pod) {
-	    return repository.findFiltered(country, region, pod).stream()
-	            .map(this::toResponseDTO)
-	            .collect(Collectors.toList());
+		return repository.findFiltered(country, region, pod).stream().map(this::toResponseDTO)
+				.collect(Collectors.toList());
 	}
-
-
 
 }
