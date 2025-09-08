@@ -277,7 +277,7 @@ public class TestCaseService {
 		// Parse the stored string into the typed field
 		List<TestCaseDTO.FeatureScenario> parsed = null;
 		String raw = testCase.getFeatureScenarioJson();
-		if (raw != null && !raw.isBlank()) {
+		if (raw != null && !raw.trim().isEmpty()) {
 			try {
 				parsed = objectMapper.readValue(raw,
 						new TypeReference<List<TestCaseDTO.FeatureScenario>>() {
