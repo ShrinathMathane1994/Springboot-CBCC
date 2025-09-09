@@ -268,157 +268,168 @@ public class TestCaseReportService {
 
 	// Detect <Payload> opening tag (any namespace/prefix or attributes allowed)
 	private boolean containsPayloadStart(String line) {
-	    if (line == null) return false;
-	    return line.toLowerCase().matches(".*<\\s*(?:[a-z0-9_\\-]+:)?payload(?:\\s+[^>]*)?>.*");
+		if (line == null)
+			return false;
+		return line.toLowerCase().matches(".*<\\s*(?:[a-z0-9_\\-]+:)?payload(?:\\s+[^>]*)?>.*");
 	}
 
 	// Detect </Payload> closing tag (namespace/prefix tolerant)
 	private boolean containsPayloadEnd(String line) {
-	    if (line == null) return false;
-	    return line.toLowerCase().matches(".*<\\s*/\\s*(?:[a-z0-9_\\-]+:)?payload\\s*>.*");
+		if (line == null)
+			return false;
+		return line.toLowerCase().matches(".*<\\s*/\\s*(?:[a-z0-9_\\-]+:)?payload\\s*>.*");
 	}
 
 	// Detect CDATA start
 	private boolean containsCdataStart(String line) {
-	    return line != null && line.contains("<![CDATA[");
+		return line != null && line.contains("<![CDATA[");
 	}
 
 	// Detect CDATA end
 	private boolean containsCdataEnd(String line) {
-	    return line != null && line.contains("]]>");
+		return line != null && line.contains("]]>");
 	}
 
 	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
-	    if (expectedXml == null) expectedXml = "";
-	    if (actualXml == null) actualXml = "";
+		if (expectedXml == null)
+			expectedXml = "";
+		if (actualXml == null)
+			actualXml = "";
 
-	    String[] expectedLines = expectedXml.split("\\r?\\n", -1);
-	    String[] actualLines = actualXml.split("\\r?\\n", -1);
+		String[] expectedLines = expectedXml.split("\\r?\\n", -1);
+		String[] actualLines = actualXml.split("\\r?\\n", -1);
 
-	    List<String> alignedExpected = new ArrayList<>();
-	    List<String> alignedActual = new ArrayList<>();
+		List<String> alignedExpected = new ArrayList<>();
+		List<String> alignedActual = new ArrayList<>();
 
-	    int ei = 0;
+		int ei = 0;
 
-	    int expectedPayloadDepth = 0;
-	    int actualPayloadDepth = 0;
-	    boolean expectedInCdata = false;
-	    boolean actualInCdata = false;
+		int expectedPayloadDepth = 0;
+		int actualPayloadDepth = 0;
+		boolean expectedInCdata = false;
+		boolean actualInCdata = false;
 
-	    for (int ai = 0; ai < actualLines.length; ai++) {
-	        String actLine = actualLines[ai];
-	        String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
+		for (int ai = 0; ai < actualLines.length; ai++) {
+			String actLine = actualLines[ai];
+			String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
 
-	        String ta = actLine == null ? "" : actLine.trim();
-	        String te = expLine == null ? "" : expLine.trim();
+			String ta = actLine == null ? "" : actLine.trim();
+			String te = expLine == null ? "" : expLine.trim();
 
-	        // --- update payload/CDATA states ---
-	        if (containsPayloadStart(expLine)) expectedPayloadDepth++;
-	        if (containsCdataStart(expLine)) expectedInCdata = true;
-	        if (containsCdataEnd(expLine)) expectedInCdata = false;
-	        if (containsPayloadEnd(expLine) && expectedPayloadDepth > 0) expectedPayloadDepth--;
+			// --- update payload/CDATA states ---
+			if (containsPayloadStart(expLine))
+				expectedPayloadDepth++;
+			if (containsCdataStart(expLine))
+				expectedInCdata = true;
+			if (containsCdataEnd(expLine))
+				expectedInCdata = false;
+			if (containsPayloadEnd(expLine) && expectedPayloadDepth > 0)
+				expectedPayloadDepth--;
 
-	        if (containsPayloadStart(actLine)) actualPayloadDepth++;
-	        if (containsCdataStart(actLine)) actualInCdata = true;
-	        if (containsCdataEnd(actLine)) actualInCdata = false;
-	        if (containsPayloadEnd(actLine) && actualPayloadDepth > 0) actualPayloadDepth--;
+			if (containsPayloadStart(actLine))
+				actualPayloadDepth++;
+			if (containsCdataStart(actLine))
+				actualInCdata = true;
+			if (containsCdataEnd(actLine))
+				actualInCdata = false;
+			if (containsPayloadEnd(actLine) && actualPayloadDepth > 0)
+				actualPayloadDepth--;
 
-	        boolean actualIsInsidePayload = (actualPayloadDepth > 0) || actualInCdata;
-	        boolean expectedIsInsidePayload = (expectedPayloadDepth > 0) || expectedInCdata;
+			boolean actualIsInsidePayload = (actualPayloadDepth > 0) || actualInCdata;
+			boolean expectedIsInsidePayload = (expectedPayloadDepth > 0) || expectedInCdata;
 
-	        // --- Case 0: skip-tag handling ---
-	        boolean allowSkipByLocation = SKIP_INTERNAL_TAGS || (!actualIsInsidePayload && !expectedIsInsidePayload);
-	        Optional<String> skippedTag = Optional.empty();
-	        if (SKIPPED_TAGS != null && !SKIPPED_TAGS.isEmpty()) {
-	            String low = ta.toLowerCase();
-	            for (String tag : SKIPPED_TAGS) {
-	                if (tag == null || tag.trim().isEmpty()) continue;
-	                String t = tag.toLowerCase();
-	                String open = "<" + t;
-	                String close = "</" + t;
-	                // skip if: allowed by location OR explicitly listed for internal skipping
-	                boolean forcedSkip = EXPLICIT_INTERNAL_SKIPPED_TAGS != null 
-	                        && EXPLICIT_INTERNAL_SKIPPED_TAGS.contains(tag);
-	                if ((allowSkipByLocation || forcedSkip) &&
-	                        (low.startsWith(open) || low.startsWith(close))) {
-	                    skippedTag = Optional.of(tag);
-	                    break;
-	                }
-	            }
-	        }
+			// --- Case 0: skip-tag handling ---
+			boolean allowSkipByLocation = SKIP_INTERNAL_TAGS || (!actualIsInsidePayload && !expectedIsInsidePayload);
+			Optional<String> skippedTag = Optional.empty();
+			if (SKIPPED_TAGS != null && !SKIPPED_TAGS.isEmpty()) {
+				String low = ta.toLowerCase();
+				for (String tag : SKIPPED_TAGS) {
+					if (tag == null || tag.trim().isEmpty())
+						continue;
+					String t = tag.toLowerCase();
+					String open = "<" + t;
+					String close = "</" + t;
+					// skip if: allowed by location OR explicitly listed for internal skipping
+					boolean forcedSkip = EXPLICIT_INTERNAL_SKIPPED_TAGS != null
+							&& EXPLICIT_INTERNAL_SKIPPED_TAGS.contains(tag);
+					if ((allowSkipByLocation || forcedSkip) && (low.startsWith(open) || low.startsWith(close))) {
+						skippedTag = Optional.of(tag);
+						break;
+					}
+				}
+			}
 
-	        if (skippedTag.isPresent()) {
-	            String indent = leadingWhitespace(actLine);
-	            alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
-	            alignedActual.add(actLine);
-	            continue; // don’t consume expected
-	        }
+			if (skippedTag.isPresent()) {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
+				alignedActual.add(actLine);
+				continue; // don’t consume expected
+			}
 
-	        // --- rest is unchanged ---
-	        if (ei < expectedLines.length && isPlaceholderOnlyLine(expLine)) {
-	            if (ei + 1 < expectedLines.length && linesEqualWithPlaceholders(expectedLines[ei + 1], actLine)) {
-	                alignedExpected.add(expLine);
-	                alignedActual.add(leadingWhitespace(expLine));
-	                ei++;
-	                ai--;
-	                continue;
-	            }
-	            alignedExpected.add(expLine);
-	            alignedActual.add(actLine);
-	            ei++;
-	            continue;
-	        }
+			// --- rest is unchanged ---
+			if (ei < expectedLines.length && isPlaceholderOnlyLine(expLine)) {
+				if (ei + 1 < expectedLines.length && linesEqualWithPlaceholders(expectedLines[ei + 1], actLine)) {
+					alignedExpected.add(expLine);
+					alignedActual.add(leadingWhitespace(expLine));
+					ei++;
+					ai--;
+					continue;
+				}
+				alignedExpected.add(expLine);
+				alignedActual.add(actLine);
+				ei++;
+				continue;
+			}
 
-	        if (ei < expectedLines.length && linesEqualWithPlaceholders(te, ta)) {
-	            alignedExpected.add(expLine);
-	            alignedActual.add(actLine);
-	            ei++;
-	            continue;
-	        }
+			if (ei < expectedLines.length && linesEqualWithPlaceholders(te, ta)) {
+				alignedExpected.add(expLine);
+				alignedActual.add(actLine);
+				ei++;
+				continue;
+			}
 
-	        if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
-	            String indent = leadingWhitespace(actLine);
-	            alignedExpected.add(indent + "<!-- missing in expected -->");
-	            alignedActual.add(actLine);
-	            continue;
-	        }
+			if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- missing in expected -->");
+				alignedActual.add(actLine);
+				continue;
+			}
 
-	        if (ei >= expectedLines.length && !ta.isEmpty()) {
-	            String indent = leadingWhitespace(actLine);
-	            alignedExpected.add(indent + "<!-- missing in expected -->");
-	            alignedActual.add(actLine);
-	            continue;
-	        }
+			if (ei >= expectedLines.length && !ta.isEmpty()) {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- missing in expected -->");
+				alignedActual.add(actLine);
+				continue;
+			}
 
-	        if (!te.isEmpty() && ta.isEmpty()) {
-	            String indent = leadingWhitespace(expLine);
-	            alignedExpected.add(expLine);
-	            alignedActual.add(indent + "<!-- missing in actual -->");
-	            ei++;
-	            continue;
-	        }
+			if (!te.isEmpty() && ta.isEmpty()) {
+				String indent = leadingWhitespace(expLine);
+				alignedExpected.add(expLine);
+				alignedActual.add(indent + "<!-- missing in actual -->");
+				ei++;
+				continue;
+			}
 
-	        if (ei < expectedLines.length) {
-	            alignedExpected.add(expLine);
-	            alignedActual.add(actLine);
-	            ei++;
-	        } else {
-	            String indent = leadingWhitespace(actLine);
-	            alignedExpected.add(indent + "<!-- missing in expected -->");
-	            alignedActual.add(actLine);
-	        }
-	    }
+			if (ei < expectedLines.length) {
+				alignedExpected.add(expLine);
+				alignedActual.add(actLine);
+				ei++;
+			} else {
+				String indent = leadingWhitespace(actLine);
+				alignedExpected.add(indent + "<!-- missing in expected -->");
+				alignedActual.add(actLine);
+			}
+		}
 
-	    while (ei < expectedLines.length) {
-	        String expLine = expectedLines[ei++];
-	        String indent = leadingWhitespace(expLine);
-	        alignedExpected.add(expLine);
-	        alignedActual.add(indent + "<!-- missing in actual -->");
-	    }
+		while (ei < expectedLines.length) {
+			String expLine = expectedLines[ei++];
+			String indent = leadingWhitespace(expLine);
+			alignedExpected.add(expLine);
+			alignedActual.add(indent + "<!-- missing in actual -->");
+		}
 
-	    return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
+		return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
 	}
-
 
 	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
 		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent();
@@ -657,6 +668,57 @@ public class TestCaseReportService {
 		}
 	}
 
+	// Helper: render run status (Passed/Failed/Partially Passed/Unexecuted/etc.)
+	private String renderStatusBadge(String statusRaw) {
+		if (statusRaw == null)
+			statusRaw = "N/A";
+		String s = statusRaw.trim().toLowerCase();
+		String cls = "badge-pill outline";
+		String icon = "";
+		String text = escapeHtml(statusRaw);
+
+		if ("passed".equalsIgnoreCase(s) || "pass".equalsIgnoreCase(s)) {
+			cls = "badge-pill compact success";
+			icon = "<span class='icon-left'>✓</span> ";
+		} else if ("failed".equalsIgnoreCase(s) || "fail".equalsIgnoreCase(s) || "failed".equals(s)) {
+			cls = "badge-pill compact fail";
+			icon = "<span class='icon-left'>&#10006;</span> ";
+		} else if (s.contains("part") || s.contains("partial")) {
+			cls = "badge-pill compact warn";
+			icon = "<span class='icon-left'>!</span> ";
+		} else if ("unexecuted".equalsIgnoreCase(s) || "n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s)) {
+			cls = "badge-pill compact outline";
+			icon = "";
+		} else {
+			cls = "badge-pill compact outline";
+		}
+
+		return "<span class='" + cls + "'>" + icon + "<span style='font-weight:600;'>" + text + "</span></span>";
+	}
+
+	private String renderXmlBadge(String xmlStatusRaw) {
+		if (xmlStatusRaw == null)
+			xmlStatusRaw = "N/A";
+		String s = xmlStatusRaw.trim().toLowerCase();
+		String cls = "badge-pill outline";
+		String text = escapeHtml(xmlStatusRaw);
+
+		if ("matched".equalsIgnoreCase(s) || "match".equalsIgnoreCase(s) || "equal".equalsIgnoreCase(s)
+				|| "✅ xml files are equal.".equalsIgnoreCase(s)) {
+			cls = "badge-pill compact success";
+		} else if ("mismatched".equalsIgnoreCase(s) || "mismatch".equalsIgnoreCase(s) || "mismatched".equals(s)) {
+			cls = "badge-pill compact fail";
+		} else if ("partially unexecuted".equalsIgnoreCase(s) || s.contains("part")) {
+			cls = "badge-pill compact warn";
+		} else if ("n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s) || "n/a".equals(s)) {
+			cls = "badge-pill compact outline";
+		} else {
+			cls = "badge-pill compact outline";
+		}
+
+		return "<span class='" + cls + "'>" + text + "</span>";
+	}
+
 	private String cssAndJs() {
 		StringBuilder s = new StringBuilder();
 		s.append("<html><head><meta charset='UTF-8'><style>")
@@ -845,66 +907,18 @@ public class TestCaseReportService {
 
 				.append("</style>")
 
-				// JS (unchanged)
-				.append("<script>").append("function toggle(id){var el=document.getElementById(id);if(!el)return;")
-				.append("var isHidden=(el.style.display==='none'||el.style.display==='');")
-				.append("var tag=(el.tagName||'').toLowerCase();")
-				.append("if(tag==='tr'||el.classList.contains('inner-row')){el.style.display=isHidden?'table-row':'none';}")
-				.append("else{el.style.display=isHidden?'block':'none';}}")
+				// JS (updated toggle only)
+				.append("<script>").append("function toggle(id){").append("var el=document.getElementById(id);")
+				.append("if(!el){console.warn('toggle: element not found:', id); return;}")
+				.append("var cs = window.getComputedStyle(el);").append("var isHidden = (cs.display === 'none');")
+				.append("var tag = (el.tagName || '').toLowerCase();")
+				.append("if(tag === 'tr' || el.classList.contains('inner-row')){")
+				.append("  el.style.display = isHidden ? 'table-row' : 'none';").append("} else {")
+				.append("  el.style.display = isHidden ? 'block' : 'none';").append("}").append("}")
 				.append("function toggleDark(){ document.body.classList.toggle('dark'); if (window.monaco) { monaco.editor.setTheme(document.body.classList.contains('dark') ? 'vs-dark' : 'vs'); } }")
 				.append("</script></head><body>");
+
 		return s.toString();
-	}
-
-	// Helper: render run status (Passed/Failed/Partially Passed/Unexecuted/etc.)
-	private String renderStatusBadge(String statusRaw) {
-		if (statusRaw == null)
-			statusRaw = "N/A";
-		String s = statusRaw.trim().toLowerCase();
-		String cls = "badge-pill outline";
-		String icon = "";
-		String text = escapeHtml(statusRaw);
-
-		if ("passed".equalsIgnoreCase(s) || "pass".equalsIgnoreCase(s)) {
-			cls = "badge-pill compact success";
-			icon = "<span class='icon-left'>✓</span> ";
-		} else if ("failed".equalsIgnoreCase(s) || "fail".equalsIgnoreCase(s) || "failed".equals(s)) {
-			cls = "badge-pill compact fail";
-			icon = "<span class='icon-left'>&#10006;</span> ";
-		} else if (s.contains("part") || s.contains("partial")) {
-			cls = "badge-pill compact warn";
-			icon = "<span class='icon-left'>!</span> ";
-		} else if ("unexecuted".equalsIgnoreCase(s) || "n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s)) {
-			cls = "badge-pill compact outline";
-			icon = "";
-		} else {
-			cls = "badge-pill compact outline";
-		}
-
-		return "<span class='" + cls + "'>" + icon + "<span style='font-weight:600;'>" + text + "</span></span>";
-	}
-
-	private String renderXmlBadge(String xmlStatusRaw) {
-		if (xmlStatusRaw == null)
-			xmlStatusRaw = "N/A";
-		String s = xmlStatusRaw.trim().toLowerCase();
-		String cls = "badge-pill outline";
-		String text = escapeHtml(xmlStatusRaw);
-
-		if ("matched".equalsIgnoreCase(s) || "match".equalsIgnoreCase(s) || "equal".equalsIgnoreCase(s)
-				|| "✅ xml files are equal.".equalsIgnoreCase(s)) {
-			cls = "badge-pill compact success";
-		} else if ("mismatched".equalsIgnoreCase(s) || "mismatch".equalsIgnoreCase(s) || "mismatched".equals(s)) {
-			cls = "badge-pill compact fail";
-		} else if ("partially unexecuted".equalsIgnoreCase(s) || s.contains("part")) {
-			cls = "badge-pill compact warn";
-		} else if ("n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s) || "n/a".equals(s)) {
-			cls = "badge-pill compact outline";
-		} else {
-			cls = "badge-pill compact outline";
-		}
-
-		return "<span class='" + cls + "'>" + text + "</span>";
 	}
 
 	@SuppressWarnings("unchecked")
@@ -988,81 +1002,89 @@ public class TestCaseReportService {
 
 			int idx = 0;
 			for (ScenarioExampleRunDTO ex : exampleRows) {
-				String title = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
-				String status = ex.getStatus() == null ? "N/A" : ex.getStatus();
-				String xmlStatusSce = ex.getXmlDiffStatus() == null ? "N/A" : ex.getXmlDiffStatus();
+			    String title = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
+			    String status = ex.getStatus() == null ? "N/A" : ex.getStatus();
+			    String xmlStatusSce = ex.getXmlDiffStatus() == null ? "N/A" : ex.getXmlDiffStatus();
 
-				xmlGroup.append("<div class='section example-card' id='exampleCard").append(idx).append("'>");
-				xmlGroup.append("<div class='section-header'>");
+			    xmlGroup.append("<div class='section example-card' id='exampleCard").append(idx).append("'>");
+			    xmlGroup.append("<div class='section-header'>");
 
-				// left: title
-				xmlGroup.append("<div class='section-title' style='font-size:14px;'>").append(escapeHtml(title))
-						.append("</div>");
+			    // left: title
+			    xmlGroup.append("<div class='section-title' style='font-size:14px;'>")
+			            .append(escapeHtml(title))
+			            .append("</div>");
 
-				// right: controls (badges + buttons)
-				xmlGroup.append("<div class='section-controls'>");
+			    // right: controls (badges + buttons)
+			    xmlGroup.append("<div class='section-controls'>");
 
-				// status badge (run status)
-//				xmlGroup.append("<div class='section-subtitle'>").append(renderStatusBadge(status)).append("</div>");
+			    // xml badge (example-wise xml result)
+			    xmlGroup.append("<div class='section-subtitle'>")
+			            .append(renderXmlBadge(xmlStatusSce))
+			            .append("</div>");
 
-				// xml badge (example-wise xml result)
-				xmlGroup.append("<div class='section-subtitle'>").append(renderXmlBadge(xmlStatusSce)).append("</div>");
+			    // toggle buttons (target child panels)
+			    xmlGroup.append("<div style='display:flex;gap:6px;'>")
+			            .append("<button class='toggle-btn' onclick=\"toggle('xmlDiffEx").append(idx).append("')\">Toggle XML Differences</button>")
+			            .append("<button class='toggle-btn' onclick=\"toggle('ssbEx").append(idx).append("')\">Toggle Expected Vs Actual</button>")
+			            .append("<button class='toggle-btn' onclick=\"toggle('semEx").append(idx).append("')\">Toggle Semantic XML Differences</button>")
+			            .append("</div>");
 
-				// toggle buttons
-				xmlGroup.append("<div style='display:flex;gap:6px;'>")
-						.append("<button class='toggle-btn' onclick=\"toggle('xmlDiffEx").append(idx)
-						.append("')\">Toggle XML Differences</button>")
-						.append("<button class='toggle-btn' onclick=\"toggle('ssbEx").append(idx)
-						.append("')\">Toggle Expected Vs Actual</button>")
-						.append("<button class='toggle-btn' onclick=\"toggle('semEx").append(idx)
-						.append("')\">Toggle Semantic XML Differences</button>").append("</div>");
+			    xmlGroup.append("</div>"); // end section-controls
+			    xmlGroup.append("</div>"); // end section-header
 
-				xmlGroup.append("</div>"); // end section-controls
-				xmlGroup.append("</div>"); // end section-header
+			    // === XML Differences panel (child) ===
+			    try {
+			        String xmlDiffHtml = buildXmlDifferencesFixed(ex, dto);
+			        String xmlContainerId = "xmlDiffEx" + idx;
+			        if (xmlDiffHtml == null || xmlDiffHtml.trim().isEmpty()) {
+			            xmlGroup.append("<div id='").append(xmlContainerId)
+			                    .append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+			                    .append("<div class='log-box'>No XML differences or unexecuted scenarios found</div>")
+			                    .append("</div>");
+			        } else {
+			            xmlGroup.append("<div id='").append(xmlContainerId)
+			                    .append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+			                    .append(xmlDiffHtml)
+			                    .append("</div>");
+			        }
+			    } catch (Exception e) {
+			        logger.warn("buildXmlDifferencesFixed threw for example {}: {}", idx, e.getMessage());
+			        xmlGroup.append("<div class='log-box'>Error rendering XML Differences.</div>");
+			    }
 
-				try {
-					String xmlDiffHtml = buildXmlDifferencesFixed(ex, dto);
-					xmlGroup.append((xmlDiffHtml == null || xmlDiffHtml.trim().isEmpty())
-							? "<div class='log-box'>No XML differences or unexecuted scenarios found</div>"
-							: xmlDiffHtml);
-				} catch (Exception e) {
-					logger.warn("buildXmlDifferencesFixed threw for example {}: {}", idx, e.getMessage());
-					xmlGroup.append("<div class='log-box'>Error rendering XML Differences.</div>");
-				}
-				xmlGroup.append("</div>");
+			    // === Expected Vs Actual panel (child) ===
+			    xmlGroup.append("<div id='ssbEx").append(idx)
+			            .append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
+			            .append("<div style='font-weight:600;margin-bottom:6px;'>Expected Vs Actual</div>");
+			    try {
+			        String ssbHtml = buildXmlSideBySide(ex);
+			        xmlGroup.append((ssbHtml == null || ssbHtml.trim().isEmpty())
+			                ? "<div class='log-box'>No XML content available — both Expected and Actual files are empty or missing.</div>"
+			                : ssbHtml);
+			    } catch (Exception e) {
+			        logger.warn("buildXmlSideBySide threw for example {}: {}", idx, e.getMessage());
+			        xmlGroup.append("<div class='log-box'>Error rendering Expected Vs Actual.</div>");
+			    }
+			    xmlGroup.append("</div>");
 
-				// Expected Vs Actual (open by default) with header
-				xmlGroup.append("<div id='ssbEx").append(idx)
-						.append("' style='display:none;margin:6px 0;padding:6px 0;'>")
-						.append("<div style='font-weight:600;margin-bottom:6px;'>Expected Vs Actual</div>");
-				try {
-					String ssbHtml = buildXmlSideBySide(ex);
-					xmlGroup.append((ssbHtml == null || ssbHtml.trim().isEmpty())
-							? "<div class='log-box'>No XML content available — both Expected and Actual files are empty or missing.</div>"
-							: ssbHtml);
-				} catch (Exception e) {
-					logger.warn("buildXmlSideBySide threw for example {}: {}", idx, e.getMessage());
-					xmlGroup.append("<div class='log-box'>Error rendering Expected Vs Actual.</div>");
-				}
-				xmlGroup.append("</div>");
+			    // === Semantic panel (child) ===
+			    xmlGroup.append("<div id='semEx").append(idx)
+			            .append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
+			            .append("<div style='font-weight:600;margin-bottom:6px;'>Semantic XML Differences</div>");
+			    try {
+			        String semHtml = buildSemanticXmlDiff(ex);
+			        xmlGroup.append((semHtml == null || semHtml.trim().isEmpty())
+			                ? "<div class='log-box'>Semantic comparison skipped — both Expected and Actual XML are empty or missing.</div>"
+			                : semHtml);
+			    } catch (Exception e) {
+			        logger.warn("buildSemanticXmlDiff threw for example {}: {}", idx, e.getMessage());
+			        xmlGroup.append("<div class='log-box'>Error rendering Semantic XML Differences.</div>");
+			    }
+			    xmlGroup.append("</div>");
 
-				// Semantic (collapsed by default) with header
-				xmlGroup.append("<div id='semEx").append(idx)
-						.append("' style='display:none;margin:6px 0;padding:6px 0;'>")
-						.append("<div style='font-weight:600;margin-bottom:6px;'>Semantic XML Differences</div>");
-				try {
-					String semHtml = buildSemanticXmlDiff(ex);
-					xmlGroup.append((semHtml == null || semHtml.trim().isEmpty())
-							? "<div class='log-box'>Semantic comparison skipped — both Expected and Actual XML are empty or missing.</div>"
-							: semHtml);
-				} catch (Exception e) {
-					logger.warn("buildSemanticXmlDiff threw for example {}: {}", idx, e.getMessage());
-					xmlGroup.append("<div class='log-box'>Error rendering Semantic XML Differences.</div>");
-				}
-				xmlGroup.append("</div>");
-
-				xmlGroup.append("</div>"); // end example-card
-				idx++;
+			    // close example-card (all three child panels are inside the card)
+			    xmlGroup.append("</div>");
+			    idx++;
 			}
 
 			xmlGroup.append("</div>"); // end examples-group

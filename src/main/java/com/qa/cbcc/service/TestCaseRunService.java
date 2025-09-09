@@ -1086,8 +1086,9 @@ public class TestCaseRunService {
 
 				try {
 					Optional<String> featureOpt = testCase.getFeatureScenarios().stream()
-							.filter(fs -> fs.getScenarios().contains(scenarioName))
-							.map(TestCaseDTO.FeatureScenario::getFeature).findFirst();
+						.filter(fs -> fs.getScenarios() != null && fs.getScenarios().contains(scenarioName))
+						.map(TestCaseDTO.FeatureScenario::getFeature)
+						.findFirst();
 
 					String feature = featureOpt.orElse(null);
 
