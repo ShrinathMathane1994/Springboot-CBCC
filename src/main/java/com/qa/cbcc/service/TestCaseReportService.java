@@ -12,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -48,7 +49,9 @@ public class TestCaseReportService {
 	private static final String SKIPPED_TAGS_REGEX;
 	private static final Set<String> PLACEHOLDERS;
 	private static final Pattern PLACEHOLDER_TOKEN;
-
+	// New flag: when true, apply skipped.tags even inside <Payload>/CDATA
+	private static final boolean SKIP_INTERNAL_TAGS;
+	private static final Set<String> EXPLICIT_INTERNAL_SKIPPED_TAGS;
 
 	static {
 		Properties props = new Properties();
@@ -58,7 +61,7 @@ public class TestCaseReportService {
 				props.load(in);
 			}
 		} catch (IOException e) {
-			// optional: log it, fallback to defaults
+			logger.warn("Could not load sem-diff.properties from classpath: {}", e.getMessage());
 		}
 
 		// fallback defaults if missing
@@ -74,12 +77,50 @@ public class TestCaseReportService {
 		SKIPPED_TAGS_REGEX = buildSkippedTagsRegex(SKIPPED_TAGS);
 
 		String joined = PLACEHOLDERS.stream().map(Pattern::quote).collect(Collectors.joining("|"));
-		PLACEHOLDER_TOKEN = Pattern.compile("\\$\\{(" + joined + ")\\}");
+		if (!joined.isEmpty()) {
+			PLACEHOLDER_TOKEN = Pattern.compile("\\$\\{(" + joined + ")\\}");
+		} else {
+			// never matches
+			PLACEHOLDER_TOKEN = Pattern.compile("(?!)");
+		}
+
+		// Read skip-internal configuration: accept "skip.internal.tags" or
+		// "skipInternalTags"
+		String skipInternalVal = props.getProperty("skip.internal.tags");
+		if (skipInternalVal == null) {
+			skipInternalVal = props.getProperty("skipInternalTags");
+		}
+		boolean skipInternal = false;
+		if (skipInternalVal != null && !skipInternalVal.trim().isEmpty()) {
+			String v = skipInternalVal.trim().toLowerCase();
+			skipInternal = v.equals("true") || v.equals("yes") || v.equals("1");
+		}
+		SKIP_INTERNAL_TAGS = skipInternal;
+
+		// Read explicit internal skip list: tags that should be skipped even when
+		// skip.internal.tags=false
+		String explicitInternal = props.getProperty("explicit.skip.internal.tags", "").trim();
+		if (explicitInternal.isEmpty()) {
+			EXPLICIT_INTERNAL_SKIPPED_TAGS = new LinkedHashSet<>();
+		} else {
+			EXPLICIT_INTERNAL_SKIPPED_TAGS = Arrays.stream(explicitInternal.split("[,;]")).map(String::trim)
+					.filter(s -> !s.isEmpty()).collect(Collectors.toCollection(LinkedHashSet::new));
+		}
+
+		logger.info("sem-diff: skipped.tags={}, placeholders={}, skip.internal.tags={}, explicit.skip.internal.tags={}",
+				SKIPPED_TAGS, PLACEHOLDERS, SKIP_INTERNAL_TAGS, EXPLICIT_INTERNAL_SKIPPED_TAGS);
 	}
 
 	private static String buildSkippedTagsRegex(Set<String> tags) {
-		String joined = String.join("|", tags);
-		return ".*<(?:/?(?:" + joined + "))(?:\\s[^>]*)?>.*";
+		if (tags == null || tags.isEmpty()) {
+			return "";
+		}
+		String joined = tags.stream().filter(Objects::nonNull).map(String::trim).filter(s -> !s.isEmpty())
+				.map(Pattern::quote).collect(Collectors.joining("|"));
+		String openClose = "(?s)<(?:[^:\\s>]+:)?" + "(?:" + joined + ")\\b[^>]*>.*?</(?:[^:\\s>]+:)?" + "(?:" + joined
+				+ ")\\s*>";
+		String selfClose = "(?s)<(?:[^:\\s>]+:)?" + "(?:" + joined + ")\\b[^>]*/\\s*>";
+		return "(?:" + openClose + "|" + selfClose + ")";
 	}
 
 	private static final Pattern PLACEHOLDER_ONLY_LINE = Pattern.compile("^\\s*" + PLACEHOLDER_TOKEN + "\\s*$");
@@ -113,117 +154,271 @@ public class TestCaseReportService {
 		return Pattern.compile(expRegex, Pattern.DOTALL).matcher(actual).matches();
 	}
 
-	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
-		if (expectedXml == null)
-			expectedXml = "";
-		if (actualXml == null)
-			actualXml = "";
+//	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
+//		if (expectedXml == null)
+//			expectedXml = "";
+//		if (actualXml == null)
+//			actualXml = "";
+//
+//		// keep trailing empty lines if any
+//		String[] expectedLines = expectedXml.split("\\r?\\n", -1);
+//		String[] actualLines = actualXml.split("\\r?\\n", -1);
+//
+//		List<String> alignedExpected = new ArrayList<>();
+//		List<String> alignedActual = new ArrayList<>();
+//
+//		int ei = 0; // cursor over expected
+//
+//		for (int ai = 0; ai < actualLines.length; ai++) {
+//			String actLine = actualLines[ai];
+//			String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
+//
+//			String ta = actLine.trim();
+//			String te = expLine.trim();
+//
+//			// --- Case 0: skip-tag handling based on Actual line ---
+//			Optional<String> skippedTag = SKIPPED_TAGS.stream()
+//					.filter(tag -> ta.startsWith("<" + tag) || ta.startsWith("</" + tag)).findFirst();
+//
+//			if (skippedTag.isPresent()) {
+//				String indent = leadingWhitespace(actLine);
+//				alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
+//				alignedActual.add(actLine);
+//				continue; // do NOT consume expected
+//			}
+//
+//			// --- placeholder-only expected line handling with look-ahead (zero-width
+//			// aware) ---
+//			if (ei < expectedLines.length && isPlaceholderOnlyLine(expLine)) {
+//
+//				// Case A: zero-width match — current actual already matches the *next* expected
+//				// line.
+//				if (ei + 1 < expectedLines.length && linesEqualWithPlaceholders(expectedLines[ei + 1], actLine)) {
+//					// Consume expected placeholder ONLY; keep the same actual line for the next
+//					// iteration.
+//					alignedExpected.add(expLine);
+//					alignedActual.add(leadingWhitespace(expLine)); // empty cell keeps columns aligned
+//					ei++;
+//					ai--; // reprocess the same actual line next loop
+//					continue;
+//				}
+//
+//				// Case B: placeholder consumes this actual line (value line)
+//				alignedExpected.add(expLine);
+//				alignedActual.add(actLine);
+//				ei++;
+//				continue;
+//			}
+//
+//			// --- Case 1: lines are equal (with placeholders) -> consume both
+//			if (ei < expectedLines.length && linesEqualWithPlaceholders(expLine, actLine)) {
+//				alignedExpected.add(expLine);
+//				alignedActual.add(actLine);
+//				ei++;
+//				continue;
+//			}
+//
+//			// --- Case 2: Actual has extra content BEFORE Expected's closing tag
+//			if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
+//				String indent = leadingWhitespace(actLine);
+//				alignedExpected.add(indent + "<!-- missing in expected -->");
+//				alignedActual.add(actLine);
+//				continue;
+//			}
+//
+//			// --- Case 3: Actual has extra content after Expected ended
+//			if (ei >= expectedLines.length && !ta.isEmpty()) {
+//				String indent = leadingWhitespace(actLine);
+//				alignedExpected.add(indent + "<!-- missing in expected -->");
+//				alignedActual.add(actLine);
+//				continue;
+//			}
+//
+//			// --- Case 4: Extra in Expected (Actual is empty here)
+//			if (!te.isEmpty() && ta.isEmpty()) {
+//				String indent = leadingWhitespace(expLine);
+//				alignedExpected.add(expLine);
+//				alignedActual.add(indent + "<!-- missing in actual -->");
+//				ei++;
+//				continue;
+//			}
+//
+//			// --- Case 5: Fallback mismatch
+//			if (ei < expectedLines.length) {
+//				alignedExpected.add(expLine);
+//				alignedActual.add(actLine);
+//				ei++;
+//			} else {
+//				String indent = leadingWhitespace(actLine);
+//				alignedExpected.add(indent + "<!-- missing in expected -->");
+//				alignedActual.add(actLine);
+//			}
+//		}
+//
+//		// Any remaining Expected lines after Actual ends → mark missing in actual
+//		while (ei < expectedLines.length) {
+//			String expLine = expectedLines[ei++];
+//			String indent = leadingWhitespace(expLine);
+//			alignedExpected.add(expLine);
+//			alignedActual.add(indent + "<!-- missing in actual -->");
+//		}
+//
+//		return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
+//	}
 
-		// keep trailing empty lines if any
-		String[] expectedLines = expectedXml.split("\\r?\\n", -1);
-		String[] actualLines = actualXml.split("\\r?\\n", -1);
-
-		List<String> alignedExpected = new ArrayList<>();
-		List<String> alignedActual = new ArrayList<>();
-
-		int ei = 0; // cursor over expected
-
-		for (int ai = 0; ai < actualLines.length; ai++) {
-			String actLine = actualLines[ai];
-			String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
-
-			String ta = actLine.trim();
-			String te = expLine.trim();
-
-			// --- Case 0: skip-tag handling based on Actual line ---
-			Optional<String> skippedTag = SKIPPED_TAGS.stream()
-					.filter(tag -> ta.startsWith("<" + tag) || ta.startsWith("</" + tag)).findFirst();
-
-			if (skippedTag.isPresent()) {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
-				alignedActual.add(actLine);
-				continue; // do NOT consume expected
-			}
-
-			// --- placeholder-only expected line handling with look-ahead (zero-width
-			// aware) ---
-			if (ei < expectedLines.length && isPlaceholderOnlyLine(expLine)) {
-
-				// Case A: zero-width match — current actual already matches the *next* expected
-				// line.
-				if (ei + 1 < expectedLines.length && linesEqualWithPlaceholders(expectedLines[ei + 1], actLine)) {
-					// Consume expected placeholder ONLY; keep the same actual line for the next
-					// iteration.
-					alignedExpected.add(expLine);
-					alignedActual.add(leadingWhitespace(expLine)); // empty cell keeps columns aligned
-					ei++;
-					ai--; // reprocess the same actual line next loop
-					continue;
-				}
-
-				// Case B: placeholder consumes this actual line (value line)
-				alignedExpected.add(expLine);
-				alignedActual.add(actLine);
-				ei++;
-				continue;
-			}
-
-			// --- Case 1: lines are equal (with placeholders) -> consume both
-			if (ei < expectedLines.length && linesEqualWithPlaceholders(expLine, actLine)) {
-				alignedExpected.add(expLine);
-				alignedActual.add(actLine);
-				ei++;
-				continue;
-			}
-
-			// --- Case 2: Actual has extra content BEFORE Expected's closing tag
-			if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- missing in expected -->");
-				alignedActual.add(actLine);
-				continue;
-			}
-
-			// --- Case 3: Actual has extra content after Expected ended
-			if (ei >= expectedLines.length && !ta.isEmpty()) {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- missing in expected -->");
-				alignedActual.add(actLine);
-				continue;
-			}
-
-			// --- Case 4: Extra in Expected (Actual is empty here)
-			if (!te.isEmpty() && ta.isEmpty()) {
-				String indent = leadingWhitespace(expLine);
-				alignedExpected.add(expLine);
-				alignedActual.add(indent + "<!-- missing in actual -->");
-				ei++;
-				continue;
-			}
-
-			// --- Case 5: Fallback mismatch
-			if (ei < expectedLines.length) {
-				alignedExpected.add(expLine);
-				alignedActual.add(actLine);
-				ei++;
-			} else {
-				String indent = leadingWhitespace(actLine);
-				alignedExpected.add(indent + "<!-- missing in expected -->");
-				alignedActual.add(actLine);
-			}
-		}
-
-		// Any remaining Expected lines after Actual ends → mark missing in actual
-		while (ei < expectedLines.length) {
-			String expLine = expectedLines[ei++];
-			String indent = leadingWhitespace(expLine);
-			alignedExpected.add(expLine);
-			alignedActual.add(indent + "<!-- missing in actual -->");
-		}
-
-		return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
+	// Detect <Payload> opening tag (any namespace/prefix or attributes allowed)
+	private boolean containsPayloadStart(String line) {
+	    if (line == null) return false;
+	    return line.toLowerCase().matches(".*<\\s*(?:[a-z0-9_\\-]+:)?payload(?:\\s+[^>]*)?>.*");
 	}
+
+	// Detect </Payload> closing tag (namespace/prefix tolerant)
+	private boolean containsPayloadEnd(String line) {
+	    if (line == null) return false;
+	    return line.toLowerCase().matches(".*<\\s*/\\s*(?:[a-z0-9_\\-]+:)?payload\\s*>.*");
+	}
+
+	// Detect CDATA start
+	private boolean containsCdataStart(String line) {
+	    return line != null && line.contains("<![CDATA[");
+	}
+
+	// Detect CDATA end
+	private boolean containsCdataEnd(String line) {
+	    return line != null && line.contains("]]>");
+	}
+
+	private Pair<String, String> alignExpectedWithSkippedTags(String expectedXml, String actualXml) {
+	    if (expectedXml == null) expectedXml = "";
+	    if (actualXml == null) actualXml = "";
+
+	    String[] expectedLines = expectedXml.split("\\r?\\n", -1);
+	    String[] actualLines = actualXml.split("\\r?\\n", -1);
+
+	    List<String> alignedExpected = new ArrayList<>();
+	    List<String> alignedActual = new ArrayList<>();
+
+	    int ei = 0;
+
+	    int expectedPayloadDepth = 0;
+	    int actualPayloadDepth = 0;
+	    boolean expectedInCdata = false;
+	    boolean actualInCdata = false;
+
+	    for (int ai = 0; ai < actualLines.length; ai++) {
+	        String actLine = actualLines[ai];
+	        String expLine = (ei < expectedLines.length) ? expectedLines[ei] : "";
+
+	        String ta = actLine == null ? "" : actLine.trim();
+	        String te = expLine == null ? "" : expLine.trim();
+
+	        // --- update payload/CDATA states ---
+	        if (containsPayloadStart(expLine)) expectedPayloadDepth++;
+	        if (containsCdataStart(expLine)) expectedInCdata = true;
+	        if (containsCdataEnd(expLine)) expectedInCdata = false;
+	        if (containsPayloadEnd(expLine) && expectedPayloadDepth > 0) expectedPayloadDepth--;
+
+	        if (containsPayloadStart(actLine)) actualPayloadDepth++;
+	        if (containsCdataStart(actLine)) actualInCdata = true;
+	        if (containsCdataEnd(actLine)) actualInCdata = false;
+	        if (containsPayloadEnd(actLine) && actualPayloadDepth > 0) actualPayloadDepth--;
+
+	        boolean actualIsInsidePayload = (actualPayloadDepth > 0) || actualInCdata;
+	        boolean expectedIsInsidePayload = (expectedPayloadDepth > 0) || expectedInCdata;
+
+	        // --- Case 0: skip-tag handling ---
+	        boolean allowSkipByLocation = SKIP_INTERNAL_TAGS || (!actualIsInsidePayload && !expectedIsInsidePayload);
+	        Optional<String> skippedTag = Optional.empty();
+	        if (SKIPPED_TAGS != null && !SKIPPED_TAGS.isEmpty()) {
+	            String low = ta.toLowerCase();
+	            for (String tag : SKIPPED_TAGS) {
+	                if (tag == null || tag.trim().isEmpty()) continue;
+	                String t = tag.toLowerCase();
+	                String open = "<" + t;
+	                String close = "</" + t;
+	                // skip if: allowed by location OR explicitly listed for internal skipping
+	                boolean forcedSkip = EXPLICIT_INTERNAL_SKIPPED_TAGS != null 
+	                        && EXPLICIT_INTERNAL_SKIPPED_TAGS.contains(tag);
+	                if ((allowSkipByLocation || forcedSkip) &&
+	                        (low.startsWith(open) || low.startsWith(close))) {
+	                    skippedTag = Optional.of(tag);
+	                    break;
+	                }
+	            }
+	        }
+
+	        if (skippedTag.isPresent()) {
+	            String indent = leadingWhitespace(actLine);
+	            alignedExpected.add(indent + "<!-- skipped " + skippedTag.get() + " -->");
+	            alignedActual.add(actLine);
+	            continue; // don’t consume expected
+	        }
+
+	        // --- rest is unchanged ---
+	        if (ei < expectedLines.length && isPlaceholderOnlyLine(expLine)) {
+	            if (ei + 1 < expectedLines.length && linesEqualWithPlaceholders(expectedLines[ei + 1], actLine)) {
+	                alignedExpected.add(expLine);
+	                alignedActual.add(leadingWhitespace(expLine));
+	                ei++;
+	                ai--;
+	                continue;
+	            }
+	            alignedExpected.add(expLine);
+	            alignedActual.add(actLine);
+	            ei++;
+	            continue;
+	        }
+
+	        if (ei < expectedLines.length && linesEqualWithPlaceholders(te, ta)) {
+	            alignedExpected.add(expLine);
+	            alignedActual.add(actLine);
+	            ei++;
+	            continue;
+	        }
+
+	        if (ei < expectedLines.length && isClosingTag(te) && !ta.isEmpty()) {
+	            String indent = leadingWhitespace(actLine);
+	            alignedExpected.add(indent + "<!-- missing in expected -->");
+	            alignedActual.add(actLine);
+	            continue;
+	        }
+
+	        if (ei >= expectedLines.length && !ta.isEmpty()) {
+	            String indent = leadingWhitespace(actLine);
+	            alignedExpected.add(indent + "<!-- missing in expected -->");
+	            alignedActual.add(actLine);
+	            continue;
+	        }
+
+	        if (!te.isEmpty() && ta.isEmpty()) {
+	            String indent = leadingWhitespace(expLine);
+	            alignedExpected.add(expLine);
+	            alignedActual.add(indent + "<!-- missing in actual -->");
+	            ei++;
+	            continue;
+	        }
+
+	        if (ei < expectedLines.length) {
+	            alignedExpected.add(expLine);
+	            alignedActual.add(actLine);
+	            ei++;
+	        } else {
+	            String indent = leadingWhitespace(actLine);
+	            alignedExpected.add(indent + "<!-- missing in expected -->");
+	            alignedActual.add(actLine);
+	        }
+	    }
+
+	    while (ei < expectedLines.length) {
+	        String expLine = expectedLines[ei++];
+	        String indent = leadingWhitespace(expLine);
+	        alignedExpected.add(expLine);
+	        alignedActual.add(indent + "<!-- missing in actual -->");
+	    }
+
+	    return Pair.of(String.join("\n", alignedExpected), String.join("\n", alignedActual));
+	}
+
 
 	private String buildXmlSideBySide(TestCaseRunHistoryDTO dto) {
 		String original = dto.getInputXmlContent() == null ? "" : dto.getInputXmlContent();
@@ -838,7 +1033,7 @@ public class TestCaseReportService {
 
 				// Expected Vs Actual (open by default) with header
 				xmlGroup.append("<div id='ssbEx").append(idx)
-						.append("' style='display:block;margin:6px 0;padding:6px 0;'>")
+						.append("' style='display:none;margin:6px 0;padding:6px 0;'>")
 						.append("<div style='font-weight:600;margin-bottom:6px;'>Expected Vs Actual</div>");
 				try {
 					String ssbHtml = buildXmlSideBySide(ex);
