@@ -154,7 +154,7 @@ public class StepDefCompiler {
 		}
 	}
 
-	public static void compileStepDefsOld(List<String> projectPaths) {
+	public static void compileStepDefs(List<String> projectPaths) {
 		for (String projectPath : projectPaths) {
 			File srcDir = new File(projectPath, "src/test/java");
 			File outputDir = new File(projectPath, "target/test-classes");
@@ -208,72 +208,6 @@ public class StepDefCompiler {
 				}
 			} catch (Exception e) {
 				throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, e);
-			}
-		}
-	}
-
-	public static void compileStepDefs(List<String> projectPaths) {
-		for (String projectPath : projectPaths) {
-			File srcDir = new File(projectPath, "src/test/java");
-			File outputDir = new File(projectPath, "target/test-classes");
-			outputDir.mkdirs();
-
-			JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-			if (compiler == null) {
-				throw new IllegalStateException(
-						"❌ No system Java compiler. Are you running on a JRE instead of a JDK?");
-			}
-
-			// Collect .java files
-			List<File> javaFiles = new ArrayList<>();
-			collectJavaFiles(srcDir, javaFiles);
-
-			if (javaFiles.isEmpty()) {
-				System.out.println("⚠ No stepDef .java files found in " + srcDir);
-				continue;
-			}
-
-			// Only recompile changed files
-			List<File> toCompile = new ArrayList<>();
-			for (File javaFile : javaFiles) {
-				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
-				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
-					toCompile.add(javaFile);
-				}
-			}
-
-			if (toCompile.isEmpty()) {
-				System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
-				continue;
-			}
-
-			// Build classpath: target/classes + target/test-classes +
-			// target/dependency/*.jar
-			StringBuilder classpath = new StringBuilder();
-			classpath.append(new File(projectPath, "target/classes").getAbsolutePath()).append(File.pathSeparator);
-			classpath.append(outputDir.getAbsolutePath()).append(File.pathSeparator);
-
-			File depDir = new File("target/dependency");
-			if (depDir.exists() && depDir.isDirectory()) {
-				File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
-				if (jars != null) {
-					for (File jar : jars) {
-						classpath.append(jar.getAbsolutePath()).append(File.pathSeparator);
-					}
-				}
-			}
-
-			List<String> options = Arrays.asList("-d", outputDir.getAbsolutePath(), "-classpath", classpath.toString(),
-					"-encoding", System.getProperty("file.encoding"));
-
-			int result = compiler.run(null, null, null, Stream
-					.concat(options.stream(), toCompile.stream().map(File::getAbsolutePath)).toArray(String[]::new));
-
-			if (result != 0) {
-				throw new RuntimeException("❌ StepDefs compilation failed, exit code " + result);
-			} else {
-				System.out
-						.println("✅ Compiled " + toCompile.size() + " StepDef(s) into " + outputDir.getAbsolutePath());
 			}
 		}
 	}
