@@ -111,6 +111,124 @@ public class TestCaseRunService {
 		}
 	}
 
+	private String findRunCucumberTestsClassName(ClassLoader cl) {
+		if (!(cl instanceof URLClassLoader)) {
+			return null;
+		}
+		URLClassLoader urlCl = (URLClassLoader) cl;
+		try {
+			for (URL url : urlCl.getURLs()) {
+				String path = url.getPath();
+				if (path == null)
+					continue;
+				File f = new File(path);
+				if (f.isDirectory()) {
+					// scan directory tree for RunCucumberTests.class
+					Path base = f.toPath();
+					try (Stream<Path> walk = Files.walk(base)) {
+						Optional<Path> found = walk
+								.filter(p -> p.getFileName().toString().equals("RunCucumberTests.class")).findFirst();
+						if (found.isPresent()) {
+							Path rel = base.relativize(found.get());
+							String className = rel.toString().replace(File.separatorChar, '.').replaceAll("\\.class$",
+									"");
+							return className;
+						}
+					} catch (IOException ioe) {
+						logger.warn("Error scanning directory {} for RunCucumberTests: {}", f, ioe.getMessage(), ioe);
+					}
+				} else if (f.isFile() && f.getName().endsWith(".jar")) {
+					try (JarFile jar = new JarFile(f)) {
+						Enumeration<JarEntry> entries = jar.entries();
+						while (entries.hasMoreElements()) {
+							JarEntry e = entries.nextElement();
+							if (e.getName().endsWith("/RunCucumberTests.class")
+									|| e.getName().equals("RunCucumberTests.class")) {
+								String className = e.getName().replace('/', '.').replaceAll("\\.class$", "");
+								return className;
+							}
+						}
+					} catch (IOException ioe) {
+						logger.warn("Error scanning jar {} for RunCucumberTests: {}", f.getAbsolutePath(),
+								ioe.getMessage(), ioe);
+					}
+				}
+			}
+		} catch (Exception ex) {
+			logger.warn("Error while searching classloader for RunCucumberTests: {}", ex.getMessage(), ex);
+		}
+		return null;
+	}
+
+	/**
+	 * Invoke RunCucumberTests.init() reflectively, but only once per JVM (guarded).
+	 * Will throw IOException if the underlying method throws it.
+	 */
+	private void invokeInitIfPresent(Class<?> runnerClass) throws Exception {
+		if (runnerClass == null) {
+			logger.debug("No RunCucumberTests class available for init().");
+			return;
+		}
+		// ensure single invocation
+		if (!runCukeInitCalled.compareAndSet(false, true)) {
+			logger.debug("RunCucumberTests.init() already invoked in this JVM — skipping.");
+			return;
+		}
+		try {
+			Method initMethod;
+			try {
+				initMethod = runnerClass.getMethod("init");
+			} catch (NoSuchMethodException nsme) {
+				initMethod = runnerClass.getDeclaredMethod("init");
+				initMethod.setAccessible(true);
+			}
+			try {
+				initMethod.invoke(null);
+				logger.info("RunCucumberTests.init() invoked successfully.");
+			} catch (InvocationTargetException ite) {
+				Throwable cause = ite.getCause();
+				if (cause instanceof IOException)
+					throw (IOException) cause;
+				throw new RuntimeException("RunCucumberTests.init() failed", cause);
+			}
+		} catch (NoSuchMethodException | IllegalAccessException e) {
+			logger.warn("Could not invoke RunCucumberTests.init(): {}", e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Invoke RunCucumberTests.destroy() reflectively. Logs exceptions; does not
+	 * rethrow.
+	 */
+	private void invokeDestroyIfPresent(Class<?> runnerClass) {
+		if (runnerClass == null) {
+			logger.debug("No RunCucumberTests class available for destroy().");
+			return;
+		}
+		try {
+			Method destroyMethod;
+			try {
+				destroyMethod = runnerClass.getMethod("destroy");
+			} catch (NoSuchMethodException nsme) {
+				destroyMethod = runnerClass.getDeclaredMethod("destroy");
+				destroyMethod.setAccessible(true);
+			}
+			try {
+				destroyMethod.invoke(null);
+				logger.info("RunCucumberTests.destroy() invoked successfully.");
+			} catch (InvocationTargetException ite) {
+				Throwable cause = ite.getCause();
+				if (cause instanceof SQLException) {
+					logger.error("RunCucumberTests.destroy() threw SQLException: {}", cause.getMessage(), cause);
+				} else {
+					logger.error("RunCucumberTests.destroy() threw exception: {}", cause.getMessage(), cause);
+				}
+			}
+		} catch (NoSuchMethodException | IllegalAccessException e) {
+			logger.warn("Could not invoke RunCucumberTests.destroy(): {}", e.getMessage(), e);
+		}
+	}
+
 	public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) {
 		List<Map<String, Object>> results = new ArrayList<>();
 
@@ -382,11 +500,68 @@ public class TestCaseRunService {
 
 				// ✅ Now just run cucumber using the system classloader
 				// Create a URLClassLoader with stepDefs and dependency jars
-				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]), Thread.currentThread().getContextClassLoader())) {
+				// try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]), Thread.currentThread().getContextClassLoader())) {
+				// 	logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+				// 	Main.run(argv, classLoader);
+				// }
+
+                URLClassLoader classLoader = null;
+				Class<?> runnerClass = null;
+				String runnerClassName = null;
+				ClassLoader originalContext = Thread.currentThread().getContextClassLoader();
+
+				try {
+					classLoader = new URLClassLoader(urls.toArray(new URL[0]), originalContext);
+					Thread.currentThread().setContextClassLoader(classLoader);
+//---For Scanning the RunCucumberTests Class---//
+//					try {
+//						// Try simple first
+//						runnerClass = classLoader.loadClass("RunCucumberTests");
+//						runnerClassName = runnerClass.getName();
+//					} catch (ClassNotFoundException e) {
+//						runnerClassName = findRunCucumberTestsClassName(classLoader);
+//						if (runnerClassName != null) {
+//							runnerClass = classLoader.loadClass(runnerClassName);
+//						}
+//					}
+
+					try {
+						runnerClass = classLoader.loadClass("RunCucumberTests");
+						runnerClassName = "RunCucumberTests"; // default package
+					} catch (ClassNotFoundException e) {
+						logger.info("RunCucumberTests not found in classpath — skipping init/destroy hooks.");
+					}
+
+					// Run init once
+					invokeInitIfPresent(runnerClass);
+
+					// Capture cucumber output
+					System.setOut(new PrintStream(baos));
 					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
 					Main.run(argv, classLoader);
-				}
 
+					exampleMap = extractExamplesFromFeature(featureFile);
+
+				} finally {
+					System.out.flush();
+					System.setOut(originalOut);
+
+					try {
+						if (runnerClass == null && runnerClassName != null && classLoader != null) {
+							runnerClass = classLoader.loadClass(runnerClassName);
+						}
+						invokeDestroyIfPresent(runnerClass);
+					} finally {
+						Thread.currentThread().setContextClassLoader(originalContext);
+						if (classLoader != null) {
+							try {
+								classLoader.close();
+							} catch (IOException e) {
+								logger.warn("Failed to close URLClassLoader: {}", e.getMessage(), e);
+							}
+						}
+					}
+				}
 
 				// 🔍 Log the resolved classpath entries
 //					logger.info("StepDefs + Dependency classpath URLs:");
@@ -403,7 +578,7 @@ public class TestCaseRunService {
 //				}
 ;
 				// ✅ Extract from the temp feature file BEFORE deleting it
-				exampleMap = extractExamplesFromFeature(featureFile);
+				// exampleMap = extractExamplesFromFeature(featureFile);
 
 			} finally {
 				System.out.flush();
