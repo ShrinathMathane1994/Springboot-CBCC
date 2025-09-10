@@ -62,6 +62,10 @@ public class CucumberLogUtils {
 	}
 
 	private static String formatDuration(String timeStr) {
+		return timeStr;
+	}
+	
+	private static String formatDurationToShowInSec(String timeStr) {
 		Pattern pattern = Pattern.compile("(\\d+)m(\\d+\\.\\d+)s");
 		Matcher matcher = pattern.matcher(timeStr);
 		if (matcher.matches()) {
@@ -71,7 +75,7 @@ public class CucumberLogUtils {
 		}
 		return timeStr; // fallback
 	}
-
+	
 	private static boolean isSummaryLine(String line) {
 	    return line.matches("^(\\d+ )?Scenarios? \\(.*\\)$") ||     // e.g., "4 Scenarios (2 failed, 2 passed)"
 	           line.matches("^(\\d+ )?Steps? \\(.*\\)$") ||         // e.g., "16 Steps (2 failed, 14 passed)"
