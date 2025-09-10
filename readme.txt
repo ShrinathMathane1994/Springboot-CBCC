@@ -94,6 +94,9 @@ Content-Type: application/json
 ❌ Delete Pod
 DELETE /api/master/pod/{id}
 
+Dashboard
+/api/dashboard/rows -- For All Test Cases Run Details (Last Run & Status Wise Count)
+/api/dashboard/rows/{id}/runs - For Sepcific Test Case Each Run Details
 
 📑 Scenarios
 GET /api/scenarios?tags=
