@@ -154,6 +154,64 @@ public class StepDefCompiler_old {
 		}
 	}
 
+	public static void compileStepDefs(List<String> projectPaths) {
+		for (String projectPath : projectPaths) {
+			File srcDir = new File(projectPath, "src/test/java");
+			File outputDir = new File(projectPath, "target/test-classes");
+			File pomFile = new File(projectPath, "pom.xml");
+
+			// If no pom.xml in repo (like client code), fall back to app root
+			if (!pomFile.exists()) {
+				System.out.println("⚠ No pom.xml found in " + projectPath + ", falling back to application root.");
+				projectPath = System.getProperty("user.dir"); // root of your app
+				srcDir = new File(projectPath, "src/test/java");
+				outputDir = new File(projectPath, "target/test-classes");
+				pomFile = new File(projectPath, "pom.xml");
+			}
+
+			List<File> javaFiles = new ArrayList<>();
+			collectJavaFiles(srcDir, javaFiles);
+
+			boolean needsCompile = false;
+			for (File javaFile : javaFiles) {
+				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
+				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
+					needsCompile = true;
+					break;
+				}
+			}
+
+			if (!needsCompile) {
+				System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
+				continue;
+			}
+
+			String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
+			ProcessBuilder pb = new ProcessBuilder(mvnCmd, "test-compile");
+			pb.directory(new File(projectPath));
+			pb.redirectErrorStream(true);
+
+			try {
+				Process process = pb.start();
+				try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+					String line;
+					while ((line = reader.readLine()) != null) {
+						System.out.println("[maven] " + line);
+					}
+				}
+				int exitCode = process.waitFor();
+				if (exitCode != 0) {
+					throw new RuntimeException(
+							"❌ Maven test-compile failed for " + projectPath + ", exit code " + exitCode);
+				} else {
+					System.out.println("✅ Maven test-compile succeeded for " + projectPath);
+				}
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, e);
+			}
+		}
+	}
+
 //	public static void compileStepDefs(List<String> projectPaths) {
 //		for (String projectPath : projectPaths) {
 //			File srcDir = new File(projectPath, "src/test/java");
@@ -238,56 +296,57 @@ public class StepDefCompiler_old {
 //		}
 //	}
 
-public static void compileStepDefs(List<String> projectPaths) {
-	for (String projectPath : projectPaths) {
-		File srcDir = new File(projectPath, "src/test/java");
-		File outputDir = new File(projectPath, "target/test-classes");
-		File pomFile = new File(projectPath, "pom.xml");
-		if (!pomFile.exists()) {
-			System.out.println("⚠ No pom.xml found in " + projectPath + ", skipping Maven compile.");
-			continue;
-		}
-		List<File> javaFiles = new ArrayList<>();
-		collectJavaFiles(srcDir, javaFiles);
-
-		boolean needsCompile = false;
-		for (File javaFile : javaFiles) {
-			File classFile = getClassFileFor(javaFile, srcDir, outputDir);
-			if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
-				needsCompile = true;
-				break;
+	public static void compileStepDefsFromOtherProject(List<String> projectPaths) {
+		for (String projectPath : projectPaths) {
+			File srcDir = new File(projectPath, "src/test/java");
+			File outputDir = new File(projectPath, "target/test-classes");
+			File pomFile = new File(projectPath, "pom.xml");
+			if (!pomFile.exists()) {
+				System.out.println("⚠ No pom.xml found in " + projectPath + ", skipping Maven compile.");
+				continue;
 			}
-		}
+			List<File> javaFiles = new ArrayList<>();
+			collectJavaFiles(srcDir, javaFiles);
 
-		if (!needsCompile) {
-			System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
-			continue;
-		}
-
-		String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
-		ProcessBuilder pb = new ProcessBuilder(mvnCmd, "test-compile");
-		pb.directory(new File(projectPath));
-		pb.redirectErrorStream(true);
-
-		try {
-			Process process = pb.start();
-			try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-				String line;
-				while ((line = reader.readLine()) != null) {
-					System.out.println("[maven] " + line);
+			boolean needsCompile = false;
+			for (File javaFile : javaFiles) {
+				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
+				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
+					needsCompile = true;
+					break;
 				}
 			}
-			int exitCode = process.waitFor();
-			if (exitCode != 0) {
-				throw new RuntimeException("❌ Maven test-compile failed for " + projectPath + ", exit code " + exitCode);
-			} else {
-				System.out.println("✅ Maven test-compile succeeded for " + projectPath);
+
+			if (!needsCompile) {
+				System.out.println("✅ StepDefs already up-to-date, skipping compile for " + projectPath);
+				continue;
 			}
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, e);
+
+			String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
+			ProcessBuilder pb = new ProcessBuilder(mvnCmd, "test-compile");
+			pb.directory(new File(projectPath));
+			pb.redirectErrorStream(true);
+
+			try {
+				Process process = pb.start();
+				try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+					String line;
+					while ((line = reader.readLine()) != null) {
+						System.out.println("[maven] " + line);
+					}
+				}
+				int exitCode = process.waitFor();
+				if (exitCode != 0) {
+					throw new RuntimeException(
+							"❌ Maven test-compile failed for " + projectPath + ", exit code " + exitCode);
+				} else {
+					System.out.println("✅ Maven test-compile succeeded for " + projectPath);
+				}
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, e);
+			}
 		}
 	}
-}
 
 	private static void collectJavaFiles(File dir, List<File> javaFiles) {
 		for (File file : dir.listFiles()) {

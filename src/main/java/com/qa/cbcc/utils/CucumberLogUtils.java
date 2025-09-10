@@ -62,6 +62,10 @@ public class CucumberLogUtils {
 	}
 
 	private static String formatDuration(String timeStr) {
+		return timeStr;
+	}
+	
+	private static String formatDurationToShowInSec(String timeStr) {
 		Pattern pattern = Pattern.compile("(\\d+)m(\\d+\\.\\d+)s");
 		Matcher matcher = pattern.matcher(timeStr);
 		if (matcher.matches()) {
