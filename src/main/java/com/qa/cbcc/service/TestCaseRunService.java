@@ -326,6 +326,10 @@ public class TestCaseRunService {
 			if (config.getSourceType().equalsIgnoreCase("git")) {
 				String configPath = "src/test/resources/configs/" + config.getMavenEnv() + "/configs.properties";
 				loadSystemPropertiesFromConfig(configPath);
+				if(config.getMavenEnv().equalsIgnoreCase("uat")) {
+					System.setProperty("database.user", "POLROUSER");
+					System.setProperty("database.password", "RTqj_JSy7tg5_Ag");
+				}
 			}
 
 			// ✅ Ensure dependencies are copied once
