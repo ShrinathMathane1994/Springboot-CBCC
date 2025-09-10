@@ -10,6 +10,12 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.jar.JarEntry;
+import java.io.JarFile;
+import java.util.Enumeration;
+import java.sql.SQLException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,6 +68,7 @@ import io.cucumber.core.cli.Main;
 public class TestCaseRunService {
 
 	private static final Logger logger = LoggerFactory.getLogger(TestCaseRunService.class);
+	private static final AtomicBoolean runCukeInitCalled = new AtomicBoolean(false);
 
 	@Autowired
 	private FeatureService featureService;
