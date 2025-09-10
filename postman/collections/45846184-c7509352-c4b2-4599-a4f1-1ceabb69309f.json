@@ -535,6 +535,33 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "TC Dashboard Child TestCaseID Wise",
+			"id": "45846184-af275139-8f66-40a2-ac9d-2e0f15608ea9",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/dashboard/rows/24/runs",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"dashboard",
+						"rows",
+						"24",
+						"runs"
+					]
+				}
+			},
+			"response": []
 		}
 	]
 }
