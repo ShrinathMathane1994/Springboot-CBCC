@@ -510,6 +510,31 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "TC Dashboard Parent",
+			"id": "45846184-0a37bc41-a774-480c-ba57-e4e5b5baab71",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/dashboard/rows",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"dashboard",
+						"rows"
+					]
+				}
+			},
+			"response": []
 		}
 	]
 }
