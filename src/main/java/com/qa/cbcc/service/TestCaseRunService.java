@@ -8,18 +8,22 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -30,7 +34,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -67,6 +74,7 @@ import io.cucumber.core.cli.Main;
 public class TestCaseRunService {
 
 	private static final Logger logger = LoggerFactory.getLogger(TestCaseRunService.class);
+	private static final AtomicBoolean runCukeInitCalled = new AtomicBoolean(false);
 
 	@Autowired
 	private FeatureService featureService;
@@ -310,11 +318,12 @@ public class TestCaseRunService {
 					// prefer explicit xmlDiffStatus from xmlDetailByScenario if present
 					String xmlStatusFromDetail = null;
 					if (scenarioName != null && xmlDetailByScenario.containsKey(scenarioName)) {
-					    Object s = xmlDetailByScenario.get(scenarioName).get("xmlDiffStatus");
-					    xmlStatusFromDetail = s == null ? null : String.valueOf(s);
+						Object s = xmlDetailByScenario.get(scenarioName).get("xmlDiffStatus");
+						xmlStatusFromDetail = s == null ? null : String.valueOf(s);
 					}
 					String xmlStatus = xmlStatusFromDetail != null ? xmlStatusFromDetail
-					        : derivePerExampleXmlStatus(scenarioName, inputXml, outputXml, differencesJson, xmlDetailByScenario, skippedScenarios);
+							: derivePerExampleXmlStatus(scenarioName, inputXml, outputXml, differencesJson,
+									xmlDetailByScenario, skippedScenarios);
 					row.setXmlDiffStatus(xmlStatus);
 
 					rowsToSave.add(row);
@@ -934,6 +943,10 @@ public class TestCaseRunService {
 			if (config.getSourceType().equalsIgnoreCase("git")) {
 				String configPath = "src/test/resources/configs/" + config.getMavenEnv() + "/configs.properties";
 				loadSystemPropertiesFromConfig(configPath);
+				if (config.getMavenEnv().equalsIgnoreCase("uat")) {
+					System.setProperty("database.user", "POLROUSER");
+					System.setProperty("database.password", "RTqj_JSy7tg5_Ag");
+				}
 			}
 
 			// ✅ Ensure dependencies are copied once
@@ -980,13 +993,71 @@ public class TestCaseRunService {
 
 				// ✅ Now just run cucumber using the system classloader
 				// Create a URLClassLoader with stepDefs and dependency jars
-				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
-						Thread.currentThread().getContextClassLoader())) {
+//				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
+//						Thread.currentThread().getContextClassLoader())) {
+//					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+//					Main.run(argv, classLoader);
+//				}
+
+				URLClassLoader classLoader = null;
+				Class<?> runnerClass = null;
+				String runnerClassName = null;
+				ClassLoader originalContext = Thread.currentThread().getContextClassLoader();
+
+				try {
+					classLoader = new URLClassLoader(urls.toArray(new URL[0]), originalContext);
+					Thread.currentThread().setContextClassLoader(classLoader);
+//---For Scanning the RunCucumberTests Class---//
+//					try {
+//						// Try simple first
+//						runnerClass = classLoader.loadClass("RunCucumberTests");
+//						runnerClassName = runnerClass.getName();
+//					} catch (ClassNotFoundException e) {
+//						runnerClassName = findRunCucumberTestsClassName(classLoader);
+//						if (runnerClassName != null) {
+//							runnerClass = classLoader.loadClass(runnerClassName);
+//						}
+//					}
+
+					try {
+						runnerClass = classLoader.loadClass("RunCucumberTests");
+						runnerClassName = "RunCucumberTests"; // default package
+					} catch (ClassNotFoundException e) {
+						logger.info("RunCucumberTests not found in classpath — skipping init/destroy hooks.");
+					}
+
+					// Run init once
+					invokeInitIfPresent(runnerClass);
+
+					// Capture cucumber output
+					System.setOut(new PrintStream(baos));
 					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
 					Main.run(argv, classLoader);
+
+					exampleMap = extractExamplesFromFeature(featureFile);
+
+				} finally {
+					System.out.flush();
+					System.setOut(originalOut);
+
+					try {
+						if (runnerClass == null && runnerClassName != null && classLoader != null) {
+							runnerClass = classLoader.loadClass(runnerClassName);
+						}
+						invokeDestroyIfPresent(runnerClass);
+					} finally {
+						Thread.currentThread().setContextClassLoader(originalContext);
+						if (classLoader != null) {
+							try {
+								classLoader.close();
+							} catch (IOException e) {
+								logger.warn("Failed to close URLClassLoader: {}", e.getMessage(), e);
+							}
+						}
+					}
 				}
 
-				exampleMap = extractExamplesFromFeature(featureFile);
+//				exampleMap = extractExamplesFromFeature(featureFile);
 
 			} finally {
 				System.out.flush();
@@ -1086,9 +1157,8 @@ public class TestCaseRunService {
 
 				try {
 					Optional<String> featureOpt = testCase.getFeatureScenarios().stream()
-						.filter(fs -> fs.getScenarios() != null && fs.getScenarios().contains(scenarioName))
-						.map(TestCaseDTO.FeatureScenario::getFeature)
-						.findFirst();
+							.filter(fs -> fs.getScenarios() != null && fs.getScenarios().contains(scenarioName))
+							.map(TestCaseDTO.FeatureScenario::getFeature).findFirst();
 
 					String feature = featureOpt.orElse(null);
 
@@ -1148,19 +1218,21 @@ public class TestCaseRunService {
 				int diffCount = (int) Optional.ofNullable(xmlDetail.get("differences")).map(d -> ((List<?>) d).size())
 						.orElse(0);
 				xmlDetail.put("diffCount", diffCount);
-				 
-				//Derive per-example XML diff status and attach to xmlDetail & scenario map
-				String perExampleStatus = derivePerExampleXmlStatus(
-				        String.valueOf(scenario.get("scenarioName")),
-				        (String) xmlDetail.get("inputXml"),   // or the inputXml you have available
-				        (String) xmlDetail.get("outputXml"),  // or the outputXml you have available
-				        toJsonOrString(xmlDetail.get("differences")),
-				        /* xmlDetailByScenario */ null,        // optional: pass a lookup map if you have one here
-				        /* skippedScenarios */ skippedScenarios // pass list so Unexecuted can be detected
+
+				// Derive per-example XML diff status and attach to xmlDetail & scenario map
+				String perExampleStatus = derivePerExampleXmlStatus(String.valueOf(scenario.get("scenarioName")),
+						(String) xmlDetail.get("inputXml"), // or the inputXml you have available
+						(String) xmlDetail.get("outputXml"), // or the outputXml you have available
+						toJsonOrString(xmlDetail.get("differences")), /* xmlDetailByScenario */ null, // optional: pass
+																										// a lookup map
+																										// if you have
+																										// one here
+						/* skippedScenarios */ skippedScenarios // pass list so Unexecuted can be detected
 				);
 				xmlDetail.put("xmlDiffStatus", perExampleStatus);
 
-				// also add it back to the scenario map (so persistPerExampleRows may read from scenario if necessary)
+				// also add it back to the scenario map (so persistPerExampleRows may read from
+				// scenario if necessary)
 				scenario.put("xmlDiffStatus", perExampleStatus);
 
 				// Match unexecuted scenarios to feature
@@ -1500,6 +1572,129 @@ public class TestCaseRunService {
 		}
 		TestContext.clear();
 		return result;
+	}
+
+	// --- helper: locate RunCucumberTests class name inside a URLClassLoader ---
+	/**
+	 * Search the given ClassLoader (must be a URLClassLoader) for RunCucumberTests
+	 * class and return its fully-qualified class name, or null if not found.
+	 */
+	private String findRunCucumberTestsClassName(ClassLoader cl) {
+		if (!(cl instanceof URLClassLoader)) {
+			return null;
+		}
+		URLClassLoader urlCl = (URLClassLoader) cl;
+		try {
+			for (URL url : urlCl.getURLs()) {
+				String path = url.getPath();
+				if (path == null)
+					continue;
+				File f = new File(path);
+				if (f.isDirectory()) {
+					// scan directory tree for RunCucumberTests.class
+					Path base = f.toPath();
+					try (Stream<Path> walk = Files.walk(base)) {
+						Optional<Path> found = walk
+								.filter(p -> p.getFileName().toString().equals("RunCucumberTests.class")).findFirst();
+						if (found.isPresent()) {
+							Path rel = base.relativize(found.get());
+							String className = rel.toString().replace(File.separatorChar, '.').replaceAll("\\.class$",
+									"");
+							return className;
+						}
+					} catch (IOException ioe) {
+						logger.warn("Error scanning directory {} for RunCucumberTests: {}", f, ioe.getMessage(), ioe);
+					}
+				} else if (f.isFile() && f.getName().endsWith(".jar")) {
+					try (JarFile jar = new JarFile(f)) {
+						Enumeration<JarEntry> entries = jar.entries();
+						while (entries.hasMoreElements()) {
+							JarEntry e = entries.nextElement();
+							if (e.getName().endsWith("/RunCucumberTests.class")
+									|| e.getName().equals("RunCucumberTests.class")) {
+								String className = e.getName().replace('/', '.').replaceAll("\\.class$", "");
+								return className;
+							}
+						}
+					} catch (IOException ioe) {
+						logger.warn("Error scanning jar {} for RunCucumberTests: {}", f.getAbsolutePath(),
+								ioe.getMessage(), ioe);
+					}
+				}
+			}
+		} catch (Exception ex) {
+			logger.warn("Error while searching classloader for RunCucumberTests: {}", ex.getMessage(), ex);
+		}
+		return null;
+	}
+
+	/**
+	 * Invoke RunCucumberTests.init() reflectively, but only once per JVM (guarded).
+	 * Will throw IOException if the underlying method throws it.
+	 */
+	private void invokeInitIfPresent(Class<?> runnerClass) throws Exception {
+		if (runnerClass == null) {
+			logger.debug("No RunCucumberTests class available for init().");
+			return;
+		}
+		// ensure single invocation
+		if (!runCukeInitCalled.compareAndSet(false, true)) {
+			logger.debug("RunCucumberTests.init() already invoked in this JVM — skipping.");
+			return;
+		}
+		try {
+			Method initMethod;
+			try {
+				initMethod = runnerClass.getMethod("init");
+			} catch (NoSuchMethodException nsme) {
+				initMethod = runnerClass.getDeclaredMethod("init");
+				initMethod.setAccessible(true);
+			}
+			try {
+				initMethod.invoke(null);
+				logger.info("RunCucumberTests.init() invoked successfully.");
+			} catch (InvocationTargetException ite) {
+				Throwable cause = ite.getCause();
+				if (cause instanceof IOException)
+					throw (IOException) cause;
+				throw new RuntimeException("RunCucumberTests.init() failed", cause);
+			}
+		} catch (NoSuchMethodException | IllegalAccessException e) {
+			logger.warn("Could not invoke RunCucumberTests.init(): {}", e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Invoke RunCucumberTests.destroy() reflectively. Logs exceptions; does not
+	 * rethrow.
+	 */
+	private void invokeDestroyIfPresent(Class<?> runnerClass) {
+		if (runnerClass == null) {
+			logger.debug("No RunCucumberTests class available for destroy().");
+			return;
+		}
+		try {
+			Method destroyMethod;
+			try {
+				destroyMethod = runnerClass.getMethod("destroy");
+			} catch (NoSuchMethodException nsme) {
+				destroyMethod = runnerClass.getDeclaredMethod("destroy");
+				destroyMethod.setAccessible(true);
+			}
+			try {
+				destroyMethod.invoke(null);
+				logger.info("RunCucumberTests.destroy() invoked successfully.");
+			} catch (InvocationTargetException ite) {
+				Throwable cause = ite.getCause();
+				if (cause instanceof SQLException) {
+					logger.error("RunCucumberTests.destroy() threw SQLException: {}", cause.getMessage(), cause);
+				} else {
+					logger.error("RunCucumberTests.destroy() threw exception: {}", cause.getMessage(), cause);
+				}
+			}
+		} catch (NoSuchMethodException | IllegalAccessException e) {
+			logger.warn("Could not invoke RunCucumberTests.destroy(): {}", e.getMessage(), e);
+		}
 	}
 
 	private List<String> extractFeatureTags(String featureFilePath) throws IOException {
