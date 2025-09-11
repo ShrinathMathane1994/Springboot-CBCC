@@ -10,74 +10,46 @@ public class Region {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_region")
     private Long idRegion;
 
+    @Column(name = "region_name")
     private String regionName;
+
+    @Column(name = "created_on")
     private LocalDateTime createdOn;
+
+    @Column(name = "updated_on")
     private LocalDateTime updatedOn;
+
+    @Column(name = "is_active")
     private boolean isActive = true;
 
-    @ManyToOne
-    @JoinColumn(name = "idCountry")
-    private Country country;
+    @OneToMany(mappedBy = "region", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Country> countries;
 
-    @OneToMany(mappedBy = "region", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "region", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Pod> pods;
 
-    // ----- Getters and Setters -----
-    public Long getIdRegion() {
-        return idRegion;
-    }
+    // Getters / Setters
+    public Long getIdRegion() { return idRegion; }
+    public void setIdRegion(Long idRegion) { this.idRegion = idRegion; }
 
-    public void setIdRegion(Long idRegion) {
-        this.idRegion = idRegion;
-    }
+    public String getRegionName() { return regionName; }
+    public void setRegionName(String regionName) { this.regionName = regionName; }
 
-    public String getRegionName() {
-        return regionName;
-    }
+    public LocalDateTime getCreatedOn() { return createdOn; }
+    public void setCreatedOn(LocalDateTime createdOn) { this.createdOn = createdOn; }
 
-    public void setRegionName(String regionName) {
-        this.regionName = regionName;
-    }
+    public LocalDateTime getUpdatedOn() { return updatedOn; }
+    public void setUpdatedOn(LocalDateTime updatedOn) { this.updatedOn = updatedOn; }
 
-    public LocalDateTime getCreatedOn() {
-        return createdOn;
-    }
+    public boolean isActive() { return isActive; }
+    public void setActive(boolean active) { isActive = active; }
 
-    public void setCreatedOn(LocalDateTime createdOn) {
-        this.createdOn = createdOn;
-    }
+    public List<Country> getCountries() { return countries; }
+    public void setCountries(List<Country> countries) { this.countries = countries; }
 
-    public LocalDateTime getUpdatedOn() {
-        return updatedOn;
-    }
-
-    public void setUpdatedOn(LocalDateTime updatedOn) {
-        this.updatedOn = updatedOn;
-    }
-
-    public boolean isActive() {
-        return isActive;
-    }
-
-    public void setActive(boolean active) {
-        isActive = active;
-    }
-
-    public Country getCountry() {
-        return country;
-    }
-
-    public void setCountry(Country country) {
-        this.country = country;
-    }
-
-    public List<Pod> getPods() {
-        return pods;
-    }
-
-    public void setPods(List<Pod> pods) {
-        this.pods = pods;
-    }
+    public List<Pod> getPods() { return pods; }
+    public void setPods(List<Pod> pods) { this.pods = pods; }
 }
