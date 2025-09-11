@@ -1300,94 +1300,115 @@ public class TestCaseReportService {
 				+ "</div>" + "</div>";
 	}
 
-	private String buildXmlDifferencesFixed(TestCaseRunHistoryDTO dto) {
-		if (!(dto.getXmlParsedDifferencesJson() instanceof List<?>)) {
-			return noScenarioAligned("No XML differences data available", 5);
-		}
+    @SuppressWarnings("unchecked")
+    private String buildXmlDifferencesFixed(TestCaseRunHistoryDTO dto) {
+        // If xmlParsedDifferencesJson is not a List, bail out
+        if (!(dto.getXmlParsedDifferencesJson() instanceof List<?>)) {
+            return noScenarioAligned("No XML differences data available", 5);
+        }
 
-		List<?> diffsList = (List<?>) dto.getXmlParsedDifferencesJson();
+        List<?> diffsList = (List<?>) dto.getXmlParsedDifferencesJson();
 
-		// Parse unexecutedScenarios JSON string
-		List<Map<String, Object>> unexecuted = java.util.Collections.emptyList();
-		try {
-			String rawJson = dto.getUnexecutedScenarios();
-			if (rawJson != null && !rawJson.trim().isEmpty()) {
-				ObjectMapper mapper = new ObjectMapper();
-				unexecuted = mapper.readValue(rawJson, new TypeReference<List<Map<String, Object>>>() {
-				});
-			}
-		} catch (Exception e) {
-			logger.warn("Failed to parse unexecutedScenarios JSON: {}", e.getMessage());
-		}
+        // Parse unexecutedScenarios JSON string (defensive)
+        List<Map<String, Object>> unexecuted = java.util.Collections.emptyList();
+        try {
+            String rawJson = dto.getUnexecutedScenarios();
+            if (rawJson != null && !rawJson.trim().isEmpty()) {
+                ObjectMapper mapper = new ObjectMapper();
+                unexecuted = mapper.readValue(rawJson, new TypeReference<List<Map<String, Object>>>() {
+                });
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to parse unexecutedScenarios JSON: {}", e.getMessage());
+        }
 
-		// Combined empty check
-		if (diffsList.isEmpty() && unexecuted.isEmpty()) {
-			return noScenarioAligned("No XML differences or unexecuted scenarios found", 5);
-		}
+        // Combined empty check
+        if (diffsList.isEmpty() && (unexecuted == null || unexecuted.isEmpty())) {
+            return noScenarioAligned("No XML differences or unexecuted scenarios found", 5);
+        }
 
-		// Only XML differences empty
-		if (diffsList.isEmpty()) {
-			return noScenarioAligned("No XML differences detected — Expected and Actual files appear identical.", 5);
-		}
+        // Only XML differences empty
+        if (diffsList.isEmpty()) {
+            return noScenarioAligned("No XML differences detected — Expected and Actual files appear identical.", 5);
+        }
 
-		StringBuilder sb = new StringBuilder(
-				"<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>")
-				.append("<tr><th>Scenario</th><th>Input File</th><th>Output File</th><th>Message</th><th>Differences</th></tr>");
+        StringBuilder sb = new StringBuilder(
+                "<table class='scenario-table'><colgroup><col/><col/><col/><col/><col/></colgroup>")
+                .append("<tr><th>Scenario</th><th>Input File</th><th>Output File</th><th>Message</th><th>Differences</th></tr>");
 
-		int index = 0;
-		for (Object obj : diffsList) {
-			if (!(obj instanceof Map))
-				continue;
-			Map<String, Object> diff = (Map<String, Object>) obj;
+        int index = 0;
+        for (Object obj : diffsList) {
+            if (!(obj instanceof Map))
+                continue;
+            Map<String, Object> diff = (Map<String, Object>) obj;
 
-			String scenarioName = String.valueOf(diff.getOrDefault("scenarioName", "N/A"));
-			String inputFile = filenameFromPath(String.valueOf(diff.getOrDefault("inputFile", "-")));
-			String outputFile = filenameFromPath(String.valueOf(diff.getOrDefault("outputFile", "-")));
-			String message = String.valueOf(diff.getOrDefault("message", "-"));
+            String scenarioName = String.valueOf(diff.getOrDefault("scenarioName", "N/A"));
 
-			List<Map<String, Object>> differences = diff.get("differences") instanceof List
-					? (List<Map<String, Object>>) diff.get("differences")
-					: java.util.Collections.emptyList();
+            // get raw values (could be null or "-" or "null")
+            Object rawInObj = diff.get("inputFile");
+            Object rawOutObj = diff.get("outputFile");
 
-			int diffCount = differences.size();
+            String rawInStr = rawInObj == null ? null : String.valueOf(rawInObj).trim();
+            String rawOutStr = rawOutObj == null ? null : String.valueOf(rawOutObj).trim();
 
-			sb.append("<tr><td>").append(escapeHtml(scenarioName)).append("</td>").append("<td>")
-					.append(escapeHtml(inputFile)).append("</td>").append("<td>").append(escapeHtml(outputFile))
-					.append("</td>").append("<td>").append(escapeHtml(message)).append("</td>")
-					.append("<td style='white-space:nowrap'>");
+            // Treat null/"null"/empty/"-" as "no file" and display hyphen
+            boolean inIsPlaceholder = (rawInStr == null) || rawInStr.isEmpty()
+                    || "-".equals(rawInStr) || "null".equalsIgnoreCase(rawInStr);
+            boolean outIsPlaceholder = (rawOutStr == null) || rawOutStr.isEmpty()
+                    || "-".equals(rawOutStr) || "null".equalsIgnoreCase(rawOutStr);
 
-			if (diffCount > 0) {
-				String countBadgeClass = "diff-badge fail";
-				sb.append("<button class='view-btn' onclick=\"toggle('diffInner").append(index)
-						.append("')\">View</button>").append("<span class='").append(countBadgeClass).append("'>")
-						.append(diffCount).append("</span>");
-			} else {
-				sb.append("-");
-			}
-			sb.append("</td></tr>");
+            String inputFile = inIsPlaceholder ? "-" : filenameFromPath(rawInStr);
+            String outputFile = outIsPlaceholder ? "-" : filenameFromPath(rawOutStr);
 
-			// Inner details table
-			if (diffCount > 0) {
-				sb.append("<tr id='diffInner").append(index).append("' class='inner-row'><td colspan='5'>")
-						.append("<table class='inner-table'>")
-						.append("<tr><th>XPath</th><th>Node</th><th>Type</th><th>Details</th></tr>");
-				for (Map<String, Object> d : differences) {
-					String details = formatMismatchDetails(d);
-					sb.append("<tr><td>").append(escapeHtml(String.valueOf(d.getOrDefault("xpath", "-"))))
-							.append("</td><td>").append(escapeHtml(String.valueOf(d.getOrDefault("node", "-"))))
-							.append("</td><td>")
-							.append(escapeHtml(String.valueOf(d.getOrDefault("differenceType", "-"))))
-							.append("</td><td>").append(escapeHtml(details)).append("</td></tr>");
-				}
-				sb.append("</table></td></tr>");
-			}
-			index++;
-		}
-		sb.append("</table>");
-		return sb.toString();
-	}
+            String message = String.valueOf(diff.getOrDefault("message", "-"));
 
-	private String formatMismatchDetails(Map<String, Object> d) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> differences = diff.get("differences") instanceof List
+                    ? (List<Map<String, Object>>) diff.get("differences")
+                    : java.util.Collections.emptyList();
+
+            int diffCount = differences.size();
+
+            sb.append("<tr><td>").append(escapeHtml(scenarioName)).append("</td>")
+                    .append("<td>").append(escapeHtml(inputFile)).append("</td>")
+                    .append("<td>").append(escapeHtml(outputFile)).append("</td>")
+                    .append("<td>").append(escapeHtml(message)).append("</td>")
+                    .append("<td style='white-space:nowrap'>");
+
+            if (diffCount > 0) {
+                String countBadgeClass = "diff-badge fail";
+                sb.append("<button class='view-btn' onclick=\"toggle('diffInner").append(index)
+                        .append("')\">View</button>")
+                        .append("<span class='").append(countBadgeClass).append("'>")
+                        .append(diffCount).append("</span>");
+            } else {
+                sb.append("-");
+            }
+            sb.append("</td></tr>");
+
+            // Inner details table (only when there are differences)
+            if (diffCount > 0) {
+                sb.append("<tr id='diffInner").append(index).append("' class='inner-row'><td colspan='5'>")
+                        .append("<table class='inner-table'>")
+                        .append("<tr><th>XPath</th><th>Node</th><th>Type</th><th>Details</th></tr>");
+                for (Map<String, Object> d : differences) {
+                    String details = formatMismatchDetails(d);
+                    sb.append("<tr><td>").append(escapeHtml(String.valueOf(d.getOrDefault("xpath", "-"))))
+                            .append("</td><td>").append(escapeHtml(String.valueOf(d.getOrDefault("node", "-"))))
+                            .append("</td><td>")
+                            .append(escapeHtml(String.valueOf(d.getOrDefault("differenceType", "-"))))
+                            .append("</td><td>").append(escapeHtml(details)).append("</td></tr>");
+                }
+                sb.append("</table></td></tr>");
+            }
+            index++;
+        }
+        sb.append("</table>");
+        return sb.toString();
+    }
+
+
+    private String formatMismatchDetails(Map<String, Object> d) {
 		String expectedVal = d.containsKey("expected") && d.get("expected") != null ? String.valueOf(d.get("expected"))
 				: "-";
 		String actualVal = d.containsKey("actual") && d.get("actual") != null ? String.valueOf(d.get("actual")) : "-";
