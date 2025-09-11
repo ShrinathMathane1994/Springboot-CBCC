@@ -9,63 +9,50 @@ public class Pod {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_pod")
     private Long idPod;
 
+    @Column(name = "pod_name")
     private String podName;
+
+    @Column(name = "created_on")
     private LocalDateTime createdOn;
+
+    @Column(name = "updated_on")
     private LocalDateTime updatedOn;
+
+    @Column(name = "is_active")
     private boolean isActive = true;
 
-    @ManyToOne
-    @JoinColumn(name = "idRegion")
+    // Pod references the Region (so region-only queries can find pods)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_region", nullable = false)
     private Region region;
 
-    // ----- Getters and Setters -----
-    public Long getIdPod() {
-        return idPod;
-    }
+    // Pod also references the Country (so country-only queries can find pods)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_country", nullable = true)
+    private Country country;
 
-    public void setIdPod(Long idPod) {
-        this.idPod = idPod;
-    }
+    // Getters / Setters
+    public Long getIdPod() { return idPod; }
+    public void setIdPod(Long idPod) { this.idPod = idPod; }
 
-    public String getPodName() {
-        return podName;
-    }
+    public String getPodName() { return podName; }
+    public void setPodName(String podName) { this.podName = podName; }
 
-    public void setPodName(String podName) {
-        this.podName = podName;
-    }
+    public LocalDateTime getCreatedOn() { return createdOn; }
+    public void setCreatedOn(LocalDateTime createdOn) { this.createdOn = createdOn; }
 
-    public LocalDateTime getCreatedOn() {
-        return createdOn;
-    }
+    public LocalDateTime getUpdatedOn() { return updatedOn; }
+    public void setUpdatedOn(LocalDateTime updatedOn) { this.updatedOn = updatedOn; }
 
-    public void setCreatedOn(LocalDateTime createdOn) {
-        this.createdOn = createdOn;
-    }
+    public boolean isActive() { return isActive; }
+    public void setActive(boolean active) { isActive = active; }
 
-    public LocalDateTime getUpdatedOn() {
-        return updatedOn;
-    }
+    public Region getRegion() { return region; }
+    public void setRegion(Region region) { this.region = region; }
 
-    public void setUpdatedOn(LocalDateTime updatedOn) {
-        this.updatedOn = updatedOn;
-    }
-
-    public boolean isActive() {
-        return isActive;
-    }
-
-    public void setActive(boolean active) {
-        isActive = active;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public void setRegion(Region region) {
-        this.region = region;
-    }
+    public Country getCountry() { return country; }
+    public void setCountry(Country country) { this.country = country; }
 }

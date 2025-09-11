@@ -57,86 +57,93 @@ CREATE TABLE test_case_run_history (
 );
 
 -------------------------
-CREATE TABLE country (
-    id_country BIGSERIAL PRIMARY KEY,
-    country_name VARCHAR(255) NOT NULL,
-    created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_on TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE
-);
--------------------------
-CREATE TABLE region (
-    id_region BIGSERIAL PRIMARY KEY,
-    region_name VARCHAR(255) NOT NULL,
-    id_country BIGINT NOT NULL,
-    created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_on TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE,
-    CONSTRAINT fk_country FOREIGN KEY (id_country) REFERENCES country (id_country)
-);
-------------------------
-CREATE TABLE pod (
-    id_pod BIGSERIAL PRIMARY KEY,
-    pod_name VARCHAR(255) NOT NULL,
-    id_region BIGINT NOT NULL,
-    created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_on TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE,
-    CONSTRAINT fk_region FOREIGN KEY (id_region) REFERENCES region (id_region)
-);
------------------------
-INSERT INTO country (country_name, created_on, is_active)
-VALUES 
-('UK', CURRENT_TIMESTAMP, TRUE),
-('US', CURRENT_TIMESTAMP, TRUE);
--------------------------------
--- Regions under UK
-INSERT INTO region (region_name, id_country, created_on, is_active)
-VALUES
-('EMEA', 1, CURRENT_TIMESTAMP, TRUE);
+BEGIN;
 
--- Regions under US
-INSERT INTO region (region_name, id_country, created_on, is_active)
+-- 1) Drop existing tables (cascade to remove FKs)
+DROP TABLE IF EXISTS pod CASCADE;
+DROP TABLE IF EXISTS country CASCADE;
+DROP TABLE IF EXISTS region CASCADE;
+
+-- 2) Recreate tables (snake_case column names)
+CREATE TABLE region (
+    id_region    BIGSERIAL PRIMARY KEY,
+    region_name  TEXT NOT NULL,
+    created_on   TIMESTAMP,
+    updated_on   TIMESTAMP,
+    is_active    BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE country (
+    id_country   BIGSERIAL PRIMARY KEY,
+    country_name TEXT NOT NULL,
+    id_region    BIGINT NOT NULL REFERENCES region(id_region) ON DELETE CASCADE,
+    created_on   TIMESTAMP,
+    updated_on   TIMESTAMP,
+    is_active    BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE pod (
+    id_pod       BIGSERIAL PRIMARY KEY,
+    pod_name     TEXT NOT NULL,
+    id_region    BIGINT NOT NULL REFERENCES region(id_region) ON DELETE CASCADE,
+    id_country   BIGINT REFERENCES country(id_country) ON DELETE SET NULL,
+    created_on   TIMESTAMP,
+    updated_on   TIMESTAMP,
+    is_active    BOOLEAN DEFAULT TRUE
+);
+
+-- 3) Insert Regions (EMEA, APAC)
+INSERT INTO region (region_name, created_on, updated_on, is_active)
 VALUES
-('APAC', 2, CURRENT_TIMESTAMP, TRUE);
------------------------
-INSERT INTO pod (pod_name, id_region, created_on, is_active)
+  ('EMEA', NOW(), NULL, TRUE),
+  ('APAC', NOW(), NULL, TRUE);
+
+-- 4) Insert Countries (GB -> EMEA, NZ -> APAC)
+INSERT INTO country (country_name, id_region, created_on, updated_on, is_active)
 VALUES
-('E1-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('E2-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('S1-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('U1-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('Q1-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('C1-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('C2-POD', 1, CURRENT_TIMESTAMP, TRUE),
-('N1-POD', 1, CURRENT_TIMESTAMP, TRUE);
----------------------------
-INSERT INTO pod (pod_name, id_region, created_on, is_active)
+  ('GB',  (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), NOW(), NULL, TRUE),
+  ('NZ',  (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), NOW(), NULL, TRUE);
+
+-- 5) Insert pods for EMEA -> GB
+INSERT INTO pod (pod_name, id_region, id_country, created_on, updated_on, is_active)
 VALUES
-('A2-POD', 2, CURRENT_TIMESTAMP, TRUE),
-('A3-POD', 2, CURRENT_TIMESTAMP, TRUE),
-('E1-POD', 2, CURRENT_TIMESTAMP, TRUE),
-('Q1-POD', 2, CURRENT_TIMESTAMP, TRUE),
-('E2-POD', 2, CURRENT_TIMESTAMP, TRUE),
-('C2-POD', 2, CURRENT_TIMESTAMP, TRUE);
----------------------------
-SELECT 
-    c.id_country,
-    c.country_name,
-    r.id_region,
-    r.region_name,
-    p.id_pod,
-    p.pod_name,
-    c.created_on AS country_created,
-    r.created_on AS region_created,
-    p.created_on AS pod_created
-FROM country c
-JOIN region r ON r.id_country = c.id_country
-JOIN pod p ON p.id_region = r.id_region
-WHERE c.is_active = TRUE
-  AND r.is_active = TRUE
-  AND p.is_active = TRUE
-ORDER BY c.country_name, r.region_name, p.pod_name;
+  ('E1-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('E2-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('S1-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('U1-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('Q1-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('C1-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('C2-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE),
+  ('N1-POD', (SELECT id_region FROM region WHERE region_name = 'EMEA' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'GB' LIMIT 1), NOW(), NULL, TRUE);
+
+-- 6) Insert pods for APAC -> NZ
+INSERT INTO pod (pod_name, id_region, id_country, created_on, updated_on, is_active)
+VALUES
+  ('A2-POD', (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'NZ' LIMIT 1), NOW(), NULL, TRUE),
+  ('A3-POD', (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'NZ' LIMIT 1), NOW(), NULL, TRUE),
+  ('E1-POD', (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'NZ' LIMIT 1), NOW(), NULL, TRUE),
+  ('Q1-POD', (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'NZ' LIMIT 1), NOW(), NULL, TRUE),
+  ('E2-POD', (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'NZ' LIMIT 1), NOW(), NULL, TRUE),
+  ('C2-POD', (SELECT id_region FROM region WHERE region_name = 'APAC' LIMIT 1), (SELECT id_country FROM country WHERE country_name = 'NZ' LIMIT 1), NOW(), NULL, TRUE);
+
+COMMIT;
+
+-- Verification queries (run after commit)
+
+-- Regions
+SELECT id_region, region_name, created_on, is_active FROM region ORDER BY id_region;
+
+-- Countries with their region
+SELECT c.id_country, c.country_name, c.id_region, r.region_name
+FROM country c JOIN region r ON c.id_region = r.id_region
+ORDER BY c.id_country;
+
+-- Pods with region & country names
+SELECT p.id_pod, p.pod_name, p.id_region, r.region_name AS region, p.id_country, c.country_name AS country
+FROM pod p
+LEFT JOIN region r ON p.id_region = r.id_region
+LEFT JOIN country c ON p.id_country = c.id_country
+ORDER BY p.id_pod;
 
 --------------------------
 

@@ -11,22 +11,28 @@ import com.qa.cbcc.repository.RegionRepository;
 import com.qa.cbcc.repository.PodRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
 public class MasterServiceImpl implements MasterService {
 
-    @Autowired
-    private CountryRepository countryRepo;
+    private final CountryRepository countryRepo;
+    private final RegionRepository regionRepo;
+    private final PodRepository podRepo;
 
     @Autowired
-    private RegionRepository regionRepo;
-
-    @Autowired
-    private PodRepository podRepo;
+    public MasterServiceImpl(CountryRepository countryRepo,
+                             RegionRepository regionRepo,
+                             PodRepository podRepo) {
+        this.countryRepo = countryRepo;
+        this.regionRepo = regionRepo;
+        this.podRepo = podRepo;
+    }
 
     // ---------------- COUNTRY ----------------
     @Override
@@ -36,6 +42,14 @@ public class MasterServiceImpl implements MasterService {
         country.setCountryName(dto.getCountryName());
         country.setCreatedOn(LocalDateTime.now());
         country.setActive(true);
+
+        if (dto.getIdRegion() == null) {
+            throw new RuntimeException("Region id (idRegion) is required to create/update a Country");
+        }
+        Region region = regionRepo.findById(dto.getIdRegion())
+                .orElseThrow(() -> new RuntimeException("Region not found with id " + dto.getIdRegion()));
+        country.setRegion(region);
+
         countryRepo.save(country);
         dto.setIdCountry(country.getIdCountry());
         return dto;
@@ -49,6 +63,7 @@ public class MasterServiceImpl implements MasterService {
                     CountryDTO dto = new CountryDTO();
                     dto.setIdCountry(c.getIdCountry());
                     dto.setCountryName(c.getCountryName());
+                    dto.setIdRegion(c.getRegion() != null ? c.getRegion().getIdRegion() : null);
                     return dto;
                 })
                 .collect(Collectors.toList());
@@ -72,11 +87,6 @@ public class MasterServiceImpl implements MasterService {
         region.setCreatedOn(LocalDateTime.now());
         region.setActive(true);
 
-        // ❌ Java 11+: region.setCountry(countryRepo.findById(dto.getIdCountry()).orElseThrow());
-        // ✅ Java 8 replacement:
-        region.setCountry(countryRepo.findById(dto.getIdCountry())
-                .orElseThrow(() -> new RuntimeException("Country not found with id " + dto.getIdCountry())));
-
         regionRepo.save(region);
         dto.setIdRegion(region.getIdRegion());
         return dto;
@@ -90,7 +100,6 @@ public class MasterServiceImpl implements MasterService {
                     RegionDTO dto = new RegionDTO();
                     dto.setIdRegion(r.getIdRegion());
                     dto.setRegionName(r.getRegionName());
-                    dto.setIdCountry(r.getCountry().getIdCountry());
                     return dto;
                 })
                 .collect(Collectors.toList());
@@ -98,13 +107,12 @@ public class MasterServiceImpl implements MasterService {
 
     @Override
     public List<RegionDTO> getRegionsByCountry(Long countryId) {
-        return regionRepo.findByCountry_IdCountryAndIsActiveTrue(countryId)
+        return regionRepo.findByCountries_IdCountryAndIsActiveTrue(countryId)
                 .stream()
                 .map(r -> {
                     RegionDTO dto = new RegionDTO();
                     dto.setIdRegion(r.getIdRegion());
                     dto.setRegionName(r.getRegionName());
-                    dto.setIdCountry(r.getCountry().getIdCountry());
                     return dto;
                 })
                 .collect(Collectors.toList());
@@ -128,13 +136,31 @@ public class MasterServiceImpl implements MasterService {
         pod.setCreatedOn(LocalDateTime.now());
         pod.setActive(true);
 
-        // ❌ Java 11+: pod.setRegion(regionRepo.findById(dto.getIdRegion()).orElseThrow());
-        // ✅ Java 8 replacement:
-        pod.setRegion(regionRepo.findById(dto.getIdRegion())
-                .orElseThrow(() -> new RuntimeException("Region not found with id " + dto.getIdRegion())));
+        // region required
+        if (dto.getIdRegion() == null) {
+            throw new RuntimeException("Region id (idRegion) is required for Pod");
+        }
+        Region region = regionRepo.findById(dto.getIdRegion())
+                .orElseThrow(() -> new RuntimeException("Region not found with id " + dto.getIdRegion()));
+        pod.setRegion(region);
+
+        // country optional; if provided, validate belongs-to
+        if (dto.getIdCountry() != null) {
+            Country country = countryRepo.findById(dto.getIdCountry())
+                    .orElseThrow(() -> new RuntimeException("Country not found with id " + dto.getIdCountry()));
+            if (country.getRegion() == null || !country.getRegion().getIdRegion().equals(region.getIdRegion())) {
+                throw new RuntimeException("Country (id " + country.getIdCountry() + ") does not belong to Region id " + region.getIdRegion());
+            }
+            pod.setCountry(country);
+        } else {
+            pod.setCountry(null);
+        }
 
         podRepo.save(pod);
+
         dto.setIdPod(pod.getIdPod());
+        dto.setIdRegion(pod.getRegion() != null ? pod.getRegion().getIdRegion() : null);
+        dto.setIdCountry(pod.getCountry() != null ? pod.getCountry().getIdCountry() : null);
         return dto;
     }
 
@@ -146,21 +172,23 @@ public class MasterServiceImpl implements MasterService {
                     PodDTO dto = new PodDTO();
                     dto.setIdPod(p.getIdPod());
                     dto.setPodName(p.getPodName());
-                    dto.setIdRegion(p.getRegion().getIdRegion());
+                    dto.setIdRegion(p.getRegion() != null ? p.getRegion().getIdRegion() : null);
+                    dto.setIdCountry(p.getCountry() != null ? p.getCountry().getIdCountry() : null);
                     return dto;
                 })
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<PodDTO> getPodsByRegion(Long regionId) {
-        return podRepo.findByRegion_IdRegionAndIsActiveTrue(regionId)
+    public List<PodDTO> getPods(Long regionId, Long countryId) {
+        return podRepo.findActiveByRegionAndCountryOptional(regionId, countryId)
                 .stream()
                 .map(p -> {
                     PodDTO dto = new PodDTO();
                     dto.setIdPod(p.getIdPod());
                     dto.setPodName(p.getPodName());
-                    dto.setIdRegion(p.getRegion().getIdRegion());
+                    dto.setIdRegion(p.getRegion() != null ? p.getRegion().getIdRegion() : null);
+                    dto.setIdCountry(p.getCountry() != null ? p.getCountry().getIdCountry() : null);
                     return dto;
                 })
                 .collect(Collectors.toList());

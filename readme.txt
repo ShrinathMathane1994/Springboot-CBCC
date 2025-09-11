@@ -54,45 +54,135 @@ Body (JSON):
 🔄 Sync Feature Files
 GET /api/sync-features
 
-📥 Get Countries
-GET /api/master/countries
-➕ Create Country
-POST /api/master/country
-Content-Type: application/json
+==================================
+ Region — examples
+==================================
 
+Get all regions
+---------------
+GET /api/master/regions
+
+Success (200):
 {
-  "countryName": "United States"
+  "data": [
+    { "idRegion": 1, "regionName": "EMEA" },
+    { "idRegion": 2, "regionName": "APAC" }
+  ],
+  "count": 2,
+  "message": "OK"
 }
-❌ Delete Country
-DELETE /api/master/country/{id}
 
-📥 Get Regions
-GET /api/master/regions → all active regions
-GET /api/master/regions?countryId=1 → only regions of countryId 1
-➕ Create Region
+Empty result (200):
+{
+  "data": [],
+  "count": 0,
+  "message": "No records found"
+}
+
+Create region
+-------------
 POST /api/master/region
-Content-Type: application/json
+
+Success (201):
 {
-  "regionName": "North America",
-  "idCountry": 1
+  "data": { "idRegion": 3, "regionName": "North America" },
+  "message": "Created"
 }
-❌ Delete Region
+
+Delete region
+-------------
 DELETE /api/master/region/{id}
 
+204 No Content if found
+404 Not Found if not
 
-📥 Get Pods
-GET /api/master/pods → all active pods
-GET /api/master/pods?regionId=2 → only pods of regionId 2
-➕ Create Pod
-POST /api/master/pod
-Content-Type: application/json
+==================================
+ Country — examples
+==================================
 
+Get all countries
+-----------------
+GET /api/master/countries
+
+Success (200):
 {
-  "podName": "U1-POD",
-  "idRegion": 2
+  "data": [
+    { "idCountry": 1, "countryName": "GB", "idRegion": 1 },
+    { "idCountry": 2, "countryName": "NZ", "idRegion": 2 }
+  ],
+  "count": 2,
+  "message": "OK"
 }
-❌ Delete Pod
+
+Get countries by region
+-----------------------
+GET /api/master/countries?regionId=1
+
+Create country
+--------------
+POST /api/master/country
+
+Success (201):
+{
+  "data": { "idCountry": 10, "countryName": "United States", "idRegion": 3 },
+  "message": "Created"
+}
+
+Delete country
+--------------
+DELETE /api/master/country/{id}
+
+204 No Content if found
+404 Not Found if not
+
+
+==================================
+ Pod — examples
+==================================
+
+Get all pods
+------------
+GET /api/master/pods
+
+Success (200):
+{
+  "data":[
+    {"idPod":1,"podName":"E1-POD","idRegion":1,"idCountry":1},
+    {"idPod":9,"podName":"A2-POD","idRegion":2,"idCountry":2}
+  ],
+  "count":2,
+  "message":"OK"
+}
+
+Get pods by region
+------------------
+GET /api/master/pods?regionId=1
+
+Get pods by country
+-------------------
+GET /api/master/pods?countryId=2
+
+Get pods by region + country
+----------------------------
+GET /api/master/pods?regionId=2&countryId=2
+
+Create pod
+----------
+POST /api/master/pod
+
+Success (201):
+{
+  "data": { "idPod": 15, "podName": "U1-POD", "idRegion": 2, "idCountry": 2 },
+  "message": "Created"
+}
+
+Delete pod
+----------
 DELETE /api/master/pod/{id}
+
+204 No Content if found
+404 Not Found if not
+==================================
 
 Dashboard
 /api/dashboard/rows -- For All Test Cases Run Details (Last Run & Status Wise Count)

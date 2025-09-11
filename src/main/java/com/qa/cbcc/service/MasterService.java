@@ -15,12 +15,12 @@ public interface MasterService {
     // Region
     RegionDTO saveRegion(RegionDTO dto);
     List<RegionDTO> getAllRegions();
-    List<RegionDTO> getRegionsByCountry(Long countryId);   // ✅ new
+    List<RegionDTO> getRegionsByCountry(Long countryId);
     void deleteRegion(Long id);
 
     // Pod
     PodDTO savePod(PodDTO dto);
     List<PodDTO> getAllPods();
-    List<PodDTO> getPodsByRegion(Long regionId);           // ✅ new
+    List<PodDTO> getPods(Long regionId, Long countryId); // regionId and countryId optional
     void deletePod(Long id);
 }

@@ -9,10 +9,8 @@ import java.util.List;
 public interface TestCaseRunHistoryRepository extends JpaRepository<TestCaseRunHistory, Long> {
 
 	// 1) latest run per test case (JPQL)
-	@Query("SELECT h FROM TestCaseRunHistory h " +
-	       "WHERE h.runTime = (" +
-	       "  SELECT MAX(h2.runTime) FROM TestCaseRunHistory h2 WHERE h2.testCase.idTC = h.testCase.idTC" +
-	       ")")
+	@Query("SELECT h FROM TestCaseRunHistory h " + "WHERE h.runTime = ("
+			+ "  SELECT MAX(h2.runTime) FROM TestCaseRunHistory h2 WHERE h2.testCase.idTC = h.testCase.idTC" + ")")
 	List<TestCaseRunHistory> findLatestRunsForAllTestCases();
 
 	// 2) grouped counts
@@ -24,5 +22,4 @@ public interface TestCaseRunHistoryRepository extends JpaRepository<TestCaseRunH
 
 	// 4) per-test-case runs (expand)
 	List<TestCaseRunHistory> findByTestCase_IdTCOrderByRunTimeDesc(Long testCaseId);
-
 }
