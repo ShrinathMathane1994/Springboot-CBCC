@@ -9,10 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/master")
@@ -52,7 +54,7 @@ public class MasterController {
                                                    : masterService.getAllCountries()
                                                                  .stream()
                                                                  .filter(c -> regionId.equals(c.getIdRegion()))
-                                                                 .toList();
+                                                                 .collect(Collectors.toList());
         return buildListResponse(list);
     }
 
@@ -120,3 +122,4 @@ public class MasterController {
         }
     }
 }
+	

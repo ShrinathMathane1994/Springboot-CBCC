@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface CountryRepository extends JpaRepository<Country, Long> {
     List<Country> findByIsActiveTrue();
+    List<Country> findByRegion_IdRegionAndIsActiveTrue(Long regionId);
 }
