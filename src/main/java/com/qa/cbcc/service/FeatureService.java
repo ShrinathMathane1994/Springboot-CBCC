@@ -43,6 +43,7 @@ import org.reflections.util.ClasspathHelper;
 import org.reflections.util.ConfigurationBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -62,6 +63,7 @@ public class FeatureService {
 
 	private static final Logger logger = LoggerFactory.getLogger(FeatureService.class);
 	private static final String CONFIG_FILE = "src/main/resources/git-config.properties";
+    @Autowired
     private ApplicationEventPublisher eventPublisher;
 
 	@Value("${feature.source:local}")
