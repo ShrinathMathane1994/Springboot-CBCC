@@ -33,6 +33,7 @@ import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 
+import com.qa.cbcc.events.GitConfigChangedEvent;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
@@ -43,6 +44,7 @@ import org.reflections.util.ConfigurationBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import com.qa.cbcc.dto.ExampleDTO;
@@ -60,6 +62,7 @@ public class FeatureService {
 
 	private static final Logger logger = LoggerFactory.getLogger(FeatureService.class);
 	private static final String CONFIG_FILE = "src/main/resources/git-config.properties";
+    private ApplicationEventPublisher eventPublisher;
 
 	@Value("${feature.source:local}")
 	private String featureSource;
@@ -800,6 +803,13 @@ public class FeatureService {
 			}
 
 			saveConfig(props);
+            // publish event so prewarm can react immediately
+            try {
+                GitConfigDTO current = getGitConfig();
+                eventPublisher.publishEvent(new GitConfigChangedEvent(this, current));
+            } catch (Exception ex) {
+                logger.warn("Failed to publish GitConfigChangedEvent: {}", ex.getMessage(), ex);
+            }
 
 			response.put("status", 200);
 			response.put("message", "Git configuration updated successfully.");

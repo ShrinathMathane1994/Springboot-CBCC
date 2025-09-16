@@ -12,7 +12,9 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.Enumeration;
@@ -237,194 +239,695 @@ public class TestCaseRunService {
 		}
 	}
 
+//    public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) {
+//        List<Map<String, Object>> results = new ArrayList<>();
+//
+//        for (TestCaseDTO testCase : testCases) {
+//            LocalDateTime executedOn = LocalDateTime.now();
+//            Map<String, Object> result = new LinkedHashMap<>();
+//            result.put("testCaseId", testCase.getTcId());
+//            result.put("testCaseName", testCase.getTcName());
+//            result.put("runOn", executedOn);
+//
+//            try {
+//                // Run and let runSingleTestCase() persist success-history
+//                Map<String, Object> executionResult = runSingleTestCase(testCase);
+//                result.putAll(executionResult);
+//
+//            } catch (Exception e) {
+//                // Capture error result instead of breaking
+//                logger.error("Execution failed for TestCase {}: {}", testCase.getTcId(), e.getMessage(), e);
+//                result.put("tcStatus", "Execution Error");
+//                result.put("xmlComparisonStatus", "Error");
+//                result.put("xmlComparisonDetails", Collections.emptyList());
+//
+//                Map<String, Object> runSummary = new LinkedHashMap<>();
+//                runSummary.put("totalExecutedScenarios", 0);
+//                runSummary.put("passedScenarioDetails", Collections.emptyList());
+//                runSummary.put("totalFailedScenarios", 0);
+//                runSummary.put("totalPassedScenarios", 0);
+//                runSummary.put("durationMillis", 0);
+//                runSummary.put("totalUnexecutedScenarios", 1);
+//                result.put("runSummary", runSummary);
+//                result.put("xmlComparisonStatus", "N/A");
+//                result.put("xmlComparisonDetails", Collections.emptyList());
+//
+//                Map<String, Object> errorDetail = new LinkedHashMap<>();
+//                errorDetail.put("scenarioName",
+//                        testCase.getFeatureScenarios().isEmpty() ? "N/A"
+//                                : testCase.getFeatureScenarios().get(0).getScenarios().isEmpty() ? "N/A"
+//                                : testCase.getFeatureScenarios().get(0).getScenarios().get(0));
+//                errorDetail.put("errors", Collections.singletonList(e.getMessage()));
+//                errorDetail.put("exception", e.getClass().getSimpleName());
+//                result.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
+//                result.put("diffSummary", Collections.emptyMap());
+//
+//                // Persist failure-history here (only on exception)
+//                try {
+//                    TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
+//                    if (entity != null) {
+//                        entity.setLastRunOn(executedOn);
+//                        entity.setLastRunStatus("Execution Error");
+//                        testCaseRepository.save(entity);
+//                    }
+//
+//                    // idempotent save: update existing if present (tolerance +/- 2s)
+//                    LocalDateTime from = executedOn.minusSeconds(2);
+//                    LocalDateTime to = executedOn.plusSeconds(2);
+//                    List<TestCaseRunHistory> existing = historyRepository
+//                            .findByTestCase_IdTCAndRunTimeBetween(testCase.getTcId(), from, to);
+//                    TestCaseRunHistory history;
+//                    if (existing != null && !existing.isEmpty()) {
+//                        history = existing.get(0);
+//                        history.setRunStatus("Execution Error");
+//                        history.setXmlDiffStatus("N/A");
+//                        history.setOutputLog(objectMapper.writeValueAsString(result));
+//                        historyRepository.save(history);
+//                    } else {
+//                        history = new TestCaseRunHistory();
+//                        history.setTestCase(entity);
+//                        history.setRunTime(executedOn);
+//                        history.setRunStatus("Execution Error");
+//                        history.setXmlDiffStatus("N/A");
+//                        history.setOutputLog(objectMapper.writeValueAsString(result));
+//                        historyRepository.save(history);
+//                    }
+//                } catch (Exception dbEx) {
+//                    logger.error("⚠ Failed to persist run history for TestCase {}: {}", testCase.getTcId(),
+//                            dbEx.getMessage(), dbEx);
+//                }
+//            }
+//
+//            results.add(result);
+//            TestContext.clear();
+//        }
+//
+//        return results;
+//    }
+
     public List<Map<String, Object>> runFromDTO(List<TestCaseDTO> testCases) {
-        List<Map<String, Object>> results = new ArrayList<>();
+        if (testCases == null || testCases.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        for (TestCaseDTO testCase : testCases) {
-            LocalDateTime executedOn = LocalDateTime.now();
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("testCaseId", testCase.getTcId());
-            result.put("testCaseName", testCase.getTcName());
-            result.put("runOn", executedOn);
+        final List<Map<String, Object>> results = new ArrayList<>(Collections.nCopies(testCases.size(), null));
 
+        // --- Kick off prewarm tasks ASYNCHRONOUSLY, do NOT wait ---
+        try {
+            // Fire-and-forget git sync if configured
             try {
-                // Run and let runSingleTestCase() persist success-history
-                Map<String, Object> executionResult = runSingleTestCase(testCase);
-                result.putAll(executionResult);
-
+                GitConfigDTO cfg = featureService.getGitConfig();
+                if (cfg != null && "git".equalsIgnoreCase(cfg.getSourceType())) {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            logger.info("Prewarm (background): syncing git + parsing features");
+                            featureService.syncGitAndParseFeatures();
+                        } catch (Exception ex) {
+                            logger.warn("Prewarm feature sync failed: {}", ex.getMessage(), ex);
+                        }
+                    });
+                }
             } catch (Exception e) {
-                // Capture error result instead of breaking
-                logger.error("Execution failed for TestCase {}: {}", testCase.getTcId(), e.getMessage(), e);
-                result.put("tcStatus", "Execution Error");
-                result.put("xmlComparisonStatus", "Error");
-                result.put("xmlComparisonDetails", Collections.emptyList());
+                logger.warn("Could not read git config during prewarm: {}", e.getMessage(), e);
+            }
 
-                Map<String, Object> runSummary = new LinkedHashMap<>();
-                runSummary.put("totalExecutedScenarios", 0);
-                runSummary.put("passedScenarioDetails", Collections.emptyList());
-                runSummary.put("totalFailedScenarios", 0);
-                runSummary.put("totalPassedScenarios", 0);
-                runSummary.put("durationMillis", 0);
-                runSummary.put("totalUnexecutedScenarios", 1);
-                result.put("runSummary", runSummary);
-                result.put("xmlComparisonStatus", "N/A");
-                result.put("xmlComparisonDetails", Collections.emptyList());
+            // Fire-and-forget step-def compilation (deduped by StepDefCompiler)
+            try {
+                List<String> stepPaths = featureService.getStepDefsProjectPaths();
+                StepDefCompiler.compileStepDefsAsync(stepPaths); // we DO NOT block here
+                logger.debug("Requested async step-def compilation (non-blocking)");
+            } catch (Exception e) {
+                logger.warn("Failed to request async step-def compilation: {}", e.getMessage(), e);
+            }
+        } catch (Throwable t) {
+            logger.warn("Prewarm scheduling failed: {}", t.getMessage(), t);
+        }
 
-                Map<String, Object> errorDetail = new LinkedHashMap<>();
-                errorDetail.put("scenarioName",
-                        testCase.getFeatureScenarios().isEmpty() ? "N/A"
-                                : testCase.getFeatureScenarios().get(0).getScenarios().isEmpty() ? "N/A"
-                                : testCase.getFeatureScenarios().get(0).getScenarios().get(0));
-                errorDetail.put("errors", Collections.singletonList(e.getMessage()));
-                errorDetail.put("exception", e.getClass().getSimpleName());
-                result.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
-                result.put("diffSummary", Collections.emptyMap());
+        // --- Parallel execution setup ---
+        int available = Runtime.getRuntime().availableProcessors();
+        int poolSize = Math.min(Math.max(1, available), Math.max(1, testCases.size()));
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize, new ThreadFactory() {
+            private final AtomicInteger idx = new AtomicInteger(1);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r, "test-runner-worker-" + idx.getAndIncrement());
+                t.setDaemon(false);
+                return t;
+            }
+        });
 
-                // Persist failure-history here (only on exception)
+        try {
+            List<Future<Map<String, Object>>> futures = new ArrayList<>(testCases.size());
+
+            // submit tasks preserving index
+            for (final TestCaseDTO tc : testCases) {
+                Callable<Map<String, Object>> task = new Callable<Map<String, Object>>() {
+                    @Override
+                    public Map<String, Object> call() {
+                        String runId = java.util.UUID.randomUUID().toString();
+                        TestContext.setRunId(runId);
+                        try {
+                            Map<String, Object> res = runSingleTestCase(tc);
+                            if (res != null) {
+                                res.putIfAbsent("testCaseId", tc.getTcId());
+                                res.putIfAbsent("testCaseName", tc.getTcName());
+                                res.putIfAbsent("runOn", LocalDateTime.now());
+                            }
+                            return res;
+                        } catch (Exception ex) {
+                            logger.error("Execution failed for TestCase {}: {}", tc.getTcId(), ex.getMessage(), ex);
+                            Map<String, Object> err = new LinkedHashMap<>();
+                            LocalDateTime executedOn = LocalDateTime.now();
+                            err.put("testCaseId", tc.getTcId());
+                            err.put("testCaseName", tc.getTcName());
+                            err.put("runOn", executedOn);
+                            err.put("tcStatus", "Execution Error");
+                            err.put("xmlComparisonStatus", "N/A");
+                            err.put("xmlComparisonDetails", Collections.emptyList());
+
+                            Map<String, Object> runSummary = new LinkedHashMap<>();
+                            runSummary.put("totalExecutedScenarios", 0);
+                            runSummary.put("passedScenarioDetails", Collections.emptyList());
+                            runSummary.put("totalFailedScenarios", 0);
+                            runSummary.put("totalPassedScenarios", 0);
+                            runSummary.put("durationMillis", 0);
+                            runSummary.put("totalUnexecutedScenarios", 1);
+                            err.put("runSummary", runSummary);
+
+                            Map<String, Object> errorDetail = new LinkedHashMap<>();
+                            errorDetail.put("scenarioName",
+                                    (tc.getFeatureScenarios() == null || tc.getFeatureScenarios().isEmpty()) ? "N/A"
+                                            : (tc.getFeatureScenarios().get(0).getScenarios() == null
+                                            || tc.getFeatureScenarios().get(0).getScenarios().isEmpty()) ? "N/A"
+                                            : tc.getFeatureScenarios().get(0).getScenarios().get(0));
+                            errorDetail.put("errors", Collections.singletonList(ex.getMessage()));
+                            errorDetail.put("exception", ex.getClass().getSimpleName());
+                            err.put("unexecutedScenarioDetails", Collections.singletonList(errorDetail));
+                            err.put("diffSummary", Collections.emptyMap());
+
+                            // best-effort persistence of failure history (runSingleTestCase already handles most cases)
+                            try {
+                                TestCase entityForFail = testCaseRepository.findById(tc.getTcId()).orElse(null);
+                                if (entityForFail != null) {
+                                    entityForFail.setLastRunOn(executedOn);
+                                    entityForFail.setLastRunStatus("Execution Error");
+                                    testCaseRepository.save(entityForFail);
+                                }
+                                LocalDateTime from = executedOn.minusSeconds(2);
+                                LocalDateTime to = executedOn.plusSeconds(2);
+                                List<TestCaseRunHistory> existingFail = historyRepository
+                                        .findByTestCase_IdTCAndRunTimeBetween(tc.getTcId(), from, to);
+
+                                if (existingFail != null && !existingFail.isEmpty()) {
+                                    TestCaseRunHistory existingHist = existingFail.get(0);
+                                    existingHist.setRunStatus("Execution Error");
+                                    existingHist.setXmlDiffStatus("N/A");
+                                    existingHist.setOutputLog(objectMapper.writeValueAsString(err));
+                                    historyRepository.save(existingHist);
+                                } else {
+                                    TestCaseRunHistory failHistory = new TestCaseRunHistory();
+                                    failHistory.setTestCase(entityForFail);
+                                    failHistory.setRunTime(executedOn);
+                                    failHistory.setRunStatus("Execution Error");
+                                    failHistory.setXmlDiffStatus("N/A");
+                                    failHistory.setOutputLog(objectMapper.writeValueAsString(err));
+                                    historyRepository.save(failHistory);
+                                }
+                            } catch (Exception dbEx) {
+                                logger.error("Failed to persist failure history for TestCase {}: {}", tc.getTcId(),
+                                        dbEx.getMessage(), dbEx);
+                            }
+
+                            return err;
+                        } finally {
+                            // ensure cleanup
+                            try {
+                                TestContext.clear();
+                            } catch (Throwable t) {
+                                logger.warn("Error while clearing TestContext: {}", t.getMessage(), t);
+                            }
+                        }
+                    }
+                };
+
+                futures.add(executor.submit(task));
+            }
+
+            // collect results in same order as input
+            for (int i = 0; i < futures.size(); i++) {
                 try {
-                    TestCase entity = testCaseRepository.findById(testCase.getTcId()).orElse(null);
-                    if (entity != null) {
-                        entity.setLastRunOn(executedOn);
-                        entity.setLastRunStatus("Execution Error");
-                        testCaseRepository.save(entity);
-                    }
-
-                    // idempotent save: update existing if present (tolerance +/- 2s)
-                    LocalDateTime from = executedOn.minusSeconds(2);
-                    LocalDateTime to = executedOn.plusSeconds(2);
-                    List<TestCaseRunHistory> existing = historyRepository
-                            .findByTestCase_IdTCAndRunTimeBetween(testCase.getTcId(), from, to);
-                    TestCaseRunHistory history;
-                    if (existing != null && !existing.isEmpty()) {
-                        history = existing.get(0);
-                        history.setRunStatus("Execution Error");
-                        history.setXmlDiffStatus("N/A");
-                        history.setOutputLog(objectMapper.writeValueAsString(result));
-                        historyRepository.save(history);
-                    } else {
-                        history = new TestCaseRunHistory();
-                        history.setTestCase(entity);
-                        history.setRunTime(executedOn);
-                        history.setRunStatus("Execution Error");
-                        history.setXmlDiffStatus("N/A");
-                        history.setOutputLog(objectMapper.writeValueAsString(result));
-                        historyRepository.save(history);
-                    }
-                } catch (Exception dbEx) {
-                    logger.error("⚠ Failed to persist run history for TestCase {}: {}", testCase.getTcId(),
-                            dbEx.getMessage(), dbEx);
+                    Map<String, Object> res = futures.get(i).get(); // wait until completed
+                    results.set(i, res);
+                } catch (ExecutionException ee) {
+                    logger.error("A test execution task threw an exception: {}", ee.getCause() != null ? ee.getCause() : ee);
+                    TestCaseDTO tc = testCases.get(i);
+                    Map<String, Object> err = new LinkedHashMap<>();
+                    err.put("testCaseId", tc.getTcId());
+                    err.put("testCaseName", tc.getTcName());
+                    err.put("runOn", LocalDateTime.now());
+                    err.put("tcStatus", "Execution Error");
+                    err.put("xmlComparisonStatus", "N/A");
+                    err.put("xmlComparisonDetails", Collections.emptyList());
+                    results.set(i, err);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    logger.warn("Interrupted while waiting for test results", ie);
+                    TestCaseDTO tc = testCases.get(i);
+                    Map<String, Object> err = new LinkedHashMap<>();
+                    err.put("testCaseId", tc.getTcId());
+                    err.put("testCaseName", tc.getTcName());
+                    err.put("runOn", LocalDateTime.now());
+                    err.put("tcStatus", "Execution Interrupted");
+                    results.set(i, err);
                 }
             }
 
-            results.add(result);
-            TestContext.clear();
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
 
         return results;
     }
 
-
     private Map<String, Object> runSingleTestCase(TestCaseDTO testCase) throws Exception {
+//        Map<String, Object> result = new LinkedHashMap<>();
+//        LocalDateTime executedOn = LocalDateTime.now();
+//        String inputPath = null;
+//        String outputPath = null;
+//        String runId = java.util.UUID.randomUUID().toString();
+//        TestContext.setRunId(runId);
+//        try {
+//            GitConfigDTO config = featureService.getGitConfig();
+//
+//            if (config.getSourceType().equalsIgnoreCase("git")) {
+//                featureService.syncGitAndParseFeatures();
+//            }
+//
+//            String baseFeaturePath;
+//            if (config.getSourceType().equalsIgnoreCase("git")) {
+//                baseFeaturePath = Paths.get(config.getCloneDir(), config.getGitFeaturePath()).toString();
+//            } else {
+//                baseFeaturePath = config.getLocalFeatherPath();
+//            }
+//
+//            List<Map<String, Object>> results = new ArrayList<>();
+//
+//            TestContext.setTestCaseId(testCase.getTcId());
+//            Map<String, String> featureToPathMap = new HashMap<>();
+//            Map<String, String> scenarioToFeatureMap = new HashMap<>();
+//            List<String> missingFeatures = new ArrayList<>();
+//
+//            for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
+//                List<ScenarioBlock> blocks = new ArrayList<>();
+//
+//                Path featureRoot = Paths.get(baseFeaturePath);
+//                Optional<Path> featurePathOpt = findFeatureFileRecursive(featureRoot, fs.getFeature());
+//
+//                boolean featureExists = featurePathOpt.isPresent();
+//                String featureFilePath = featurePathOpt.map(Path::toString).orElse(null);
+//
+//                if (!featureExists) {
+//                    missingFeatures.add(fs.getFeature());
+//                } else {
+//                    // Feature-level tags once per feature file
+//                    fs.setFeatureTags(extractFeatureTags(featureFilePath));
+//                    fs.setBackgroundBlock(extractBackground(featureFilePath));
+//                }
+//
+//                // NEW: per-scenario tag maps we’ll fill and store on fs
+//                Map<String, List<String>> scenarioTagsByName = new LinkedHashMap<>();
+//                Map<String, List<String>> exampleTagsByName = new LinkedHashMap<>();
+//
+//                for (String scenarioName : fs.getScenarios()) {
+//                    if (!featureExists)
+//                        continue;
+//
+//                    try {
+//                        featureToPathMap.put(fs.getFeature(), featureFilePath);
+//
+//                        // normalize key used for extraction
+//                        String adjustedScenarioName = scenarioName.trim();
+//                        if (!adjustedScenarioName.startsWith("-")) {
+//                            adjustedScenarioName = "- " + adjustedScenarioName;
+//                        }
+//
+//                        ScenarioBlock sb = extractScenarioBlock(featureFilePath, adjustedScenarioName);
+//                        if (sb == null || sb.getContent() == null || sb.getContent().trim().isEmpty())
+//                            continue;
+//
+//                        if (sb.isFromExampleWithTags()) {
+//                            logger.warn("Skipping scenario [{}] because it belongs to Examples with tags",
+//                                    adjustedScenarioName);
+//                            continue;
+//                        }
+//
+//                        blocks.add(sb);
+//
+//                        // map both clean and adjusted names for reverse lookup (optional)
+//                        String featureFileName = Paths.get(featureFilePath).getFileName().toString();
+//                        scenarioToFeatureMap.put(scenarioName.trim(), featureFileName);
+//                        scenarioToFeatureMap.put(adjustedScenarioName, featureFileName);
+//
+//                        // ⬇️ Extract tags for THIS scenario only, then put into maps under the plain
+//                        // scenario name
+//                        List<String> scenarioTags = extractScenarioTags(featureFilePath, adjustedScenarioName);
+//                        if (scenarioTags != null && !scenarioTags.isEmpty()) {
+//                            scenarioTagsByName.put(scenarioName.trim(), scenarioTags);
+//                        }
+//
+//                        List<String> exampleTags = extractExampleTags(featureFilePath, adjustedScenarioName);
+//                        if (exampleTags != null && !exampleTags.isEmpty()) {
+//                            exampleTagsByName.put(scenarioName.trim(), exampleTags);
+//                        }
+//
+//                    } catch (IOException e) {
+//                        logger.error("Error reading feature file: {}", featureFilePath, e);
+//                    }
+//                }
+//
+//                fs.setScenarioBlocks(blocks);
+//                // Store the per-scenario tag maps on the DTO
+//                fs.setScenarioTagsByName(scenarioTagsByName);
+//                fs.setExampleTagsByName(exampleTagsByName);
+//            }
+//
+//            Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
+//
+//            // 1. Generate temporary feature file from TestCaseDTO
+//            File featureFile = generateTempFeatureFile(testCase);
+//            File jsonReportFile = File.createTempFile("cucumber-report", ".json");
+//
+//            // Keep mapping for replacement
+//            Map<String, String> tempPathMapping = new HashMap<>();
+//            tempPathMapping.put(featureFile.getAbsolutePath(),
+//                    featureToPathMap.values().stream().findFirst().orElse(featureFile.getAbsolutePath()));
+//
+//            String tempFileName = featureFile.getName();
+//            String originalPath = featureToPathMap.values().stream().findFirst().orElse(featureFile.getAbsolutePath());
+//            String originalFileName = Paths.get(originalPath).getFileName().toString();
+//            // map temp → file name
+//            featureToPathMap.put(tempFileName, originalFileName);
+//            // store path separately
+//            featureToPathMap.put(originalFileName, originalPath);
+//
+//            // 2. Setup Cucumber command-line arguments
+//            String[] gluePkgs = featureService.getGluePackagesArray();
+//
+//            List<String> argvList = new ArrayList<>();
+//
+//            // 1. Add glue packages
+//            for (String glue : gluePkgs) {
+//                argvList.add("--glue");
+//                argvList.add(glue);
+//            }
+//
+//            // 2. Add plugins
+//            argvList.add("--plugin");
+//            argvList.add("pretty");
+//            argvList.add("--plugin");
+//            argvList.add("json:" + jsonReportFile.getAbsolutePath());
+//
+//            // 3. Finally add the feature file(s)
+//            argvList.add(featureFile.getAbsolutePath());
+//
+//            String[] argv = argvList.toArray(new String[0]);
+//
+//            // ✅ Inject Maven Run Profile
+//            if (config.getSourceType().equalsIgnoreCase("git")) {
+//                String configPath = "src/test/resources/configs/" + config.getMavenEnv() + "/configs.properties";
+//                loadSystemPropertiesFromConfig(configPath);
+//                if(config.getMavenEnv().equalsIgnoreCase("uat")) {
+//                    System.setProperty("database.user", "POLROUSER");
+//                    System.setProperty("database.password", "RTqj_JSy7tg5_Ag");
+//                }
+//            }
+//
+//            // 3. Compile stepDefs if needed (before running cucumber)
+//            String currentAppPath = Paths.get(".").toAbsolutePath().normalize().toString();
+//            CompletableFuture<Void> compileFuture = StepDefCompiler.compileStepDefsAsync(Collections.singletonList(currentAppPath));
+//
+//            try {
+//                compileFuture.get(60, TimeUnit.SECONDS); // bigger for cold starts
+//                logger.debug("StepDefs compilation finished");
+//            } catch (TimeoutException te) {
+//                logger.warn("StepDef compile timeout. Proceeding — Cucumber may report undefined steps.");
+//            } catch (ExecutionException ee) {
+//                logger.error("StepDef compile failed", ee.getCause() != null ? ee.getCause() : ee);
+//                throw new RuntimeException("StepDef compilation failed", ee);
+//            }
+//
+//
+//            // 3.1. Capture Cucumber stdout
+//            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//            PrintStream originalOut = System.out;
+//            System.setOut(new PrintStream(baos));
+//
+//            Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
+//            try {
+//                Set<URL> urls = new LinkedHashSet<>();
+//                // ✅ Gather stepDef paths (target/classes, test-classes)
+//                List<String> stepDefsPaths = featureService.getStepDefsFullPaths(); // make sure this returns test + main
+//                // Add dynamic compiled step defs
+//                stepDefsPaths.add("target/dynamic-stepdefs");
+//                for (String p : stepDefsPaths) {
+//                    File f = new File(p);
+//                    if (f.exists()) urls.add(f.toURI().toURL());
+//                }
+//
+//                for (String path : stepDefsPaths) {
+//                    File f = new File(path);
+//                    if (f.exists()) {
+//                        urls.add(f.toURI().toURL());
+//                    }
+//                }
+//
+//                // ✅ Add jars from target/dependency
+//                File depDir = new File("target/dependency");
+//                if (depDir.exists() && depDir.isDirectory()) {
+//                    File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
+//                    if (jars != null) {
+//                        for (File jar : jars) {
+//                            urls.add(jar.toURI().toURL());
+//                        }
+//                    }
+//                }
+//
+//
+//                URLClassLoader classLoader = null;
+//                Class<?> runnerClass = null;
+//                String runnerClassName = null;
+//                ClassLoader originalContext = Thread.currentThread().getContextClassLoader();
+//
+//                try {
+//                    classLoader = new URLClassLoader(urls.toArray(new URL[0]), originalContext);
+//                    Thread.currentThread().setContextClassLoader(classLoader);
+//
+//                    try {
+//                        runnerClass = classLoader.loadClass("RunCucumberTests");
+//                        runnerClassName = "RunCucumberTests"; // default package
+//                    } catch (ClassNotFoundException e) {
+//                        logger.info("RunCucumberTests not found in classpath — skipping init/destroy hooks.");
+//                    }
+//
+//                    // Run init once
+//                    invokeInitIfPresent(runnerClass);
+//
+//                    // Capture cucumber output
+//                    System.setOut(new PrintStream(baos));
+//                    logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
+//                    Main.run(argv, classLoader);
+//
+//                    exampleMap = extractExamplesFromFeature(featureFile);
+//
+//                } finally {
+//                    System.out.flush();
+//                    System.setOut(originalOut);
+//
+//                    try {
+//                        if (runnerClass == null && runnerClassName != null && classLoader != null) {
+//                            runnerClass = classLoader.loadClass(runnerClassName);
+//                        }
+//                        invokeDestroyIfPresent(runnerClass);
+//                    } finally {
+//                        Thread.currentThread().setContextClassLoader(originalContext);
+//                        if (classLoader != null) {
+//                            try {
+//                                classLoader.close();
+//                            } catch (IOException e) {
+//                                logger.warn("Failed to close URLClassLoader: {}", e.getMessage(), e);
+//                            }
+//                        }
+//                    }
+//                }
+//            } finally {
+//                System.out.flush();
+//                System.setOut(originalOut);
+//                if (cleanupTempFeature && featureFile.exists()) {
+//                    if (!featureFile.delete()) {
+//                        logger.warn("Could not delete temp feature file: {}", featureFile.getAbsolutePath());
+//                    } else {
+//                        logger.info("Deleted temp feature file: {}", featureFile.getAbsolutePath());
+//                    }
+//                }
+//            }
+//
+//            String fullOutput = baos.toString();
+//
+//            // ✅ Replace temp paths with actual feature paths in output
+//            for (Map.Entry<String, String> entry : tempPathMapping.entrySet()) {
+//                String tempPath = entry.getKey().replace("\\", "/");
+//                String realPath = entry.getValue().replace("\\", "/");
+//                fullOutput = fullOutput.replace(tempPath, realPath);
+//                fullOutput = fullOutput.replace(tempFileName, originalFileName);
+//            }
+//
+//            logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
+//
+//            // 5. Parse the generated JSON report
+//            executedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
+//
+//            if (jsonReportFile.exists())
+//                jsonReportFile.delete();
+
         Map<String, Object> result = new LinkedHashMap<>();
         LocalDateTime executedOn = LocalDateTime.now();
         String inputPath = null;
         String outputPath = null;
         String runId = java.util.UUID.randomUUID().toString();
         TestContext.setRunId(runId);
+
         try {
+            // --- Read config but do NOT force a blocking sync here (prewarm kicked separately) ---
             GitConfigDTO config = featureService.getGitConfig();
 
-            if (config.getSourceType().equalsIgnoreCase("git")) {
-                featureService.syncGitAndParseFeatures();
-            }
-
-            String baseFeaturePath;
-            if (config.getSourceType().equalsIgnoreCase("git")) {
-                baseFeaturePath = Paths.get(config.getCloneDir(), config.getGitFeaturePath()).toString();
-            } else {
-                baseFeaturePath = config.getLocalFeatherPath();
-            }
+            // Decide baseFeaturePath immediately from config (sync may change files later)
+            String baseFeaturePath = "local".equalsIgnoreCase(config.getSourceType())
+                    ? config.getLocalFeatherPath()
+                    : Paths.get(config.getCloneDir(), config.getGitFeaturePath()).toString();
 
             List<Map<String, Object>> results = new ArrayList<>();
 
             TestContext.setTestCaseId(testCase.getTcId());
+
+            // maps/lists that we populate (we may re-populate once if we detect missing files)
             Map<String, String> featureToPathMap = new HashMap<>();
             Map<String, String> scenarioToFeatureMap = new HashMap<>();
             List<String> missingFeatures = new ArrayList<>();
 
-            for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
-                List<ScenarioBlock> blocks = new ArrayList<>();
+            // We'll try once; if missing features are detected, attempt a single synchronous git sync & re-populate.
+            int attempts = 0;
+            while (attempts < 2) {
+                missingFeatures.clear();
+                featureToPathMap.clear();
+                scenarioToFeatureMap.clear();
 
-                Path featureRoot = Paths.get(baseFeaturePath);
-                Optional<Path> featurePathOpt = findFeatureFileRecursive(featureRoot, fs.getFeature());
+                // populate scenario blocks / maps
+                for (TestCaseDTO.FeatureScenario fs : testCase.getFeatureScenarios()) {
+                    List<ScenarioBlock> blocks = new ArrayList<>();
 
-                boolean featureExists = featurePathOpt.isPresent();
-                String featureFilePath = featurePathOpt.map(Path::toString).orElse(null);
-
-                if (!featureExists) {
-                    missingFeatures.add(fs.getFeature());
-                } else {
-                    // Feature-level tags once per feature file
-                    fs.setFeatureTags(extractFeatureTags(featureFilePath));
-                    fs.setBackgroundBlock(extractBackground(featureFilePath));
-                }
-
-                // NEW: per-scenario tag maps we’ll fill and store on fs
-                Map<String, List<String>> scenarioTagsByName = new LinkedHashMap<>();
-                Map<String, List<String>> exampleTagsByName = new LinkedHashMap<>();
-
-                for (String scenarioName : fs.getScenarios()) {
-                    if (!featureExists)
-                        continue;
-
+                    Path featureRoot = Paths.get(baseFeaturePath);
+                    Optional<Path> featurePathOpt;
                     try {
-                        featureToPathMap.put(fs.getFeature(), featureFilePath);
-
-                        // normalize key used for extraction
-                        String adjustedScenarioName = scenarioName.trim();
-                        if (!adjustedScenarioName.startsWith("-")) {
-                            adjustedScenarioName = "- " + adjustedScenarioName;
-                        }
-
-                        ScenarioBlock sb = extractScenarioBlock(featureFilePath, adjustedScenarioName);
-                        if (sb == null || sb.getContent() == null || sb.getContent().trim().isEmpty())
-                            continue;
-
-                        if (sb.isFromExampleWithTags()) {
-                            logger.warn("Skipping scenario [{}] because it belongs to Examples with tags",
-                                    adjustedScenarioName);
-                            continue;
-                        }
-
-                        blocks.add(sb);
-
-                        // map both clean and adjusted names for reverse lookup (optional)
-                        String featureFileName = Paths.get(featureFilePath).getFileName().toString();
-                        scenarioToFeatureMap.put(scenarioName.trim(), featureFileName);
-                        scenarioToFeatureMap.put(adjustedScenarioName, featureFileName);
-
-                        // ⬇️ Extract tags for THIS scenario only, then put into maps under the plain
-                        // scenario name
-                        List<String> scenarioTags = extractScenarioTags(featureFilePath, adjustedScenarioName);
-                        if (scenarioTags != null && !scenarioTags.isEmpty()) {
-                            scenarioTagsByName.put(scenarioName.trim(), scenarioTags);
-                        }
-
-                        List<String> exampleTags = extractExampleTags(featureFilePath, adjustedScenarioName);
-                        if (exampleTags != null && !exampleTags.isEmpty()) {
-                            exampleTagsByName.put(scenarioName.trim(), exampleTags);
-                        }
-
-                    } catch (IOException e) {
-                        logger.error("Error reading feature file: {}", featureFilePath, e);
+                        featurePathOpt = findFeatureFileRecursive(featureRoot, fs.getFeature());
+                    } catch (Exception ex) {
+                        // If baseFeaturePath doesn't exist or some I/O hiccup, treat as missing
+                        featurePathOpt = Optional.empty();
                     }
+
+                    boolean featureExists = featurePathOpt.isPresent();
+                    String featureFilePath = featurePathOpt.map(Path::toString).orElse(null);
+
+                    if (!featureExists) {
+                        missingFeatures.add(fs.getFeature());
+                    } else {
+                        // Feature-level tags once per feature file
+                        fs.setFeatureTags(extractFeatureTags(featureFilePath));
+                        fs.setBackgroundBlock(extractBackground(featureFilePath));
+                    }
+
+                    // per-scenario tag maps
+                    Map<String, List<String>> scenarioTagsByName = new LinkedHashMap<>();
+                    Map<String, List<String>> exampleTagsByName = new LinkedHashMap<>();
+
+                    for (String scenarioName : fs.getScenarios()) {
+                        if (!featureExists)
+                            continue;
+
+                        try {
+                            featureToPathMap.put(fs.getFeature(), featureFilePath);
+
+                            // normalize key used for extraction
+                            String adjustedScenarioName = scenarioName.trim();
+                            if (!adjustedScenarioName.startsWith("-")) {
+                                adjustedScenarioName = "- " + adjustedScenarioName;
+                            }
+
+                            ScenarioBlock sb = extractScenarioBlock(featureFilePath, adjustedScenarioName);
+                            if (sb == null || sb.getContent() == null || sb.getContent().trim().isEmpty())
+                                continue;
+
+                            if (sb.isFromExampleWithTags()) {
+                                logger.warn("Skipping scenario [{}] because it belongs to Examples with tags",
+                                        adjustedScenarioName);
+                                continue;
+                            }
+
+                            blocks.add(sb);
+
+                            // map both clean and adjusted names
+                            String featureFileName = Paths.get(featureFilePath).getFileName().toString();
+                            scenarioToFeatureMap.put(scenarioName.trim(), featureFileName);
+                            scenarioToFeatureMap.put(adjustedScenarioName, featureFileName);
+
+                            // Extract tags for THIS scenario only
+                            List<String> scenarioTags = extractScenarioTags(featureFilePath, adjustedScenarioName);
+                            if (scenarioTags != null && !scenarioTags.isEmpty()) {
+                                scenarioTagsByName.put(scenarioName.trim(), scenarioTags);
+                            }
+
+                            List<String> exampleTags = extractExampleTags(featureFilePath, adjustedScenarioName);
+                            if (exampleTags != null && !exampleTags.isEmpty()) {
+                                exampleTagsByName.put(scenarioName.trim(), exampleTags);
+                            }
+
+                        } catch (IOException e) {
+                            logger.error("Error reading feature file: {}", featureFilePath, e);
+                        }
+                    }
+
+                    fs.setScenarioBlocks(blocks);
+                    fs.setScenarioTagsByName(scenarioTagsByName);
+                    fs.setExampleTagsByName(exampleTagsByName);
                 }
 
-                fs.setScenarioBlocks(blocks);
-                // Store the per-scenario tag maps on the DTO
-                fs.setScenarioTagsByName(scenarioTagsByName);
-                fs.setExampleTagsByName(exampleTagsByName);
-            }
+                // if no missing features or we already retried once, break
+                if (missingFeatures.isEmpty() || attempts == 1) {
+                    break;
+                }
+
+                // First attempt found missing features -> perform one synchronous sync (fallback)
+                try {
+                    logger.info("Missing feature files detected while preparing test {}. Performing one-time synchronous feature sync.", testCase.getTcId());
+                    featureService.syncGitAndParseFeatures();
+                    // after sync we should recompute baseFeaturePath (in case the source type changed or clone dir updated)
+                    GitConfigDTO refreshedCfg = featureService.getGitConfig();
+                    baseFeaturePath = "local".equalsIgnoreCase(refreshedCfg.getSourceType())
+                            ? refreshedCfg.getLocalFeatherPath()
+                            : Paths.get(refreshedCfg.getCloneDir(), refreshedCfg.getGitFeaturePath()).toString();
+                } catch (Exception ex) {
+                    logger.warn("Synchronous feature sync failed (fallback): {}", ex.getMessage(), ex);
+                    // we'll retry finding files once anyway — if still missing we continue (test will mark unexecuted)
+                }
+                attempts++;
+            } // end attempts loop
 
             Set<Map<String, Object>> executedScenarios = new LinkedHashSet<>();
 
@@ -446,7 +949,15 @@ public class TestCaseRunService {
             featureToPathMap.put(originalFileName, originalPath);
 
             // 2. Setup Cucumber command-line arguments
-            String[] gluePkgs = featureService.getGluePackagesArray();
+            String[] gluePkgs;
+            try {
+                gluePkgs = featureService.getGluePackagesArray();
+            } catch (Exception e) {
+                // fallback: try configured glue or empty
+                logger.warn("Failed to detect glue packages (falling back): {}", e.getMessage());
+                String manual = featureService.getGitConfig() != null ? featureService.getGitConfig().getGluePackage() : null;
+                gluePkgs = manual != null && !manual.trim().isEmpty() ? new String[] { manual } : new String[] {};
+            }
 
             List<String> argvList = new ArrayList<>();
 
@@ -467,27 +978,24 @@ public class TestCaseRunService {
 
             String[] argv = argvList.toArray(new String[0]);
 
-            // ✅ Inject Maven Run Profile
+            // ✅ Inject Maven Run Profile if source is git (this only reads properties)
             if (config.getSourceType().equalsIgnoreCase("git")) {
                 String configPath = "src/test/resources/configs/" + config.getMavenEnv() + "/configs.properties";
                 loadSystemPropertiesFromConfig(configPath);
-                if(config.getMavenEnv().equalsIgnoreCase("uat")) {
+                if (config.getMavenEnv().equalsIgnoreCase("uat")) {
                     System.setProperty("database.user", "POLROUSER");
                     System.setProperty("database.password", "RTqj_JSy7tg5_Ag");
                 }
             }
 
-            // ✅ Ensure dependencies are copied once
-            StepDefCompiler.ensureDependenciesCopied();
-
-            // 3. Compile stepDefs if needed (before running cucumber)
-//			for (String projPath : featureService.getStepDefsProjectPaths()) {
-//				StepDefCompiler.compileStepDefs(Collections.singletonList(projPath)); // ✅
-//			}
-
-            // Always compile step defs from the current application project
-            String currentAppPath = Paths.get(".").toAbsolutePath().normalize().toString();
-            StepDefCompiler.compileStepDefs(Collections.singletonList(currentAppPath));
+            // --- Trigger compilation asynchronously (non-blocking) but do NOT wait ---
+            try {
+                String currentAppPath = Paths.get(".").toAbsolutePath().normalize().toString();
+                StepDefCompiler.compileStepDefsAsync(Collections.singletonList(currentAppPath));
+                logger.debug("Triggered async step-def compile (non-blocking) for {}", currentAppPath);
+            } catch (Exception e) {
+                logger.warn("Unable to request async step-def compile: {}", e.getMessage(), e);
+            }
 
             // 3.1. Capture Cucumber stdout
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -496,25 +1004,17 @@ public class TestCaseRunService {
 
             Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
             try {
-                // ✅ Gather stepDef paths (target/classes, test-classes)
+                Set<URL> urls = new LinkedHashSet<>();
+                // Gather stepDef paths (target/classes, test-classes)
                 List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
-
-                // ✅ Gather stepDef paths (current application only)
-//				List<String> stepDefsPaths = Arrays.asList(
-//				    "target/test-classes",
-//				    "target/classes"
-//				);
-
-                List<URL> urls = new ArrayList<>();
-
-                for (String path : stepDefsPaths) {
-                    File f = new File(path);
-                    if (f.exists()) {
-                        urls.add(f.toURI().toURL());
-                    }
+                // Add dynamic compiled step defs
+                stepDefsPaths.add("target/dynamic-stepdefs");
+                for (String p : stepDefsPaths) {
+                    File f = new File(p);
+                    if (f.exists()) urls.add(f.toURI().toURL());
                 }
 
-                // ✅ Add jars from target/dependency
+                // Add jars from target/dependency
                 File depDir = new File("target/dependency");
                 if (depDir.exists() && depDir.isDirectory()) {
                     File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
@@ -525,13 +1025,6 @@ public class TestCaseRunService {
                     }
                 }
 
-                // ✅ Now just run cucumber using the system classloader
-                // Create a URLClassLoader with stepDefs and dependency jars
-                // try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]), Thread.currentThread().getContextClassLoader())) {
-                // 	logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-                // 	Main.run(argv, classLoader);
-                // }
-
                 URLClassLoader classLoader = null;
                 Class<?> runnerClass = null;
                 String runnerClassName = null;
@@ -540,29 +1033,18 @@ public class TestCaseRunService {
                 try {
                     classLoader = new URLClassLoader(urls.toArray(new URL[0]), originalContext);
                     Thread.currentThread().setContextClassLoader(classLoader);
-//---For Scanning the RunCucumberTests Class---//
-//					try {
-//						// Try simple first
-//						runnerClass = classLoader.loadClass("RunCucumberTests");
-//						runnerClassName = runnerClass.getName();
-//					} catch (ClassNotFoundException e) {
-//						runnerClassName = findRunCucumberTestsClassName(classLoader);
-//						if (runnerClassName != null) {
-//							runnerClass = classLoader.loadClass(runnerClassName);
-//						}
-//					}
 
                     try {
                         runnerClass = classLoader.loadClass("RunCucumberTests");
-                        runnerClassName = "RunCucumberTests"; // default package
+                        runnerClassName = "RunCucumberTests";
                     } catch (ClassNotFoundException e) {
                         logger.info("RunCucumberTests not found in classpath — skipping init/destroy hooks.");
                     }
 
-                    // Run init once
+                    // Run init if present
                     invokeInitIfPresent(runnerClass);
 
-                    // Capture cucumber output
+                    // Capture cucumber output and run
                     System.setOut(new PrintStream(baos));
                     logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
                     Main.run(argv, classLoader);
@@ -589,24 +1071,6 @@ public class TestCaseRunService {
                         }
                     }
                 }
-
-                // 🔍 Log the resolved classpath entries
-//					logger.info("StepDefs + Dependency classpath URLs:");
-//					for (URL url : urls) {
-//						logger.info("  {}", url);
-//					}
-
-                // ✅ Dynamic Hybrid classloader (inherits app deps + adds stepDefs + jars)
-//				try (URLClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[0]),
-//						Thread.currentThread().getContextClassLoader())) {
-//
-//					logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-//					Main.run(argv, classLoader);
-//				}
-                ;
-                // ✅ Extract from the temp feature file BEFORE deleting it
-                // exampleMap = extractExamplesFromFeature(featureFile);
-
             } finally {
                 System.out.flush();
                 System.setOut(originalOut);
@@ -621,7 +1085,7 @@ public class TestCaseRunService {
 
             String fullOutput = baos.toString();
 
-            // ✅ Replace temp paths with actual feature paths in output
+            // Replace temp paths with actual feature paths in output
             for (Map.Entry<String, String> entry : tempPathMapping.entrySet()) {
                 String tempPath = entry.getKey().replace("\\", "/");
                 String realPath = entry.getValue().replace("\\", "/");
@@ -636,6 +1100,7 @@ public class TestCaseRunService {
 
             if (jsonReportFile.exists())
                 jsonReportFile.delete();
+
 
             // ✅ Split: truly executed vs skipped/unexecuted
             List<Map<String, Object>> trulyExecutedScenarios = new ArrayList<>();
