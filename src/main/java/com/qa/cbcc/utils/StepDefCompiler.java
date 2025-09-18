@@ -159,19 +159,19 @@ public class StepDefCompiler {
                     String diagText = diagnostics.getDiagnostics().stream()
                             .map(Object::toString)
                             .collect(Collectors.joining(System.lineSeparator()));
-//                    logger.warn("Compilation diagnostics for {}:\n{}", projectPath, diagText);
+                    logger.warn("Compilation diagnostics for {}:\n{}", projectPath, diagText);
                     if (!retried && indicatesMissingTestLibs(diagText)) {
                         logger.warn("Missing test libraries detected; attempting dependency copy then retry.");
                         retried = true;
                         ensureDependenciesCopied(projectPath);
                         continue;
                     }
-//                    throw new IllegalStateException("StepDef compilation failed:\n" + diagText);
+                    throw new IllegalStateException("StepDef compilation failed:\n" + diagText);
                 }
             } catch (RuntimeException ex) {
                 throw ex;
             } catch (Exception ex) {
-//                throw new RuntimeException("Failed compiling step definitions for " + projectPath, ex);
+                throw new RuntimeException("Failed compiling step definitions for " + projectPath, ex);
             }
         }
     }
