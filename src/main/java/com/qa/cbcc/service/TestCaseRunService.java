@@ -388,7 +388,7 @@ public class TestCaseRunService {
                         String runId = java.util.UUID.randomUUID().toString();
                         TestContext.setRunId(runId);
                         try {
-                            Map<String, Object> res = runSingleTestCase(tc);
+                            Map<String, Object> res = runParallelTestCase(tc);
                             if (res != null) {
                                 res.putIfAbsent("testCaseId", tc.getTcId());
                                 res.putIfAbsent("testCaseName", tc.getTcName());
@@ -518,7 +518,7 @@ public class TestCaseRunService {
         return results;
     }
 
-    private Map<String, Object> runSingleTestCase(TestCaseDTO testCase) throws Exception {
+    private Map<String, Object> runParallelTestCase(TestCaseDTO testCase) throws Exception {
         Map<String, Object> result = new LinkedHashMap<>();
         LocalDateTime executedOn = LocalDateTime.now();
         String inputPath = null;
@@ -719,111 +719,8 @@ public class TestCaseRunService {
                 logger.warn("Unable to request async step-def compile: {}", e.getMessage(), e);
             }
 
-            // 3.1. Capture Cucumber stdout
-//            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-//            PrintStream originalOut = System.out;
-//            System.setOut(new PrintStream(baos));
-//
-//            Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
-//            try {
-//                Set<URL> urls = new LinkedHashSet<>();
-//                // Gather stepDef paths (target/classes, test-classes)
-//                List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
-//                // Add dynamic compiled step defs
-//                stepDefsPaths.add("target/dynamic-stepdefs");
-//                for (String p : stepDefsPaths) {
-//                    File f = new File(p);
-//                    if (f.exists()) urls.add(f.toURI().toURL());
-//                }
-//
-//                // Add jars from target/dependency
-//                File depDir = new File("target/dependency");
-//                if (depDir.exists() && depDir.isDirectory()) {
-//                    File[] jars = depDir.listFiles((dir, name) -> name.endsWith(".jar"));
-//                    if (jars != null) {
-//                        for (File jar : jars) {
-//                            urls.add(jar.toURI().toURL());
-//                        }
-//                    }
-//                }
-//
-//                URLClassLoader classLoader = null;
-//                Class<?> runnerClass = null;
-//                String runnerClassName = null;
-//                ClassLoader originalContext = Thread.currentThread().getContextClassLoader();
-//
-//                try {
-//                    classLoader = new URLClassLoader(urls.toArray(new URL[0]), originalContext);
-//                    Thread.currentThread().setContextClassLoader(classLoader);
-//
-//                    try {
-//                        runnerClass = classLoader.loadClass("RunCucumberTests");
-//                        runnerClassName = "RunCucumberTests";
-//                    } catch (ClassNotFoundException e) {
-//                        logger.info("RunCucumberTests not found in classpath — skipping init/destroy hooks.");
-//                    }
-//
-//                    // Run init if present
-//                    invokeInitIfPresent(runnerClass);
-//
-//                    // Capture cucumber output and run
-//                    System.setOut(new PrintStream(baos));
-//                    logger.info("Running Cucumber with argv: {}", Arrays.toString(argv));
-//                    Main.run(argv, classLoader);
-//
-//                    exampleMap = extractExamplesFromFeature(featureFile);
-//
-//                } finally {
-//                    System.out.flush();
-//                    System.setOut(originalOut);
-//
-//                    try {
-//                        if (runnerClass == null && runnerClassName != null && classLoader != null) {
-//                            runnerClass = classLoader.loadClass(runnerClassName);
-//                        }
-//                        invokeDestroyIfPresent(runnerClass);
-//                    } finally {
-//                        Thread.currentThread().setContextClassLoader(originalContext);
-//                        if (classLoader != null) {
-//                            try {
-//                                classLoader.close();
-//                            } catch (IOException e) {
-//                                logger.warn("Failed to close URLClassLoader: {}", e.getMessage(), e);
-//                            }
-//                        }
-//                    }
-//                }
-//            } finally {
-//                System.out.flush();
-//                System.setOut(originalOut);
-//                if (cleanupTempFeature && featureFile.exists()) {
-//                    if (!featureFile.delete()) {
-//                        logger.warn("Could not delete temp feature file: {}", featureFile.getAbsolutePath());
-//                    } else {
-//                        logger.info("Deleted temp feature file: {}", featureFile.getAbsolutePath());
-//                    }
-//                }
-//            }
-//
-//            String fullOutput = baos.toString();
-//
-//            // Replace temp paths with actual feature paths in output
-//            for (Map.Entry<String, String> entry : tempPathMapping.entrySet()) {
-//                String tempPath = entry.getKey().replace("\\", "/");
-//                String realPath = entry.getValue().replace("\\", "/");
-//                fullOutput = fullOutput.replace(tempPath, realPath);
-//                fullOutput = fullOutput.replace(tempFileName, originalFileName);
-//            }
-//
-//            logger.info("===== Begin Test Output =====\n{}\n===== End Test Output =====", fullOutput);
-//
-//            // 5. Parse the generated JSON report
-//            executedScenarios = parseCucumberJson(jsonReportFile, exampleMap, featureToPathMap);
-//
-//            if (jsonReportFile.exists())
-//                jsonReportFile.delete();
 
-// 3.1. Run cucumber and capture logs safely (stdout + stderr)
+           // 3.1. Run cucumber and capture logs safely (stdout + stderr)
             Map<String, Map<String, Pair<List<String>, List<String>>>> exampleMap;
             try {
                 Set<URL> urls = new LinkedHashSet<>();
