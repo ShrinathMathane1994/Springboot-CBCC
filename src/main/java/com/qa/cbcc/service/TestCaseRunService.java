@@ -727,7 +727,8 @@ public class TestCaseRunService {
                 // Gather stepDef paths (target/classes, test-classes)
                 List<String> stepDefsPaths = featureService.getStepDefsFullPaths();
                 // Add dynamic compiled step defs
-                stepDefsPaths.add("target/dynamic-stepdefs");
+//                stepDefsPaths.add("target/dynamic-stepdefs");
+                stepDefsPaths.add("target/test-classes");
                 for (String p : stepDefsPaths) {
                     File f = new File(p);
                     if (f.exists()) urls.add(f.toURI().toURL());
