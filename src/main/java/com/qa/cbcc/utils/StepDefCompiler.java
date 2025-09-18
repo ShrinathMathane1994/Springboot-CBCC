@@ -163,7 +163,8 @@ public class StepDefCompiler {
                     if (!retried && indicatesMissingTestLibs(diagText)) {
                         logger.warn("Missing test libraries detected; attempting dependency copy then retry.");
                         retried = true;
-                        ensureDependenciesCopied(projectPath);
+                        ensureDepende
+                    nciesCopied(projectPath);
                         continue;
                     }
                     throw new IllegalStateException("StepDef compilation failed:\n" + diagText);
