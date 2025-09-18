@@ -1,305 +1,305 @@
 package com.qa.cbcc.utils;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.stream.Stream;
-
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.tools.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 public class StepDefCompiler {
 
-	private static final Logger logger = LoggerFactory.getLogger(StepDefCompiler.class);
+    private static final Logger logger = LoggerFactory.getLogger(StepDefCompiler.class);
 
-	// Timeout for external Maven operations (adjust if needed)
-	private static final long MVN_TIMEOUT_SECONDS = 3 * 60; // 3 minutes
+    private static final String TEST_SRC_REL = "src/test/java";
+    private static final String OUTPUT_REL = "target/dynamic-stepdefs";
+    private static final String DEP_DIR = "target/dependency";
+    private static final List<String> REQUIRED_TEST_ARTIFACT_HINTS = Arrays.asList("awaitility", "lombok");
 
-	/**
-	 * Ensures dependencies are copied into target/dependency. Uses a timeout and
-	 * gobblers to avoid process deadlocks.
-	 */
-	public static void ensureDependenciesCopied() {
-		File depDir = new File("target/dependency");
+    // Use a bounded pool sized to CPU cores to avoid unbounded thread growth
+    private static final int POOL_SIZE = Math.max(1, Runtime.getRuntime().availableProcessors());
+    private static final ExecutorService COMPILE_EXECUTOR = Executors.newFixedThreadPool(POOL_SIZE,
+            r -> {
+                Thread t = new Thread(r, "stepdef-compiler-" + UUID.randomUUID().toString());
+                t.setDaemon(true);
+                return t;
+            });
 
-		if (!depDir.exists()) {
-			depDir.mkdirs();
-		}
+    // Track running compilations per normalized projectPath to dedupe
+    private static final ConcurrentMap<String, CompletableFuture<Void>> RUNNING = new ConcurrentHashMap<>();
 
-		// Skip if already copied
-		if (depDir.exists() && depDir.isDirectory() && depDir.list().length > 0) {
-			logger.info("Dependencies already available in target/dependency, skipping copy.");
-			return;
-		}
+    private StepDefCompiler() {
+        // no instantiation
+    }
 
-		String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
-		logger.info("Copying dependencies with {} ...", mvnCmd);
+    /**
+     * Asynchronously compile step definitions for given project paths.
+     * Returns a CompletableFuture that completes when compilation finishes (or exceptionally if failed).
+     * If no files are stale, returns a completed future.
+     */
+    public static CompletableFuture<Void> compileStepDefsAsync(List<String> projectPaths) {
+        if (projectPaths == null || projectPaths.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
 
-		ProcessBuilder pb = new ProcessBuilder(mvnCmd, "dependency:copy-dependencies", "-DoutputDirectory=target/dependency",
-				"-DincludeScope=test");
-		pb.redirectErrorStream(true);
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (String projectPath : projectPaths) {
+            if (projectPath == null) continue;
+            final String normalized = normalizeProjectPath(projectPath);
+            CompletableFuture<Void> fut = RUNNING.computeIfAbsent(normalized, p -> {
+                CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
+                    try {
+                        doCompileForProject(p);
+                    } catch (RuntimeException re) {
+                        // rethrow so future completes exceptionally
+                        throw re;
+                    }
+                }, COMPILE_EXECUTOR).whenComplete((r, t) -> {
+                    // remove entry (allow subsequent compiles). keep removal quiet even on exception.
+                    RUNNING.remove(p);
+                    if (t == null) {
+                        logger.debug("Async compile completed for {}", p);
+                    } else {
+                        logger.warn("Async compile failed for {}: {}", p, t.getMessage());
+                    }
+                });
+                return cf;
+            });
+            futures.add(fut);
+        }
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
+    }
 
-		Process process = null;
-		StreamGobbler gobbler = null;
-		try {
-			process = pb.start();
-			gobbler = new StreamGobbler(process.getInputStream(), s -> logger.info("[maven] {}", s));
-			gobbler.start();
+    /**
+     * Blocking compile convenience API (previous behaviour) — waits for completion.
+     */
+    public static void compileStepDefs(List<String> projectPaths) {
+        CompletableFuture<Void> all = compileStepDefsAsync(projectPaths);
+        try {
+            all.get(); // block until done
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            logger.warn("Interrupted while waiting for step-def compilation: {}", ie.getMessage());
+        } catch (ExecutionException ee) {
+            throw new RuntimeException("StepDef compilation failed", ee.getCause());
+        }
+    }
 
-			boolean finished = process.waitFor(MVN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-			if (!finished) {
-				logger.error("Maven dependency:copy-dependencies timed out after {}s; destroying process", MVN_TIMEOUT_SECONDS);
-				process.destroyForcibly();
-				throw new RuntimeException("Timed out running mvn dependency:copy-dependencies");
-			}
-			int exitCode = process.exitValue();
-			if (exitCode != 0) {
-				throw new RuntimeException("Maven dependency:copy-dependencies failed with exit code " + exitCode);
-			}
-			logger.info("Dependencies copied successfully into target/dependency");
-		} catch (InterruptedException ie) {
-			Thread.currentThread().interrupt();
-			if (process != null) process.destroyForcibly();
-			throw new RuntimeException("Interrupted while running mvn dependency:copy-dependencies", ie);
-		} catch (IOException ioe) {
-			if (process != null) process.destroyForcibly();
-			logger.error("Failed to copy dependencies automatically", ioe);
-			throw new RuntimeException("Failed to copy dependencies automatically", ioe);
-		} finally {
-			if (gobbler != null) {
-				try {
-					gobbler.join(500);
-				} catch (InterruptedException ignored) {
-					Thread.currentThread().interrupt();
-				}
-			}
-		}
-	}
+    // --- internal helpers --- //
 
-	/**
-	 * Compile step definitions by running 'mvn test-compile' in each project path.
-	 * This method keeps original behavior but adds robust process handling.
-	 */
-	public static void compileStepDefs(List<String> projectPaths) {
-		for (String projectPath0 : projectPaths) {
-			String projectPath = projectPath0;
-			File srcDir = new File(projectPath, "src/test/java");
-			File outputDir = new File(projectPath, "target/test-classes");
-			File pomFile = new File(projectPath, "pom.xml");
+    private static String normalizeProjectPath(String projectPath) {
+        try {
+            return Paths.get(projectPath).toAbsolutePath().normalize().toString();
+        } catch (Exception e) {
+            // fallback: use raw string if normalization fails
+            return projectPath;
+        }
+    }
 
-			// If no pom.xml in repo (like client code), fall back to app root
-			if (!pomFile.exists()) {
-				logger.warn("No pom.xml found in {}, falling back to application root ({})", projectPath, System.getProperty("user.dir"));
-				projectPath = System.getProperty("user.dir"); // root of your app
-				srcDir = new File(projectPath, "src/test/java");
-				outputDir = new File(projectPath, "target/test-classes");
-				pomFile = new File(projectPath, "pom.xml");
-			}
+    // Synchronous compile logic (executed inside executor)
+    private static void doCompileForProject(String projectPath) {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException("JDK required (JavaCompiler not found).");
+        }
 
-			List<File> javaFiles = new ArrayList<>();
-			if (srcDir.exists()) {
-				collectJavaFiles(srcDir, javaFiles);
-			}
+        File srcDir = new File(projectPath, TEST_SRC_REL);
+        if (!srcDir.isDirectory()) {
+            logger.info("Skip compile: no test sources at {}", srcDir.getAbsolutePath());
+            return;
+        }
 
-			boolean needsCompile = false;
-			for (File javaFile : javaFiles) {
-				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
-				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
-					needsCompile = true;
-					break;
-				}
-			}
+        File outDir = new File(projectPath, OUTPUT_REL);
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            throw new IllegalStateException("Cannot create output directory " + outDir.getAbsolutePath());
+        }
 
-			if (!needsCompile) {
-				logger.info("StepDefs already up-to-date, skipping compile for {}", projectPath);
-				continue;
-			}
+        List<File> sources = collectJavaFilesParallel(srcDir.toPath());
+        if (sources.isEmpty()) {
+            logger.info("No test sources under {}", srcDir.getAbsolutePath());
+            return;
+        }
 
-			String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
-			ProcessBuilder pb = new ProcessBuilder(mvnCmd, "test-compile");
-			pb.directory(new File(projectPath));
-			pb.redirectErrorStream(true);
+        // incremental: only compile stale files
+        final List<File> toCompile = sources.parallelStream()
+                .filter(src -> isStale(src, srcDir, outDir))
+                .collect(Collectors.toList());
 
-			Process process = null;
-			StreamGobbler gobbler = null;
-			try {
-				process = pb.start();
-				gobbler = new StreamGobbler(process.getInputStream(), s -> logger.info("[maven] {}", s));
-				gobbler.start();
+        if (toCompile.isEmpty()) {
+            logger.debug("StepDefs up-to-date for {}", projectPath);
+            return;
+        }
 
-				boolean finished = process.waitFor(MVN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-				if (!finished) {
-					logger.error("Maven test-compile timed out after {}s for {}, killing process", MVN_TIMEOUT_SECONDS, projectPath);
-					process.destroyForcibly();
-					throw new RuntimeException("Timed out running mvn test-compile for " + projectPath);
-				}
-				int exitCode = process.exitValue();
-				if (exitCode != 0) {
-					throw new RuntimeException("Maven test-compile failed for " + projectPath + ", exit code " + exitCode);
-				} else {
-					logger.info("Maven test-compile succeeded for {}", projectPath);
-				}
-			} catch (InterruptedException ie) {
-				Thread.currentThread().interrupt();
-				if (process != null) process.destroyForcibly();
-				throw new RuntimeException("Interrupted while running Maven test-compile for " + projectPath, ie);
-			} catch (IOException ioe) {
-				if (process != null) process.destroyForcibly();
-				throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, ioe);
-			} finally {
-				if (gobbler != null) {
-					try {
-						gobbler.join(500);
-					} catch (InterruptedException ignored) {
-						Thread.currentThread().interrupt();
-					}
-				}
-			}
-		}
-	}
+        // Ensure dependencies (can be slow) — do it synchronously here before invoking javac.
+        ensureDependenciesCopied(projectPath);
 
-	/**
-	 * Similar to compileStepDefs but only runs for projects that have a pom.xml.
-	 */
-	public static void compileStepDefsFromOtherProject(List<String> projectPaths) {
-		for (String projectPath : projectPaths) {
-			File srcDir = new File(projectPath, "src/test/java");
-			File outputDir = new File(projectPath, "target/test-classes");
-			File pomFile = new File(projectPath, "pom.xml");
-			if (!pomFile.exists()) {
-				logger.warn("No pom.xml found in {}, skipping Maven compile.", projectPath);
-				continue;
-			}
-			List<File> javaFiles = new ArrayList<>();
-			if (srcDir.exists()) {
-				collectJavaFiles(srcDir, javaFiles);
-			}
+        boolean retried = false;
+        while (true) {
+            String classpath = buildFullTestClasspath(projectPath);
+            DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+            try (StandardJavaFileManager fm = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+                Iterable<? extends JavaFileObject> units = fm.getJavaFileObjectsFromFiles(toCompile);
+                List<String> options = Arrays.asList(
+                        "-classpath", classpath,
+                        "-processorpath", classpath,
+                        "-d", outDir.getAbsolutePath(),
+                        "-parameters"
+                );
+                JavaCompiler.CompilationTask task = compiler.getTask(null, fm, diagnostics, options, null, units);
+                boolean ok = task.call();
+                if (ok) {
+                    logger.info("Compiled {} StepDef file(s) for {}", toCompile.size(), projectPath);
+                    break;
+                } else {
+                    String diagText = diagnostics.getDiagnostics().stream()
+                            .map(Object::toString)
+                            .collect(Collectors.joining(System.lineSeparator()));
+                    logger.warn("Compilation diagnostics for {}:\n{}", projectPath, diagText);
+                    if (!retried && indicatesMissingTestLibs(diagText)) {
+                        logger.warn("Missing test libraries detected; attempting dependency copy then retry.");
+                        retried = true;
+                        ensureDependenciesCopied(projectPath);
+                        continue;
+                    }
+                    throw new IllegalStateException("StepDef compilation failed:\n" + diagText);
+                }
+            } catch (RuntimeException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                throw new RuntimeException("Failed compiling step definitions for " + projectPath, ex);
+            }
+        }
+    }
 
-			boolean needsCompile = false;
-			for (File javaFile : javaFiles) {
-				File classFile = getClassFileFor(javaFile, srcDir, outputDir);
-				if (!classFile.exists() || javaFile.lastModified() > classFile.lastModified()) {
-					needsCompile = true;
-					break;
-				}
-			}
+    private static boolean indicatesMissingTestLibs(String diagnostics) {
+        String lower = diagnostics == null ? "" : diagnostics.toLowerCase();
+        if (REQUIRED_TEST_ARTIFACT_HINTS.stream().anyMatch(lower::contains)) return true;
+        return lower.contains("cannot find symbol") && (lower.contains("awaitility") || lower.contains("lombok"));
+    }
 
-			if (!needsCompile) {
-				logger.info("StepDefs already up-to-date, skipping compile for {}", projectPath);
-				continue;
-			}
+    private static List<File> collectJavaFilesParallel(Path root) {
+        try (Stream<Path> stream = Files.walk(root)) {
+            return stream.parallel()
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .map(Path::toFile)
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            logger.warn("Failed to scan java files under {}: {}", root, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
 
-			String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
-			ProcessBuilder pb = new ProcessBuilder(mvnCmd, "test-compile");
-			pb.directory(new File(projectPath));
-			pb.redirectErrorStream(true);
+    private static boolean isStale(File javaFile, File srcRoot, File outRoot) {
+        File classFile = toClassFile(javaFile, srcRoot, outRoot);
+        return !classFile.exists() || javaFile.lastModified() > classFile.lastModified();
+    }
 
-			Process process = null;
-			StreamGobbler gobbler = null;
-			try {
-				process = pb.start();
-				gobbler = new StreamGobbler(process.getInputStream(), s -> logger.info("[maven] {}", s));
-				gobbler.start();
+    private static File toClassFile(File javaFile, File srcRoot, File outRoot) {
+        String rel = srcRoot.toPath().relativize(javaFile.toPath()).toString();
+        String classRel = rel.substring(0, rel.length() - 5) + "class";
+        return new File(outRoot, classRel);
+    }
 
-				boolean finished = process.waitFor(MVN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-				if (!finished) {
-					logger.error("Maven test-compile timed out after {}s for {}, killing process", MVN_TIMEOUT_SECONDS, projectPath);
-					process.destroyForcibly();
-					throw new RuntimeException("Timed out running mvn test-compile for " + projectPath);
-				}
-				int exitCode = process.exitValue();
-				if (exitCode != 0) {
-					throw new RuntimeException("Maven test-compile failed for " + projectPath + ", exit code " + exitCode);
-				} else {
-					logger.info("Maven test-compile succeeded for {}", projectPath);
-				}
-			} catch (InterruptedException ie) {
-				Thread.currentThread().interrupt();
-				if (process != null) process.destroyForcibly();
-				throw new RuntimeException("Interrupted while running Maven test-compile for " + projectPath, ie);
-			} catch (IOException ioe) {
-				if (process != null) process.destroyForcibly();
-				throw new RuntimeException("Failed to run Maven test-compile for " + projectPath, ioe);
-			} finally {
-				if (gobbler != null) {
-					try {
-						gobbler.join(500);
-					} catch (InterruptedException ignored) {
-						Thread.currentThread().interrupt();
-					}
-				}
-			}
-		}
-	}
+    private static String buildFullTestClasspath(String projectPath) {
+        Set<String> entries = new LinkedHashSet<>();
+        String runtimeCp = System.getProperty("java.class.path", "");
+        if (!runtimeCp.isEmpty()) entries.addAll(Arrays.asList(runtimeCp.split(File.pathSeparator)));
+        addIfExists(entries, projectPath + File.separator + "target" + File.separator + "classes");
+        addIfExists(entries, projectPath + File.separator + "target" + File.separator + "test-classes");
+        addIfExists(entries, projectPath + File.separator + OUTPUT_REL);
+        File depDir = new File(projectPath, DEP_DIR);
+        if (depDir.isDirectory()) {
+            File[] jars = depDir.listFiles((d, n) -> n.endsWith(".jar"));
+            if (jars != null) for (File j : jars) entries.add(j.getAbsolutePath());
+        } else {
+            logger.debug("Dependency directory not found: {}", depDir.getAbsolutePath());
+        }
+        return String.join(File.pathSeparator, entries);
+    }
 
-	/* ------------------ Helper methods ------------------ */
+    private static void addIfExists(Set<String> set, String path) {
+        File f = new File(path);
+        if (f.exists()) set.add(f.getAbsolutePath());
+    }
 
-	/**
-	 * Collects .java files recursively. Null-safe.
-	 */
-	private static void collectJavaFiles(File dir, List<File> javaFiles) {
-		if (dir == null || !dir.exists() || !dir.isDirectory()) {
-			return;
-		}
-		File[] list = dir.listFiles();
-		if (list == null) return;
-		for (File file : list) {
-			if (file.isDirectory()) {
-				collectJavaFiles(file, javaFiles);
-			} else if (file.getName().endsWith(".java")) {
-				javaFiles.add(file);
-			}
-		}
-	}
+    /**
+     * Copy test-scope dependencies (one-time) by invoking mvn dependency:copy-dependencies.
+     * This method is synchronous and may take time on first run.
+     */
+    public static void ensureDependenciesCopied(String projectPath) {
+        File depDir = new File(projectPath, DEP_DIR);
+        if (depDir.isDirectory()) {
+            File[] jars = depDir.listFiles((d, n) -> n.endsWith(".jar"));
+            if (jars != null && jars.length > 0 && hasRequiredArtifacts(jars)) {
+                logger.debug("Dependencies appear present in {}", depDir.getAbsolutePath());
+                return;
+            }
+        }
 
-	/**
-	 * Builds a class file path relative to src/test/java -> target/test-classes
-	 */
-	private static File getClassFileFor(File javaFile, File srcDir, File outputDir) {
-		String relative = javaFile.getAbsolutePath().substring(srcDir.getAbsolutePath().length() + 1);
-		String classNamePath = relative.replace(".java", ".class");
-		return new File(outputDir, classNamePath);
-	}
+        String mvnCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "mvn.cmd" : "mvn";
+        List<String> cmd = Arrays.asList(
+                mvnCmd,
+                "-q",
+                "dependency:copy-dependencies",
+                "-DincludeScope=test",
+                "-DoutputDirectory=" + DEP_DIR
+        );
+        logger.info("Copying test dependencies (project {}) with: {}", projectPath, String.join(" ", cmd));
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.directory(new File(projectPath));
+        pb.redirectErrorStream(true);
+        try {
+            Process p = pb.start();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = r.readLine()) != null) logger.debug("[dep-copy] {}", line);
+            }
+            int ec = p.waitFor();
+            if (ec != 0) logger.warn("dependency:copy-dependencies exited with {}", ec);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            logger.warn("Interrupted while copying dependencies for {}: {}", projectPath, ie.getMessage());
+        } catch (IOException ioe) {
+            logger.warn("Failed to copy dependencies automatically for {}: {}", projectPath, ioe.getMessage());
+        }
 
-	/**
-	 * Small thread to continuously read input stream and pass lines to a consumer.
-	 * This prevents spawned processes blocking due to full stdout/stderr buffers.
-	 */
-	private static class StreamGobbler extends Thread {
-		private final InputStream is;
-		private final Consumer<String> consumer;
+        File finalDep = new File(projectPath, DEP_DIR);
+        if (!finalDep.isDirectory() || Objects.requireNonNull(finalDep.listFiles((d, n) -> n.endsWith(".jar"))).length == 0) {
+            logger.warn("Dependency jars missing in `{}`. Ensure they are copied before running tests.", finalDep.getAbsolutePath());
+        }
+    }
 
-		StreamGobbler(InputStream is, Consumer<String> consumer) {
-			this.is = is;
-			this.consumer = consumer;
-			setDaemon(true);
-		}
+    private static boolean hasRequiredArtifacts(File[] jars) {
+        String lower = Arrays.stream(jars).map(f -> f.getName().toLowerCase()).collect(Collectors.joining(" "));
+        return REQUIRED_TEST_ARTIFACT_HINTS.stream().allMatch(lower::contains);
+    }
 
-		@Override
-		public void run() {
-			try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
-				String line;
-				while ((line = br.readLine()) != null) {
-					try {
-						consumer.accept(line);
-					} catch (Exception e) {
-						// swallow consumer exceptions but log
-						logger.warn("StreamGobbler consumer threw: {}", e.getMessage(), e);
-					}
-				}
-			} catch (IOException e) {
-				logger.debug("StreamGobbler IO error: {}", e.getMessage());
-			}
-		}
-	}
+    public static void clean(String projectPath) {
+        Path out = new File(projectPath, OUTPUT_REL).toPath();
+        if (!Files.exists(out)) return;
+        try {
+            Files.walk(out)
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(p -> {
+                        try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                    });
+            logger.info("Cleaned {}", out);
+        } catch (Exception e) {
+            logger.warn("Failed cleaning {}", out, e);
+        }
+    }
+
+    /**
+     * Optional helper to shutdown executor at application stop, if desired.
+     */
+    public static void shutdownExecutorNow() {
+        try {
+            COMPILE_EXECUTOR.shutdownNow();
+        } catch (Exception ignored) {}
+    }
 }

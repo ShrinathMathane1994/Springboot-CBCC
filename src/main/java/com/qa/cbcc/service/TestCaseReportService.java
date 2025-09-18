@@ -711,7 +711,7 @@ public class TestCaseReportService {
 		} else if ("partially unexecuted".equalsIgnoreCase(s) || s.contains("part")) {
 			cls = "badge-pill compact warn";
 		} else if ("n/a".equalsIgnoreCase(s) || "na".equalsIgnoreCase(s) || "n/a".equals(s)) {
-			cls = "badge-pill compact outline";
+			cls = "badge-pill compact fail";
 		} else {
 			cls = "badge-pill compact outline";
 		}
@@ -921,6 +921,184 @@ public class TestCaseReportService {
 		return s.toString();
 	}
 
+//	@SuppressWarnings("unchecked")
+//	public String generateHtmlReport(TestCaseRunHistoryDTO dto, ScenarioExampleRunDTO scDTO,
+//			List<ScenarioExampleRunDTO> exampleRows) {
+//		SimpleDateFormat sdf = new SimpleDateFormat("EEEE, dd MMMM yyyy hh:mm a");
+//
+//		StringBuilder html = new StringBuilder();
+//
+//		// Preserve original CSS/JS (use the updated cssAndJs() you applied earlier)
+//		html.append(cssAndJs());
+//
+//		// Small extra helpers (re-using existing toggle function from cssAndJs)
+//		html.append("<style>")
+//				// keep example container compact
+//				.append(".examples-group{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }")
+//				.append(".example-card { margin:6px 0; padding:8px; border:1px solid #e6e6e6; border-radius:6px; background:transparent; }")
+//				.append("</style>");
+//
+//		// Header
+//		html.append("<h1><span class='icon'>📋</span>Test Case Execution Report")
+//				.append("<span class='pdf-icon' onclick='expandAllAndPrint()'>🖨️</span>")
+//				.append("<span class='dark-toggle' onclick='toggleDark()'>🌙</span></h1>");
+//
+//		String runStatus = dto.getRunStatus() == null ? "N/A" : dto.getRunStatus();
+//		String runBadgeClass = runStatus.toLowerCase().contains("fail") ? "badge-fail"
+//				: runStatus.toLowerCase().contains("error") ? "badge-fail"
+//						: runStatus.toLowerCase().contains("unex") ? "badge-warn"
+//								: runStatus.toLowerCase().contains("part") ? "badge-warn" : "badge-pass";
+//		html.append("<p style='text-align:center;margin:6px 0'><b>TC Status:</b> <span class='badge ")
+//				.append(runBadgeClass).append("'>").append(escapeHtml(runStatus)).append("</span></p>");
+//
+//		String xmlStatus = dto.getXmlDiffStatus() == null ? "N/A" : dto.getXmlDiffStatus();
+//		String xmlBadgeClass = "Matched".equalsIgnoreCase(xmlStatus) ? "badge-xml-pass" : "badge-xml-fail";
+//		html.append("<p style='text-align:center;margin:6px 0'><b>XML Difference:</b> <span class='badge ")
+//				.append(xmlBadgeClass).append("'>").append(escapeHtml(xmlStatus)).append("</span></p>");
+//
+//		String runTimeFormatted = (dto.getRunTime() != null) ? sdf.format(Timestamp.valueOf(dto.getRunTime())) : "N/A";
+//		html.append("<p style='text-align:center;margin:6px 0'><b>Executed On:</b> ")
+//				.append(escapeHtml(runTimeFormatted)).append("</p>");
+//
+//		// Counts
+//		int passedCount = 0, failedCount = 0, unexecutedCount = 0;
+//		if (dto.getOutputLog() instanceof Map) {
+//			Map<String, Object> output = (Map<String, Object>) dto.getOutputLog();
+//			Object runSummaryObj = output.get("runSummary");
+//			if (runSummaryObj instanceof Map) {
+//				Map<String, Object> summary = (Map<String, Object>) runSummaryObj;
+//				try {
+//					passedCount = Integer.parseInt(summary.getOrDefault("totalPassedScenarios", 0).toString());
+//				} catch (Exception ignore) {
+//				}
+//				try {
+//					failedCount = Integer.parseInt(summary.getOrDefault("totalFailedScenarios", 0).toString());
+//				} catch (Exception ignore) {
+//				}
+//				try {
+//					unexecutedCount = Integer.parseInt(summary.getOrDefault("totalUnexecutedScenarios", 0).toString());
+//				} catch (Exception ignore) {
+//				}
+//			}
+//		}
+//
+//		// Top-level lists (unchanged)
+//		html.append(buildSection("Passed Scenarios", passedCount, "passedScenarios", buildPassedScenarios(dto),
+//				passedCount == 0));
+//		html.append(buildSection("Failed Scenarios", failedCount, "failedScenarios", buildFailedScenarios(dto),
+//				failedCount == 0));
+//		html.append(buildSection("Unexecuted Scenarios", unexecutedCount, "unexecutedScenarios",
+//				buildUnexecutedScenarios(dto), unexecutedCount == 0));
+//
+//		// === Examples grouped under single XML Differences section ===
+//		if (exampleRows == null || exampleRows.isEmpty()) {
+//			// fallback to history-level output
+//			html.append(buildSection("XML Differences", -1, "xmlDiff", buildXmlDifferencesFixed(dto), false));
+//			html.append(buildSection("Expected Vs Actual", -1, "xmlDomDiff", buildXmlSideBySide(dto), false));
+//			html.append(buildSection("Semantic XML Differences", -1, "xmlSemantic", buildSemanticXmlDiff(dto), true));
+//		} else {
+//			StringBuilder xmlGroup = new StringBuilder();
+//			xmlGroup.append("<div class='examples-group'>");
+//
+//			int idx = 0;
+//			for (ScenarioExampleRunDTO ex : exampleRows) {
+//			    String title = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
+//			    String status = ex.getStatus() == null ? "N/A" : ex.getStatus();
+//			    String xmlStatusSce = ex.getXmlDiffStatus() == null ? "N/A" : ex.getXmlDiffStatus();
+//
+//			    xmlGroup.append("<div class='section example-card' id='exampleCard").append(idx).append("'>");
+//			    xmlGroup.append("<div class='section-header'>");
+//
+//			    // left: title
+//			    xmlGroup.append("<div class='section-title' style='font-size:14px;'>")
+//			            .append(escapeHtml(title))
+//			            .append("</div>");
+//
+//			    // right: controls (badges + buttons)
+//			    xmlGroup.append("<div class='section-controls'>");
+//
+//			    // xml badge (example-wise xml result)
+//			    xmlGroup.append("<div class='section-subtitle'>")
+//			            .append(renderXmlBadge(xmlStatusSce))
+//			            .append("</div>");
+//
+//			    // toggle buttons (target child panels)
+//			    xmlGroup.append("<div style='display:flex;gap:6px;'>")
+//			            .append("<button class='toggle-btn' onclick=\"toggle('xmlDiffEx").append(idx).append("')\">Toggle XML Differences</button>")
+//			            .append("<button class='toggle-btn' onclick=\"toggle('ssbEx").append(idx).append("')\">Toggle Expected Vs Actual</button>")
+//			            .append("<button class='toggle-btn' onclick=\"toggle('semEx").append(idx).append("')\">Toggle Semantic XML Differences</button>")
+//			            .append("</div>");
+//
+//			    xmlGroup.append("</div>"); // end section-controls
+//			    xmlGroup.append("</div>"); // end section-header
+//
+//			    // === XML Differences panel (child) ===
+//			    try {
+//			        String xmlDiffHtml = buildXmlDifferencesFixed(ex, dto);
+//			        String xmlContainerId = "xmlDiffEx" + idx;
+//			        if (xmlDiffHtml == null || xmlDiffHtml.trim().isEmpty()) {
+//			            xmlGroup.append("<div id='").append(xmlContainerId)
+//			                    .append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+//			                    .append("<div class='log-box'>No XML differences or unexecuted scenarios found</div>")
+//			                    .append("</div>");
+//			        } else {
+//			            xmlGroup.append("<div id='").append(xmlContainerId)
+//			                    .append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+//			                    .append(xmlDiffHtml)
+//			                    .append("</div>");
+//			        }
+//			    } catch (Exception e) {
+//			        logger.warn("buildXmlDifferencesFixed threw for example {}: {}", idx, e.getMessage());
+//			        xmlGroup.append("<div class='log-box'>Error rendering XML Differences.</div>");
+//			    }
+//
+//			    // === Expected Vs Actual panel (child) ===
+//			    xmlGroup.append("<div id='ssbEx").append(idx)
+//			            .append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
+//			            .append("<div style='font-weight:600;margin-bottom:6px;'>Expected Vs Actual</div>");
+//			    try {
+//			        String ssbHtml = buildXmlSideBySide(ex);
+//			        xmlGroup.append((ssbHtml == null || ssbHtml.trim().isEmpty())
+//			                ? "<div class='log-box'>No XML content available — both Expected and Actual files are empty or missing.</div>"
+//			                : ssbHtml);
+//			    } catch (Exception e) {
+//			        logger.warn("buildXmlSideBySide threw for example {}: {}", idx, e.getMessage());
+//			        xmlGroup.append("<div class='log-box'>Error rendering Expected Vs Actual.</div>");
+//			    }
+//			    xmlGroup.append("</div>");
+//
+//			    // === Semantic panel (child) ===
+//			    xmlGroup.append("<div id='semEx").append(idx)
+//			            .append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
+//			            .append("<div style='font-weight:600;margin-bottom:6px;'>Semantic XML Differences</div>");
+//			    try {
+//			        String semHtml = buildSemanticXmlDiff(ex);
+//			        xmlGroup.append((semHtml == null || semHtml.trim().isEmpty())
+//			                ? "<div class='log-box'>Semantic comparison skipped — both Expected and Actual XML are empty or missing.</div>"
+//			                : semHtml);
+//			    } catch (Exception e) {
+//			        logger.warn("buildSemanticXmlDiff threw for example {}: {}", idx, e.getMessage());
+//			        xmlGroup.append("<div class='log-box'>Error rendering Semantic XML Differences.</div>");
+//			    }
+//			    xmlGroup.append("</div>");
+//
+//			    // close example-card (all three child panels are inside the card)
+//			    xmlGroup.append("</div>");
+//			    idx++;
+//			}
+//
+//			xmlGroup.append("</div>"); // end examples-group
+//			html.append(buildSection("XML Differences", -1, "xmlDiffPerExample", xmlGroup.toString(), false));
+//		}
+//
+//		// Raw logs / summary
+//		html.append(buildSection("Raw Cucumber Logs", -1, "rawLogs", buildRawLogs(dto), false));
+//		html.append(buildSection("Raw Cucumber Summary", -1, "rawSummary", buildRawSummary(dto), false));
+//
+//		html.append("</body></html>");
+//		return html.toString();
+//	}
+
 	@SuppressWarnings("unchecked")
 	public String generateHtmlReport(TestCaseRunHistoryDTO dto, ScenarioExampleRunDTO scDTO,
 			List<ScenarioExampleRunDTO> exampleRows) {
@@ -1002,89 +1180,135 @@ public class TestCaseReportService {
 
 			int idx = 0;
 			for (ScenarioExampleRunDTO ex : exampleRows) {
-			    String title = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
-			    String status = ex.getStatus() == null ? "N/A" : ex.getStatus();
-			    String xmlStatusSce = ex.getXmlDiffStatus() == null ? "N/A" : ex.getXmlDiffStatus();
+				String title = ex.getScenarioName() == null ? ("example#" + (idx + 1)) : ex.getScenarioName();
+				String status = ex.getStatus() == null ? "N/A" : ex.getStatus();
+				String xmlStatusSce = ex.getXmlDiffStatus() == null ? "N/A" : ex.getXmlDiffStatus();
 
-			    xmlGroup.append("<div class='section example-card' id='exampleCard").append(idx).append("'>");
-			    xmlGroup.append("<div class='section-header'>");
+				// determine whether input/output are present for clearer messages
+				String inputXml = null;
+				String outputXml = null;
+				try {
+					inputXml = ex.getInputXml();
+				} catch (Throwable t) {
+				}
+				try {
+					outputXml = ex.getOutputXml();
+				} catch (Throwable t) {
+				}
+				boolean inputMissing = (inputXml == null || inputXml.trim().isEmpty());
+				boolean outputMissing = (outputXml == null || outputXml.trim().isEmpty());
 
-			    // left: title
-			    xmlGroup.append("<div class='section-title' style='font-size:14px;'>")
-			            .append(escapeHtml(title))
-			            .append("</div>");
+				// build friendly message for missing content
+				String missingMsg;
+				if (inputMissing && outputMissing) {
+					missingMsg = "Both Expected (Input) and Actual (Output) XML are missing or empty for this example.";
+				} else if (inputMissing) {
+					missingMsg = "Expected XML (Input) is missing or empty for this example.";
+				} else if (outputMissing) {
+					missingMsg = "Actual XML (Output) is missing or empty for this example.";
+				} else {
+					missingMsg = null;
+				}
 
-			    // right: controls (badges + buttons)
-			    xmlGroup.append("<div class='section-controls'>");
+				xmlGroup.append("<div class='section example-card' id='exampleCard").append(idx).append("'>");
+				xmlGroup.append("<div class='section-header'>");
 
-			    // xml badge (example-wise xml result)
-			    xmlGroup.append("<div class='section-subtitle'>")
-			            .append(renderXmlBadge(xmlStatusSce))
-			            .append("</div>");
+				// left: title
+				xmlGroup.append("<div class='section-title' style='font-size:14px;'>").append(escapeHtml(title))
+						.append("</div>");
 
-			    // toggle buttons (target child panels)
-			    xmlGroup.append("<div style='display:flex;gap:6px;'>")
-			            .append("<button class='toggle-btn' onclick=\"toggle('xmlDiffEx").append(idx).append("')\">Toggle XML Differences</button>")
-			            .append("<button class='toggle-btn' onclick=\"toggle('ssbEx").append(idx).append("')\">Toggle Expected Vs Actual</button>")
-			            .append("<button class='toggle-btn' onclick=\"toggle('semEx").append(idx).append("')\">Toggle Semantic XML Differences</button>")
-			            .append("</div>");
+				// right: controls (badges + buttons)
+				xmlGroup.append("<div class='section-controls'>");
 
-			    xmlGroup.append("</div>"); // end section-controls
-			    xmlGroup.append("</div>"); // end section-header
+				// xml badge (example-wise xml result)
+				xmlGroup.append("<div class='section-subtitle'>").append(renderXmlBadge(xmlStatusSce)).append("</div>");
 
-			    // === XML Differences panel (child) ===
-			    try {
-			        String xmlDiffHtml = buildXmlDifferencesFixed(ex, dto);
-			        String xmlContainerId = "xmlDiffEx" + idx;
-			        if (xmlDiffHtml == null || xmlDiffHtml.trim().isEmpty()) {
-			            xmlGroup.append("<div id='").append(xmlContainerId)
-			                    .append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
-			                    .append("<div class='log-box'>No XML differences or unexecuted scenarios found</div>")
-			                    .append("</div>");
-			        } else {
-			            xmlGroup.append("<div id='").append(xmlContainerId)
-			                    .append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
-			                    .append(xmlDiffHtml)
-			                    .append("</div>");
-			        }
-			    } catch (Exception e) {
-			        logger.warn("buildXmlDifferencesFixed threw for example {}: {}", idx, e.getMessage());
-			        xmlGroup.append("<div class='log-box'>Error rendering XML Differences.</div>");
-			    }
+				// toggle buttons (target child panels)
+				xmlGroup.append("<div style='display:flex;gap:6px;'>")
+						.append("<button class='toggle-btn' onclick=\"toggle('xmlDiffEx").append(idx)
+						.append("')\">Toggle XML Differences</button>")
+						.append("<button class='toggle-btn' onclick=\"toggle('ssbEx").append(idx)
+						.append("')\">Toggle Expected Vs Actual</button>")
+						.append("<button class='toggle-btn' onclick=\"toggle('semEx").append(idx)
+						.append("')\">Toggle Semantic XML Differences</button>").append("</div>");
 
-			    // === Expected Vs Actual panel (child) ===
-			    xmlGroup.append("<div id='ssbEx").append(idx)
-			            .append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
-			            .append("<div style='font-weight:600;margin-bottom:6px;'>Expected Vs Actual</div>");
-			    try {
-			        String ssbHtml = buildXmlSideBySide(ex);
-			        xmlGroup.append((ssbHtml == null || ssbHtml.trim().isEmpty())
-			                ? "<div class='log-box'>No XML content available — both Expected and Actual files are empty or missing.</div>"
-			                : ssbHtml);
-			    } catch (Exception e) {
-			        logger.warn("buildXmlSideBySide threw for example {}: {}", idx, e.getMessage());
-			        xmlGroup.append("<div class='log-box'>Error rendering Expected Vs Actual.</div>");
-			    }
-			    xmlGroup.append("</div>");
+				xmlGroup.append("</div>"); // end section-controls
+				xmlGroup.append("</div>"); // end section-header
 
-			    // === Semantic panel (child) ===
-			    xmlGroup.append("<div id='semEx").append(idx)
-			            .append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
-			            .append("<div style='font-weight:600;margin-bottom:6px;'>Semantic XML Differences</div>");
-			    try {
-			        String semHtml = buildSemanticXmlDiff(ex);
-			        xmlGroup.append((semHtml == null || semHtml.trim().isEmpty())
-			                ? "<div class='log-box'>Semantic comparison skipped — both Expected and Actual XML are empty or missing.</div>"
-			                : semHtml);
-			    } catch (Exception e) {
-			        logger.warn("buildSemanticXmlDiff threw for example {}: {}", idx, e.getMessage());
-			        xmlGroup.append("<div class='log-box'>Error rendering Semantic XML Differences.</div>");
-			    }
-			    xmlGroup.append("</div>");
+				// === XML Differences panel (child) ===
+				try {
+					String xmlDiffHtml = buildXmlDifferencesFixed(ex, dto);
+					String xmlContainerId = "xmlDiffEx" + idx;
+					if (xmlDiffHtml == null || xmlDiffHtml.trim().isEmpty()) {
+						xmlGroup.append("<div id='").append(xmlContainerId)
+								.append("' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+								.append("<div class='log-box'>No XML differences or unexecuted scenarios found</div>")
+								.append("</div>");
+					} else {
+						if (missingMsg != null) {
+							xmlGroup.append("<div id='").append(xmlContainerId).append(
+									"' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+									.append("<div class='log-box'>").append(escapeHtml(missingMsg)).append("</div>")
+									.append("</div>");
+						} else {
+							xmlGroup.append("<div id='").append(xmlContainerId).append(
+									"' class='section-content' style='display:block;margin:6px 0;padding:6px 0;'>")
+									.append(xmlDiffHtml).append("</div>");
+						}
+					}
+				} catch (Exception e) {
+					logger.warn("buildXmlDifferencesFixed threw for example {}: {}", idx, e.getMessage());
+					xmlGroup.append("<div class='log-box'>Error rendering XML Differences.</div>");
+				}
 
-			    // close example-card (all three child panels are inside the card)
-			    xmlGroup.append("</div>");
-			    idx++;
+				// === Expected Vs Actual panel (child) ===
+				xmlGroup.append("<div id='ssbEx").append(idx)
+						.append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
+						.append("<div style='font-weight:600;margin-bottom:6px;padding:6px;'>Expected Vs Actual</div>");
+				try {
+					String ssbHtml = buildXmlSideBySide(ex);
+					if (ssbHtml == null || ssbHtml.trim().isEmpty()) {
+						xmlGroup.append(
+								"<div class='log-box'>No XML content available — both Expected and Actual files are empty or missing.</div>");
+					} else {
+						if (missingMsg != null) {
+							xmlGroup.append("<div class='log-box'>").append(escapeHtml(missingMsg)).append("</div>");
+						} else {
+							xmlGroup.append(ssbHtml);
+						}
+					}
+				} catch (Exception e) {
+					logger.warn("buildXmlSideBySide threw for example {}: {}", idx, e.getMessage());
+					xmlGroup.append("<div class='log-box'>Error rendering Expected Vs Actual.</div>");
+				}
+				xmlGroup.append("</div>");
+
+				// === Semantic panel (child) ===
+				xmlGroup.append("<div id='semEx").append(idx)
+						.append("' class='section-content' style='display:none;margin:6px 0;padding:6px 0;'>")
+						.append("<div style='font-weight:600;margin-bottom:6px;padding:6px;'>Semantic XML Differences</div>");
+				try {
+					String semHtml = buildSemanticXmlDiff(ex);
+					if (semHtml == null || semHtml.trim().isEmpty()) {
+						xmlGroup.append(
+								"<div class='log-box'>Semantic comparison skipped — both Expected and Actual XML are empty or missing.</div>");
+					} else {
+						if (missingMsg != null) {
+							xmlGroup.append("<div class='log-box'>Semantic comparison skipped — ")
+									.append(escapeHtml(missingMsg)).append("</div>");
+						} else {
+							xmlGroup.append(semHtml);
+						}
+					}
+				} catch (Exception e) {
+					logger.warn("buildSemanticXmlDiff threw for example {}: {}", idx, e.getMessage());
+					xmlGroup.append("<div class='log-box'>Error rendering Semantic XML Differences.</div>");
+				}
+				xmlGroup.append("</div>");
+
+				// close example-card (all three child panels are inside the card)
+				xmlGroup.append("</div>");
+				idx++;
 			}
 
 			xmlGroup.append("</div>"); // end examples-group
@@ -2722,10 +2946,24 @@ public class TestCaseReportService {
 			Map<String, Object> diff = (Map<String, Object>) obj;
 
 			String scenarioName = String.valueOf(diff.getOrDefault("scenarioName", "N/A"));
-			String inputFile = filenameFromPath(String.valueOf(diff.getOrDefault("inputFile", "-")));
-			String outputFile = filenameFromPath(String.valueOf(diff.getOrDefault("outputFile", "-")));
-			String message = String.valueOf(diff.getOrDefault("message", "-"));
+			// get raw values (could be null or "-" or "null")
+			Object rawInObj = diff.get("inputFile");
+			Object rawOutObj = diff.get("outputFile");
 
+			String rawInStr = rawInObj == null ? null : String.valueOf(rawInObj).trim();
+			String rawOutStr = rawOutObj == null ? null : String.valueOf(rawOutObj).trim();
+
+			// Treat null/"null"/empty/"-" as "no file" and display hyphen
+			boolean inIsPlaceholder = (rawInStr == null) || rawInStr.isEmpty() || "-".equals(rawInStr)
+					|| "null".equalsIgnoreCase(rawInStr);
+			boolean outIsPlaceholder = (rawOutStr == null) || rawOutStr.isEmpty() || "-".equals(rawOutStr)
+					|| "null".equalsIgnoreCase(rawOutStr);
+
+			String inputFile = inIsPlaceholder ? "-" : filenameFromPath(rawInStr);
+			String outputFile = outIsPlaceholder ? "-" : filenameFromPath(rawOutStr);
+
+			String message = String.valueOf(diff.getOrDefault("message", "-"));
+			@SuppressWarnings("unchecked")
 			List<Map<String, Object>> differences = diff.get("differences") instanceof List
 					? (List<Map<String, Object>>) diff.get("differences")
 					: java.util.Collections.emptyList();

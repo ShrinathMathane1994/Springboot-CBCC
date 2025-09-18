@@ -40,216 +40,273 @@ import com.qa.cbcc.service.TestCaseService;
 @RequestMapping("/api/test-cases")
 public class TestCaseController {
 
-    private static final Logger logger = LogManager.getLogger(TestCaseController.class);
+	private static final Logger logger = LogManager.getLogger(TestCaseController.class);
 
-    @Autowired
-    private TestCaseService testCaseService;
+	@Autowired
+	private TestCaseService testCaseService;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @PostMapping(value = "/create", consumes = { "multipart/form-data" })
-    public ResponseEntity<?> createTestCase(@RequestPart("data") String dtoJson,
-            @RequestPart("inputFile") MultipartFile inputFile, @RequestPart("outputFile") MultipartFile outputFile) {
+//    @PostMapping(value = "/create", consumes = { "multipart/form-data" })
+//    public ResponseEntity<?> createTestCase(@RequestPart("data") String dtoJson,
+//            @RequestPart("inputFile") MultipartFile inputFile, @RequestPart("outputFile") MultipartFile outputFile) {
+//
+//        logger.info("Received request to create a new test case.");
+//
+//        try {
+//            TestCaseDTO dto = objectMapper.readValue(dtoJson, TestCaseDTO.class);
+//            logger.info("Parsed DTO: {}", objectMapper.writeValueAsString(dto));
+//
+//            TestCase created = testCaseService.saveTestCase(dto, inputFile, outputFile);
+//            logger.info("Test case created with ID: {}", created.getIdTC());
+//
+//            return ResponseEntity.ok(testCaseService.toResponseDTO(created));
+//        } catch (Exception e) {
+//            logger.error("Failed to create test case: {}", e.getMessage(), e);
+//            // return ResponseEntity.badRequest().body(Map.of("error", "Failed to create test case", "details", e.getMessage()));
+//            Map<String, Object> errorMap = new HashMap<>();
+//            errorMap.put("error", "Failed to create test case");
+//            errorMap.put("details", e.getMessage());
+//            return ResponseEntity.badRequest().body(errorMap);
+//        }
+//    }
+//
+//    @PutMapping(value = "/{id}", consumes = { "multipart/form-data" })
+//    public ResponseEntity<?> updateTestCase(@PathVariable Long id, @RequestPart("data") String dtoJson,
+//            @RequestPart("inputFile") MultipartFile inputFile, @RequestPart("outputFile") MultipartFile outputFile) {
+//
+//        logger.info("Received request to update test case ID: {}", id);
+//
+//        try {
+//            TestCaseDTO dto = objectMapper.readValue(dtoJson, TestCaseDTO.class);
+//            logger.debug("Parsed DTO: {}", objectMapper.writeValueAsString(dto));
+//
+//            TestCase updated = testCaseService.updateTestCase(id, dto, inputFile, outputFile);
+//            logger.info("Updated test case ID: {}", id);
+//
+//            TestCaseResponseDTO response = testCaseService.toResponseDTO(updated);
+//            ObjectMapper mapper = new ObjectMapper();
+//            mapper.registerModule(new JavaTimeModule());
+//            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+//            logger.info("Updated test case details: {}", mapper.writeValueAsString(response));
+//            return ResponseEntity.ok(response);
+//        } catch (Exception e) {
+//            logger.error("Update failed for test case ID {}: {}", id, e.getMessage(), e);
+//            // return ResponseEntity.badRequest().body(Map.of("error", "Failed to update test case", "details", e.getMessage()));
+//            Map<String, Object> errorMap = new HashMap<>();
+//            errorMap.put("error", "Failed to update test case");
+//            errorMap.put("details", e.getMessage());
+//            return ResponseEntity.badRequest().body(errorMap);
+//        }
+//    }
 
-        logger.info("Received request to create a new test case.");
 
-        try {
-            TestCaseDTO dto = objectMapper.readValue(dtoJson, TestCaseDTO.class);
-            logger.info("Parsed DTO: {}", objectMapper.writeValueAsString(dto));
+	@PostMapping(value = "/create", consumes = { "multipart/form-data" })
+	public ResponseEntity<?> createTestCase(@RequestPart("data") String dtoJson,
+			@RequestPart(value = "inputFile", required = false) MultipartFile inputFile,
+			@RequestPart(value = "outputFile", required = false) MultipartFile outputFile) {
 
-            TestCase created = testCaseService.saveTestCase(dto, inputFile, outputFile);
-            logger.info("Test case created with ID: {}", created.getIdTC());
+		logger.info("Received request to create a new test case.");
 
-            return ResponseEntity.ok(testCaseService.toResponseDTO(created));
-        } catch (Exception e) {
-            logger.error("Failed to create test case: {}", e.getMessage(), e);
-            // return ResponseEntity.badRequest().body(Map.of("error", "Failed to create test case", "details", e.getMessage()));
-            Map<String, Object> errorMap = new HashMap<>();
-            errorMap.put("error", "Failed to create test case");
-            errorMap.put("details", e.getMessage());
-            return ResponseEntity.badRequest().body(errorMap);
-        }
-    }
+		try {
+			TestCaseDTO dto = objectMapper.readValue(dtoJson, TestCaseDTO.class);
+			logger.info("Parsed DTO: {}", objectMapper.writeValueAsString(dto));
 
-    @PutMapping(value = "/{id}", consumes = { "multipart/form-data" })
-    public ResponseEntity<?> updateTestCase(@PathVariable Long id, @RequestPart("data") String dtoJson,
-            @RequestPart("inputFile") MultipartFile inputFile, @RequestPart("outputFile") MultipartFile outputFile) {
+			TestCase created = testCaseService.saveTestCase(dto, inputFile, outputFile);
+			logger.info("Test case created with ID: {}", created.getIdTC());
 
-        logger.info("Received request to update test case ID: {}", id);
+			return ResponseEntity.ok(testCaseService.toResponseDTO(created));
+		} catch (Exception e) {
+			logger.error("Failed to create test case: {}", e.getMessage(), e);
+			Map<String, Object> errorMap = new HashMap<>();
+			errorMap.put("error", "Failed to create test case");
+			errorMap.put("details", e.getMessage());
+			return ResponseEntity.badRequest().body(errorMap);
+		}
+	}
 
-        try {
-            TestCaseDTO dto = objectMapper.readValue(dtoJson, TestCaseDTO.class);
-            logger.debug("Parsed DTO: {}", objectMapper.writeValueAsString(dto));
+	@PutMapping(value = "/{id}", consumes = { "multipart/form-data" })
+	public ResponseEntity<?> updateTestCase(@PathVariable Long id, @RequestPart("data") String dtoJson,
+			@RequestPart(value = "inputFile", required = false) MultipartFile inputFile,
+			@RequestPart(value = "outputFile", required = false) MultipartFile outputFile) {
 
-            TestCase updated = testCaseService.updateTestCase(id, dto, inputFile, outputFile);
-            logger.info("Updated test case ID: {}", id);
+		logger.info("Received request to update test case ID: {}", id);
 
-            TestCaseResponseDTO response = testCaseService.toResponseDTO(updated);
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
-            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            logger.info("Updated test case details: {}", mapper.writeValueAsString(response));
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            logger.error("Update failed for test case ID {}: {}", id, e.getMessage(), e);
-            // return ResponseEntity.badRequest().body(Map.of("error", "Failed to update test case", "details", e.getMessage()));
-            Map<String, Object> errorMap = new HashMap<>();
-            errorMap.put("error", "Failed to update test case");
-            errorMap.put("details", e.getMessage());
-            return ResponseEntity.badRequest().body(errorMap);
-        }
-    }
+		try {
+			TestCaseDTO dto = objectMapper.readValue(dtoJson, TestCaseDTO.class);
+			logger.debug("Parsed DTO: {}", objectMapper.writeValueAsString(dto));
 
-    @GetMapping("/{id}")
-    public ResponseEntity<?> getTestCaseById(@PathVariable Long id) {
-        logger.info("Fetching test case ID: {}", id);
-        TestCase testCase = testCaseService.getTestCaseById(id);
-        if (testCase == null) {
-            logger.warn("Test case ID {} not found.", id);
-            // return ResponseEntity.status(404).body(Map.of("message", "Test case not found."));
-            Map<String, Object> errorMap = new HashMap<>();
-            errorMap.put("message", "Test case not found.");
-            return ResponseEntity.status(404).body(errorMap);
-        }
-        return ResponseEntity.ok(testCaseService.toResponseDTO(testCase));
-    }
+			TestCase updated = testCaseService.updateTestCase(id, dto, inputFile, outputFile);
+			logger.info("Updated test case ID: {}", id);
 
-    @GetMapping
-    public ResponseEntity<?> getAllTestCases(@RequestParam(required = false) String country,
-            @RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
+			TestCaseResponseDTO response = testCaseService.toResponseDTO(updated);
+			ObjectMapper mapper = new ObjectMapper();
+			mapper.registerModule(new JavaTimeModule());
+			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+			logger.info("Updated test case details: {}", mapper.writeValueAsString(response));
+			return ResponseEntity.ok(response);
+		} catch (Exception e) {
+			logger.error("Update failed for test case ID {}: {}", id, e.getMessage(), e);
+			Map<String, Object> errorMap = new HashMap<>();
+			errorMap.put("error", "Failed to update test case");
+			errorMap.put("details", e.getMessage());
+			return ResponseEntity.badRequest().body(errorMap);
+		}
+	}
 
-        logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
-        List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
+	@GetMapping("/{id}")
+	public ResponseEntity<?> getTestCaseById(@PathVariable Long id) {
+		logger.info("Fetching test case ID: {}", id);
+		TestCase testCase = testCaseService.getTestCaseById(id);
+		if (testCase == null) {
+			logger.warn("Test case ID {} not found.", id);
+			// return ResponseEntity.status(404).body(Map.of("message", "Test case not
+			// found."));
+			Map<String, Object> errorMap = new HashMap<>();
+			errorMap.put("message", "Test case not found.");
+			return ResponseEntity.status(404).body(errorMap);
+		}
+		return ResponseEntity.ok(testCaseService.toResponseDTO(testCase));
+	}
 
-        result.sort(Comparator.comparing(TestCaseResponseDTO::getId).reversed());
+	@GetMapping
+	public ResponseEntity<?> getAllTestCases(@RequestParam(required = false) String country,
+			@RequestParam(required = false) String region, @RequestParam(required = false) String pod) {
 
-        if (result.isEmpty()) {
-            logger.warn("No test cases found with given filters.");
-            // return ResponseEntity.ok(Map.of("message", "No test cases found."));
-            Map<String, Object> map = new HashMap<>();
-            map.put("message", "No test cases found.");
-            return ResponseEntity.ok(map);
-        }
+		logger.info("Fetching test cases with filters -> country: {}, region: {}, pod: {}", country, region, pod);
+		List<TestCaseResponseDTO> result = testCaseService.getFilteredTestCases(country, region, pod);
 
-        return ResponseEntity.ok(result);
-    }
+		result.sort(Comparator.comparing(TestCaseResponseDTO::getId).reversed());
 
-    @GetMapping("/deleted")
-    public ResponseEntity<List<TestCaseResponseDTO>> getDeletedTestCases() {
-        logger.info("Fetching deleted test cases.");
+		if (result.isEmpty()) {
+			logger.warn("No test cases found with given filters.");
+			// return ResponseEntity.ok(Map.of("message", "No test cases found."));
+			Map<String, Object> map = new HashMap<>();
+			map.put("message", "No test cases found.");
+			return ResponseEntity.ok(map);
+		}
 
-        List<TestCaseResponseDTO> deletedDtos = testCaseService.getDeletedTestCases().stream()
-                .map(testCaseService::toResponseDTO)
-                .sorted(Comparator.comparing(TestCaseResponseDTO::getId))
-                .collect(Collectors.toList());
+		return ResponseEntity.ok(result);
+	}
 
-        return ResponseEntity.ok(deletedDtos);
-    }
+	@GetMapping("/deleted")
+	public ResponseEntity<List<TestCaseResponseDTO>> getDeletedTestCases() {
+		logger.info("Fetching deleted test cases.");
 
-    @DeleteMapping("/{id}/delete")
-    public ResponseEntity<?> deleteTestCase(@PathVariable Long id) {
-        logger.info("Deleting test case ID: {}", id);
-        try {
-            testCaseService.deleteTestCase(id);
-            TestCase deleted = testCaseService.getTestCaseByIdIncludingInactive(id);
+		List<TestCaseResponseDTO> deletedDtos = testCaseService.getDeletedTestCases().stream()
+				.map(testCaseService::toResponseDTO).sorted(Comparator.comparing(TestCaseResponseDTO::getId))
+				.collect(Collectors.toList());
 
-            if (deleted == null) {
-                logger.warn("Test case ID {} not found after delete.", id);
-                return ResponseEntity.notFound().build();
-            }
+		return ResponseEntity.ok(deletedDtos);
+	}
 
-            TestCaseResponseDTO responseDTO = testCaseService.toResponseDTO(deleted);
+	@DeleteMapping("/{id}/delete")
+	public ResponseEntity<?> deleteTestCase(@PathVariable Long id) {
+		logger.info("Deleting test case ID: {}", id);
+		try {
+			testCaseService.deleteTestCase(id);
+			TestCase deleted = testCaseService.getTestCaseByIdIncludingInactive(id);
 
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
-            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            logger.info("Deleted test case details: {}", mapper.writeValueAsString(responseDTO));
+			if (deleted == null) {
+				logger.warn("Test case ID {} not found after delete.", id);
+				return ResponseEntity.notFound().build();
+			}
 
-            return ResponseEntity.ok(responseDTO);
-        } catch (Exception e) {
-            logger.error("Failed to delete test case ID {}: {}", id, e.getMessage(), e);
-            // return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-            Map<String, Object> map = new HashMap<>();
-            map.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(map);
-        }
-    }
+			TestCaseResponseDTO responseDTO = testCaseService.toResponseDTO(deleted);
 
-    @GetMapping("/{id}/history")
-    public ResponseEntity<?> getTestCaseHistory(@PathVariable Long id) {
-        logger.info("Fetching history for test case ID: {}", id);
+			ObjectMapper mapper = new ObjectMapper();
+			mapper.registerModule(new JavaTimeModule());
+			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+			logger.info("Deleted test case details: {}", mapper.writeValueAsString(responseDTO));
 
-        List<TestCaseHistoryDTO> dtoList = testCaseService.getTestCaseHistoryDTOs(id);
+			return ResponseEntity.ok(responseDTO);
+		} catch (Exception e) {
+			logger.error("Failed to delete test case ID {}: {}", id, e.getMessage(), e);
+			// return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+			Map<String, Object> map = new HashMap<>();
+			map.put("error", e.getMessage());
+			return ResponseEntity.badRequest().body(map);
+		}
+	}
 
-        dtoList.sort(Comparator.comparing(TestCaseHistoryDTO::getModifiedOn).reversed());
+	@GetMapping("/{id}/history")
+	public ResponseEntity<?> getTestCaseHistory(@PathVariable Long id) {
+		logger.info("Fetching history for test case ID: {}", id);
 
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
-            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            logger.info("History DTO for test case ID {}: {}", id, mapper.writeValueAsString(dtoList));
-        } catch (Exception e) {
-            logger.error("Failed to serialize history DTO for logging: {}", e.getMessage(), e);
-        }
+		List<TestCaseHistoryDTO> dtoList = testCaseService.getTestCaseHistoryDTOs(id);
 
-        return ResponseEntity.ok(dtoList);
-    }
+		dtoList.sort(Comparator.comparing(TestCaseHistoryDTO::getModifiedOn).reversed());
 
-    @PutMapping("/{id}/executed")
-    public ResponseEntity<?> updateExecutionTimestamp(@PathVariable Long id) {
-        logger.info("Marking test case ID {} as executed.", id);
-        testCaseService.updateExecutionTime(id);
-        TestCase updated = testCaseService.getTestCaseById(id);
-        return ResponseEntity.ok(testCaseService.toResponseDTO(updated));
-    }
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			mapper.registerModule(new JavaTimeModule());
+			mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+			logger.info("History DTO for test case ID {}: {}", id, mapper.writeValueAsString(dtoList));
+		} catch (Exception e) {
+			logger.error("Failed to serialize history DTO for logging: {}", e.getMessage(), e);
+		}
 
-    @GetMapping("/{id}/download")
-    public ResponseEntity<?> downloadFile(@PathVariable Long id, @RequestParam String fileType) {
-        try {
-            TestCase testCase = testCaseService.getTestCaseByIdIncludingInactive(id);
-            if (testCase == null) {
-                // return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Test case not found"));
-                Map<String, Object> map = new HashMap<>();
-                map.put("error", "Test case not found");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(map);
-            }
+		return ResponseEntity.ok(dtoList);
+	}
 
-            String relativePath = fileType.equalsIgnoreCase("input") ? testCase.getInputFile()
-                    : testCase.getOutputFile();
+	@PutMapping("/{id}/executed")
+	public ResponseEntity<?> updateExecutionTimestamp(@PathVariable Long id) {
+		logger.info("Marking test case ID {} as executed.", id);
+		testCaseService.updateExecutionTime(id);
+		TestCase updated = testCaseService.getTestCaseById(id);
+		return ResponseEntity.ok(testCaseService.toResponseDTO(updated));
+	}
 
-            if (relativePath == null) {
-                // return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", fileType + " file not found for this test case"));
-                Map<String, Object> map = new HashMap<>();
-                map.put("error", fileType + " file not found for this test case");
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(map);
-            }
+	@GetMapping("/{id}/download")
+	public ResponseEntity<?> downloadFile(@PathVariable Long id, @RequestParam String fileType) {
+		try {
+			TestCase testCase = testCaseService.getTestCaseByIdIncludingInactive(id);
+			if (testCase == null) {
+				// return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Test
+				// case not found"));
+				Map<String, Object> map = new HashMap<>();
+				map.put("error", "Test case not found");
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(map);
+			}
 
-            String baseDir = System.getProperty("user.dir") + File.separator + "src" + File.separator + "main"
-                    + File.separator + "resources" + File.separator;
+			String relativePath = fileType.equalsIgnoreCase("input") ? testCase.getInputFile()
+					: testCase.getOutputFile();
 
-            File file = new File(baseDir + relativePath);
-            if (!file.exists()) {
-                // return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "File does not exist on server"));
-                Map<String, Object> map = new HashMap<>();
-                map.put("error", "File does not exist on server");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(map);
-            }
+			if (relativePath == null) {
+				// return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error",
+				// fileType + " file not found for this test case"));
+				Map<String, Object> map = new HashMap<>();
+				map.put("error", fileType + " file not found for this test case");
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(map);
+			}
 
-            Resource resource = new FileSystemResource(file);
-            String contentDisposition = "attachment; filename=\"" + file.getName() + "\"";
+			String baseDir = System.getProperty("user.dir") + File.separator + "src" + File.separator + "main"
+					+ File.separator + "resources" + File.separator;
 
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(resource);
+			File file = new File(baseDir + relativePath);
+			if (!file.exists()) {
+				// return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "File
+				// does not exist on server"));
+				Map<String, Object> map = new HashMap<>();
+				map.put("error", "File does not exist on server");
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(map);
+			}
 
-        } catch (Exception e) {
-            logger.error("Failed to download {} file for test case {}: {}", fileType, id, e.getMessage(), e);
-            // return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Download failed", "details", e.getMessage()));
-            Map<String, Object> map = new HashMap<>();
-            map.put("error", "Download failed");
-            map.put("details", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(map);
-        }
-    }
+			Resource resource = new FileSystemResource(file);
+			String contentDisposition = "attachment; filename=\"" + file.getName() + "\"";
+
+			return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM).body(resource);
+
+		} catch (Exception e) {
+			logger.error("Failed to download {} file for test case {}: {}", fileType, id, e.getMessage(), e);
+			// return
+			// ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error",
+			// "Download failed", "details", e.getMessage()));
+			Map<String, Object> map = new HashMap<>();
+			map.put("error", "Download failed");
+			map.put("details", e.getMessage());
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(map);
+		}
+	}
 }

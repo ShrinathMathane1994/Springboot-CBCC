@@ -48,7 +48,7 @@ public class MasterController {
 
     @GetMapping("/countries")
     public ResponseEntity<Map<String,Object>> getAllCountries(
-            @RequestParam(value = "regionId", required = false) Long regionId) {
+            @RequestParam(value = "region", required = false) Long regionId) {
         // support optional filtering by regionId for convenience
         List<CountryDTO> list = (regionId == null) ? masterService.getAllCountries()
                                                    : masterService.getAllCountries()
@@ -80,7 +80,7 @@ public class MasterController {
     }
 
     @GetMapping("/regions")
-    public ResponseEntity<Map<String,Object>> getRegions(@RequestParam(value = "countryId", required = false) Long countryId) {
+    public ResponseEntity<Map<String,Object>> getRegions(@RequestParam(value = "country", required = false) Long countryId) {
         List<RegionDTO> list = (countryId == null) ? masterService.getAllRegions()
                                                    : masterService.getRegionsByCountry(countryId);
         return buildListResponse(list);
@@ -105,8 +105,8 @@ public class MasterController {
     }
 
     @GetMapping("/pods")
-    public ResponseEntity<Map<String,Object>> getPods(@RequestParam(value = "regionId", required = false) Long regionId,
-                                                      @RequestParam(value = "countryId", required = false) Long countryId) {
+    public ResponseEntity<Map<String,Object>> getPods(@RequestParam(value = "region", required = false) Long regionId,
+                                                      @RequestParam(value = "country", required = false) Long countryId) {
         List<PodDTO> list = masterService.getPods(regionId, countryId);
         return buildListResponse(list);
     }

@@ -30,7 +30,7 @@ import com.qa.cbcc.repository.TestCaseRepository;
 public class TestCaseService {
 
 	private static final Logger logger = LoggerFactory.getLogger(TestCaseService.class);
-	
+
 	@Autowired
 	private TestCaseRepository repository;
 
@@ -77,6 +77,52 @@ public class TestCaseService {
 		}
 	}
 
+//	@Transactional
+//	public TestCase saveTestCase(TestCaseDTO dto, MultipartFile inputFile, MultipartFile outputFile) {
+//		try {
+//			TestCase testCase = new TestCase();
+//			testCase.setTcName(dto.getTcName());
+//			testCase.setDescription(dto.getDescription());
+//
+////			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+//			validateFeatureScenarios(dto.getFeatureScenarios());
+//			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+//
+//			testCase.setFeatureScenarioJson(json);
+//
+//			LocalDateTime now = LocalDateTime.now();
+//			testCase.setCreatedOn(now);
+//			testCase.setModifiedOn(now);
+//			testCase.setIsActive(true);
+//
+//			// New fields
+//			testCase.setCountry(dto.getCountry());
+//			testCase.setRegion(dto.getRegion());
+//			testCase.setPod(dto.getPod());
+//
+//			TestCase saved = repository.save(testCase);
+//
+//			// ✅ Call your centralized method to store files in the correct path
+//			String inputFileName = inputFile.getOriginalFilename();
+//			String outputFileName = outputFile.getOriginalFilename();
+//
+//			// Save files first
+//			storeTestFiles(saved.getIdTC(), inputFile, outputFile);
+//
+//			// Save relative paths
+//			saved.setInputFile("testData/" + saved.getIdTC() + "/" + inputFileName);
+//			saved.setOutputFile("testData/" + saved.getIdTC() + "/" + outputFileName);
+//
+//			TestCase finalSaved = repository.save(saved);
+//
+//			buildHistory(finalSaved, "CREATE");
+//			return finalSaved;
+//
+//		} catch (IOException e) {
+//			throw new RuntimeException("Failed to store test files: " + e.getMessage(), e);
+//		}
+//	}
+
 	@Transactional
 	public TestCase saveTestCase(TestCaseDTO dto, MultipartFile inputFile, MultipartFile outputFile) {
 		try {
@@ -84,10 +130,8 @@ public class TestCaseService {
 			testCase.setTcName(dto.getTcName());
 			testCase.setDescription(dto.getDescription());
 
-//			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
 			validateFeatureScenarios(dto.getFeatureScenarios());
 			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
-
 			testCase.setFeatureScenarioJson(json);
 
 			LocalDateTime now = LocalDateTime.now();
@@ -95,28 +139,28 @@ public class TestCaseService {
 			testCase.setModifiedOn(now);
 			testCase.setIsActive(true);
 
-			// New fields
 			testCase.setCountry(dto.getCountry());
 			testCase.setRegion(dto.getRegion());
 			testCase.setPod(dto.getPod());
 
 			TestCase saved = repository.save(testCase);
 
-			// ✅ Call your centralized method to store files in the correct path
-			String inputFileName = inputFile.getOriginalFilename();
-			String outputFileName = outputFile.getOriginalFilename();
+			// If at least one file is provided, store those files and set paths.
+			if ((inputFile != null && !inputFile.isEmpty()) || (outputFile != null && !outputFile.isEmpty())) {
+				// store files that exist
+				storeTestFiles(saved.getIdTC(), inputFile, outputFile);
 
-			// Save files first
-			storeTestFiles(saved.getIdTC(), inputFile, outputFile);
+				if (inputFile != null && !inputFile.isEmpty()) {
+					saved.setInputFile("testData/" + saved.getIdTC() + "/" + inputFile.getOriginalFilename());
+				}
+				if (outputFile != null && !outputFile.isEmpty()) {
+					saved.setOutputFile("testData/" + saved.getIdTC() + "/" + outputFile.getOriginalFilename());
+				}
+				saved = repository.save(saved);
+			}
 
-			// Save relative paths
-			saved.setInputFile("testData/" + saved.getIdTC() + "/" + inputFileName);
-			saved.setOutputFile("testData/" + saved.getIdTC() + "/" + outputFileName);
-
-			TestCase finalSaved = repository.save(saved);
-
-			buildHistory(finalSaved, "CREATE");
-			return finalSaved;
+			buildHistory(saved, "CREATE");
+			return saved;
 
 		} catch (IOException e) {
 			throw new RuntimeException("Failed to store test files: " + e.getMessage(), e);
@@ -144,7 +188,70 @@ public class TestCaseService {
 		}
 	}
 
+//	public void storeTestFiles(Long testCaseId, MultipartFile inputFile, MultipartFile outputFile) throws IOException {
+//		String baseDir = System.getProperty("user.dir") + File.separator + "src" + File.separator + "main"
+//				+ File.separator + "resources" + File.separator + "testData";
+//
+//		File dir = new File(baseDir + File.separator + testCaseId);
+//		if (!dir.exists()) {
+//			dir.mkdirs();
+//		}
+//
+//		String inputFileName = inputFile.getOriginalFilename();
+//		String outputFileName = outputFile.getOriginalFilename();
+//
+//		File inputDest = new File(dir, inputFileName);
+//		File outputDest = new File(dir, outputFileName);
+//
+//		inputFile.transferTo(inputDest);
+//		outputFile.transferTo(outputDest);
+//	}
+
+//	@Transactional
+//	public TestCase updateTestCase(Long id, TestCaseDTO dto, MultipartFile inputFile, MultipartFile outputFile) {
+//		try {
+//			TestCase existing = getTestCaseById(id);
+//			if (existing == null) {
+//				throw new RuntimeException("Test case with ID " + id + " not found.");
+//			}
+//
+//			existing.setTcName(dto.getTcName());
+//			existing.setDescription(dto.getDescription());
+////			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+//			validateFeatureScenarios(dto.getFeatureScenarios());
+//			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
+//			existing.setFeatureScenarioJson(json);
+//			existing.setModifiedOn(LocalDateTime.now());
+//			existing.setCountry(dto.getCountry());
+//			existing.setRegion(dto.getRegion());
+//			existing.setPod(dto.getPod());
+//
+//			// Update files and set new paths
+//			String inputFileName = inputFile.getOriginalFilename();
+//			String outputFileName = outputFile.getOriginalFilename();
+//
+//			storeTestFiles(id, inputFile, outputFile);
+//
+//			existing.setInputFile("testData/" + id + "/" + inputFileName);
+//			existing.setOutputFile("testData/" + id + "/" + outputFileName);
+//
+//			TestCase updated = repository.save(existing);
+//
+//			// ✅ Save history after update
+//			buildHistory(updated, "UPDATE");
+//
+//			return updated;
+//		} catch (IOException e) {
+//			throw new RuntimeException("Failed to update test case: " + e.getMessage(), e);
+//		}
+//	}
+
 	public void storeTestFiles(Long testCaseId, MultipartFile inputFile, MultipartFile outputFile) throws IOException {
+		// If neither file is present, nothing to do
+		if ((inputFile == null || inputFile.isEmpty()) && (outputFile == null || outputFile.isEmpty())) {
+			return;
+		}
+
 		String baseDir = System.getProperty("user.dir") + File.separator + "src" + File.separator + "main"
 				+ File.separator + "resources" + File.separator + "testData";
 
@@ -153,14 +260,17 @@ public class TestCaseService {
 			dir.mkdirs();
 		}
 
-		String inputFileName = inputFile.getOriginalFilename();
-		String outputFileName = outputFile.getOriginalFilename();
+		if (inputFile != null && !inputFile.isEmpty()) {
+			String inputFileName = inputFile.getOriginalFilename();
+			File inputDest = new File(dir, inputFileName);
+			inputFile.transferTo(inputDest);
+		}
 
-		File inputDest = new File(dir, inputFileName);
-		File outputDest = new File(dir, outputFileName);
-
-		inputFile.transferTo(inputDest);
-		outputFile.transferTo(outputDest);
+		if (outputFile != null && !outputFile.isEmpty()) {
+			String outputFileName = outputFile.getOriginalFilename();
+			File outputDest = new File(dir, outputFileName);
+			outputFile.transferTo(outputDest);
+		}
 	}
 
 	@Transactional
@@ -173,7 +283,6 @@ public class TestCaseService {
 
 			existing.setTcName(dto.getTcName());
 			existing.setDescription(dto.getDescription());
-//			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
 			validateFeatureScenarios(dto.getFeatureScenarios());
 			String json = objectMapper.writeValueAsString(dto.getFeatureScenarios());
 			existing.setFeatureScenarioJson(json);
@@ -182,18 +291,21 @@ public class TestCaseService {
 			existing.setRegion(dto.getRegion());
 			existing.setPod(dto.getPod());
 
-			// Update files and set new paths
-			String inputFileName = inputFile.getOriginalFilename();
-			String outputFileName = outputFile.getOriginalFilename();
+			// If files provided, store and update paths. If not provided, keep existing
+			// paths.
+			if ((inputFile != null && !inputFile.isEmpty()) || (outputFile != null && !outputFile.isEmpty())) {
+				storeTestFiles(id, inputFile, outputFile);
 
-			storeTestFiles(id, inputFile, outputFile);
-
-			existing.setInputFile("testData/" + id + "/" + inputFileName);
-			existing.setOutputFile("testData/" + id + "/" + outputFileName);
+				if (inputFile != null && !inputFile.isEmpty()) {
+					existing.setInputFile("testData/" + id + "/" + inputFile.getOriginalFilename());
+				}
+				if (outputFile != null && !outputFile.isEmpty()) {
+					existing.setOutputFile("testData/" + id + "/" + outputFile.getOriginalFilename());
+				}
+			}
 
 			TestCase updated = repository.save(existing);
 
-			// ✅ Save history after update
 			buildHistory(updated, "UPDATE");
 
 			return updated;
@@ -279,9 +391,8 @@ public class TestCaseService {
 		String raw = testCase.getFeatureScenarioJson();
 		if (raw != null && !raw.trim().isEmpty()) {
 			try {
-				parsed = objectMapper.readValue(raw,
-						new TypeReference<List<TestCaseDTO.FeatureScenario>>() {
-						});
+				parsed = objectMapper.readValue(raw, new TypeReference<List<TestCaseDTO.FeatureScenario>>() {
+				});
 			} catch (Exception ex) {
 				logger.info(ex.getMessage());
 			}

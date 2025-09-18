@@ -1,10 +1,12 @@
 package com.qa.cbcc.controller;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.HttpStatus;
@@ -74,44 +76,95 @@ public class FeatureController {
         }
     }
 
+//    @GetMapping("/scenarios/filter")
+//    public ResponseEntity<?> getScenariosByMultiTags(@RequestParam(required = false) String country,
+//            @RequestParam(required = false) String region, @RequestParam(required = false) String pod,
+//            @RequestParam(required = false) String team, @RequestParam(required = false) String env) {
+//        Map<String, String> tagFilters = new HashMap<>();
+//        if (country != null)
+//            tagFilters.put("country", country.toLowerCase());
+//        if (region != null)
+//            tagFilters.put("region", region.toLowerCase());
+//        if (pod != null)
+//            tagFilters.put("pod", pod.toLowerCase());
+//        if (env != null)
+//            tagFilters.put("env", env.toLowerCase());
+//        if (team != null)
+//            tagFilters.put("team", team.toLowerCase());
+//
+//        logger.info("Fetching scenarios with tag filters: {}", tagFilters);
+//        try {
+//            List<ScenarioDTO> scenarios = featureService.getScenariosByTags(tagFilters); // ✅ Now correct
+//
+//            if (scenarios.isEmpty()) {
+//                Map<String, Object> body = new HashMap<>();
+//                body.put("status", 200);
+//                body.put("message", "No scenarios found for provided filters");
+//                return ResponseEntity.status(HttpStatus.OK).body(body);
+//            }
+//
+//            return ResponseEntity.ok(scenarios);
+//        } catch (IOException e) {
+//            logger.error("IO error fetching scenarios: {}", e.getMessage());
+//            Map<String, Object> body = new HashMap<>();
+//            body.put("status", 500);
+//            body.put("message", "Error processing feature files");
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+//        } catch (Exception e) {
+//            logger.error("Unexpected error: {}", e.getMessage());
+//            Map<String, Object> body = new HashMap<>();
+//            body.put("status", 500);
+//            body.put("message", "Internal server error");
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+//        }
+//    }
+    
     @GetMapping("/scenarios/filter")
-    public ResponseEntity<?> getScenariosByMultiTags(@RequestParam(required = false) String country,
-            @RequestParam(required = false) String region, @RequestParam(required = false) String pod,
-            @RequestParam(required = false) String team, @RequestParam(required = false) String env) {
+    public ResponseEntity<?> getScenariosByMultiTags(
+            @RequestParam(required = false) String country,
+            @RequestParam(required = false) String region,
+            @RequestParam(required = false) String pod,
+            @RequestParam(required = false) String team,
+            @RequestParam(required = false) String env) {
+
         Map<String, String> tagFilters = new HashMap<>();
-        if (country != null)
-            tagFilters.put("country", country.toLowerCase());
-        if (region != null)
-            tagFilters.put("region", region.toLowerCase());
-        if (pod != null)
-            tagFilters.put("pod", pod.toLowerCase());
-        if (env != null)
-            tagFilters.put("env", env.toLowerCase());
-        if (team != null)
-            tagFilters.put("team", team.toLowerCase());
+        if (country != null) tagFilters.put("country", country.toLowerCase());
+        if (region != null) tagFilters.put("region", region.toLowerCase());
+        if (pod != null) tagFilters.put("pod", pod.toLowerCase());
+        if (env != null) tagFilters.put("env", env.toLowerCase());
+        if (team != null) tagFilters.put("team", team.toLowerCase());
 
         logger.info("Fetching scenarios with tag filters: {}", tagFilters);
-        try {
-            List<ScenarioDTO> scenarios = featureService.getScenariosByTags(tagFilters); // ✅ Now correct
 
+        try {
+            List<ScenarioDTO> scenarios = featureService.getScenariosByTags(tagFilters);
+
+            Map<String, Object> body = new LinkedHashMap<>();
             if (scenarios.isEmpty()) {
-                Map<String, Object> body = new HashMap<>();
-                body.put("status", 200);
-                body.put("message", "No scenarios found for provided filters");
-                return ResponseEntity.status(HttpStatus.OK).body(body);
+                body.put("data", Collections.emptyList());
+                body.put("count", 0);
+                body.put("message", "No records found");
+                return ResponseEntity.ok(body);
+            } else {
+                body.put("data", scenarios);
+                body.put("count", scenarios.size());
+                body.put("message", "OK");
+                return ResponseEntity.ok(body);
             }
 
-            return ResponseEntity.ok(scenarios);
         } catch (IOException e) {
             logger.error("IO error fetching scenarios: {}", e.getMessage());
-            Map<String, Object> body = new HashMap<>();
-            body.put("status", 500);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("data", Collections.emptyList());
+            body.put("count", 0);
             body.put("message", "Error processing feature files");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+
         } catch (Exception e) {
-            logger.error("Unexpected error: {}", e.getMessage());
-            Map<String, Object> body = new HashMap<>();
-            body.put("status", 500);
+            logger.error("Unexpected error: {}", e.getMessage(), e);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("data", Collections.emptyList());
+            body.put("count", 0);
             body.put("message", "Internal server error");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
         }
