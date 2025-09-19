@@ -871,9 +871,27 @@ public class TestCaseRunService {
                     .flatMap(fs -> fs.getScenarios().stream()).map(String::trim).collect(Collectors.toSet());
 
             // Java: Match scenario outlines by prefix
-            Set<String> unexecuted = declaredScenarioNames.stream()
-                    .filter(declared -> executedScenarioNames.stream()
-                            .noneMatch(executed -> executed.startsWith(declared.replace("<Scenario>", ""))))
+//            Set<String> unexecuted = declaredScenarioNames.stream()
+//                    .filter(declared -> executedScenarioNames.stream()
+//                            .noneMatch(executed -> executed.startsWith(declared.replace("<Scenario>", ""))))
+//                    .collect(Collectors.toSet());
+
+              Set<String> unexecuted = declaredScenarioNames.stream()
+                    .filter(declared -> {
+                        if (declared.contains("<Scenario>")) {
+                            String prefix = declared.substring(0, declared.indexOf("<Scenario>")).trim();
+                            // Match any executed scenario that starts with the prefix and has [example #N]
+                            return executedScenarioNames.stream()
+                                    .noneMatch(executed -> executed.startsWith(prefix) && executed.contains("[example"));
+                        } else {
+                            // For scenario outlines without <Scenario>, match by prefix and ignore [example #N]
+                            return executedScenarioNames.stream()
+                                    .noneMatch(executed -> {
+                                        String execName = executed.replaceAll("\\s*\\[example.*\\]$", "").trim();
+                                        return execName.equals(declared);
+                                    });
+                        }
+                    })
                     .collect(Collectors.toSet());
 
             List<Map<String, Object>> allUnexecutedScenarios = new ArrayList<>();
