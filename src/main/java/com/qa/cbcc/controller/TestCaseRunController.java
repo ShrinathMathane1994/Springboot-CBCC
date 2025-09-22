@@ -256,5 +256,90 @@ public class TestCaseRunController {
 		headers.setContentType(MediaType.TEXT_HTML);
 		return new ResponseEntity<>(html, headers, HttpStatus.OK);
 	}
+	
+	@GetMapping("/run-history/{historyId}/html")
+	public ResponseEntity<String> getHistoryExecutionHtml(
+	        @PathVariable Long historyId,
+	        @RequestParam(name = "exampleId", required = false) Long exampleId
+	) throws IOException {
+
+	    // Load the history entry
+	    Optional<TestCaseRunHistory> historyOpt = historyRepository.findById(historyId);
+	    if (!historyOpt.isPresent()) {
+	        return ResponseEntity.notFound().build();
+	    }
+
+	    TestCaseRunHistory history = historyOpt.get();
+
+	    // Build DTO (same style as other endpoints)
+	    ObjectMapper mapper = new ObjectMapper();
+	    mapper.registerModule(new JavaTimeModule());
+
+	    TestCaseRunHistoryDTO dto = new TestCaseRunHistoryDTO();
+	    dto.setId(history.getId());
+	    dto.setTestCaseId(history.getTestCase() != null ? history.getTestCase().getIdTC() : null);
+	    dto.setRunTime(history.getRunTime());
+	    dto.setRunStatus(history.getRunStatus());
+	    dto.setExecutedScenarios(history.getExecutedScenarios());
+	    dto.setUnexecutedScenarios(history.getUnexecutedScenarios());
+	    dto.setXmlDiffStatus(history.getXmlDiffStatus());
+	    dto.setInputXmlContent(history.getInputXmlContent());
+	    dto.setOutputXmlContent(history.getOutputXmlContent());
+
+	    // raw log grouping
+	    if (history.getRawCucumberLog() != null) {
+	        List<String> rawLog = Arrays.asList(history.getRawCucumberLog().split("\\r?\\n"));
+	        dto.setRawCucumberLogGrouped(CucumberLogUtils.groupRawCucumberLog(rawLog));
+	    }
+
+	    try {
+	        if (history.getOutputLog() != null) {
+	            dto.setOutputLog(mapper.readValue(history.getOutputLog(), Object.class));
+	        }
+	        if (history.getXmlParsedDifferencesJson() != null) {
+	            List<Map<String, Object>> xmlDiffs = mapper.readValue(
+	                    history.getXmlParsedDifferencesJson(),
+	                    new TypeReference<List<Map<String, Object>>>() {}
+	            );
+	            dto.setXmlParsedDifferencesJson(xmlDiffs);
+	        }
+	    } catch (Exception e) {
+	        logger.warn("Failed to parse stored JSON for history {}: {}", historyId, e.getMessage());
+	    }
+
+	    // Fetch example rows for this execution
+	    List<ScenarioExampleRunDTO> exampleRows = Collections.emptyList();
+	    try {
+	        exampleRows = testCaseRunService.getExampleRowsForExecution(historyId, true);
+	    } catch (Exception ex) {
+	        logger.warn("Failed to fetch example rows for history {}: {}", historyId, ex.getMessage(), ex);
+	    }
+
+	    // Pick example row
+	    ScenarioExampleRunDTO scDTO = null;
+	    if (exampleId != null && exampleRows != null) {
+	        for (ScenarioExampleRunDTO e : exampleRows) {
+	            if (e.getId() != null && e.getId().equals(exampleId)) {
+	                scDTO = e;
+	                break;
+	            }
+	        }
+	    }
+	    if (scDTO == null && exampleRows != null && !exampleRows.isEmpty()) {
+	        scDTO = exampleRows.get(0);
+	    }
+
+	    // Generate HTML
+	    String html = caseReportService.generateHtmlReport(
+	            dto,
+	            scDTO,
+	            exampleRows == null ? Collections.emptyList() : exampleRows
+	    );
+
+	    HttpHeaders headers = new HttpHeaders();
+	    headers.setContentType(MediaType.TEXT_HTML);
+	    return new ResponseEntity<>(html, headers, HttpStatus.OK);
+	}
+
 
 }

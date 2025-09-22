@@ -116,7 +116,7 @@ Success (200):
 
 Get countries by region
 -----------------------
-GET /api/master/countries?regionId=1
+GET /api/master/countries?region=1
 
 Create country
 --------------
@@ -156,15 +156,15 @@ Success (200):
 
 Get pods by region
 ------------------
-GET /api/master/pods?regionId=1
+GET /api/master/pods?region=1
 
 Get pods by country
 -------------------
-GET /api/master/pods?countryId=2
+GET /api/master/pods?country=2
 
 Get pods by region + country
 ----------------------------
-GET /api/master/pods?regionId=2&countryId=2
+GET /api/master/pods?region=2&country=2
 
 Create pod
 ----------

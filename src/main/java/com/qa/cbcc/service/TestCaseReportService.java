@@ -1117,7 +1117,10 @@ public class TestCaseReportService {
 				.append("</style>");
 
 		// Header
-		html.append("<h1><span class='icon'>📋</span>Test Case Execution Report")
+		// Add Test Case Name
+		String tcId = dto.getTestCaseId() != null ? String.valueOf(dto.getTestCaseId()) : "";
+
+		html.append("<h1><span class='icon'>📋</span>Test Case ").append(tcId).append(" Execution Report")
 				.append("<span class='pdf-icon' onclick='expandAllAndPrint()'>🖨️</span>")
 				.append("<span class='dark-toggle' onclick='toggleDark()'>🌙</span></h1>");
 

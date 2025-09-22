@@ -3,6 +3,7 @@ package com.qa.cbcc.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 public class TestCaseResponseDTO {
@@ -13,12 +14,15 @@ public class TestCaseResponseDTO {
 	private List<TestCaseDTO.FeatureScenario> featureScenarioJson;
 	private String inputFile;
 	private String outputFile;
+	@JsonFormat(pattern = "yyyy-MM-dd hh:mm:ss a")
 	private LocalDateTime createdOn;
+	@JsonFormat(pattern = "yyyy-MM-dd hh:mm:ss a")
 	private LocalDateTime modifiedOn;
 	private Boolean isActive;
 	private String country;
 	private String region;
 	private String pod;
+	@JsonFormat(pattern = "yyyy-MM-dd hh:mm:ss a")
 	private LocalDateTime executionOn;
 	private String executionStatus;
 
