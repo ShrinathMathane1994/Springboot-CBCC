@@ -36,7 +36,8 @@ import com.qa.cbcc.utils.CucumberLogUtils;
 
 @RestController
 @RequestMapping("/api/test-cases")
-public class TestCaseRunController {
+public class
+TestCaseRunController {
 
 	private static final Logger logger = LoggerFactory.getLogger(TestCaseRunController.class);
 
@@ -201,4 +202,51 @@ public class TestCaseRunController {
 		return new ResponseEntity<>(html, headers, HttpStatus.OK);
 	}
 
+    @GetMapping("/run-history/{historyId}/html")
+    public ResponseEntity<String> getExecutionHtmlByHistoryId(@PathVariable Long historyId) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+
+        Optional<TestCaseRunHistory> optHistory = historyRepository.findById(historyId);
+        if (!optHistory.isPresent()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        TestCaseRunHistory h = optHistory.get();
+        TestCaseRunHistoryDTO dto = new TestCaseRunHistoryDTO();
+        dto.setId(h.getId());
+        dto.setTestCaseId(h.getTestCase() != null ? h.getTestCase().getIdTC() : null);
+        dto.setRunTime(h.getRunTime());
+        dto.setRunStatus(h.getRunStatus());
+        dto.setExecutedScenarios(h.getExecutedScenarios());
+        dto.setUnexecutedScenarios(h.getUnexecutedScenarios());
+        dto.setXmlDiffStatus(h.getXmlDiffStatus());
+        dto.setInputXmlContent(h.getInputXmlContent());
+        dto.setOutputXmlContent(h.getOutputXmlContent());
+
+        // Raw log grouping (same as your other methods)
+        List<String> rawLog = h.getRawCucumberLog() != null ? Arrays.asList(h.getRawCucumberLog().split("\\r?\\n")) : null;
+        if (rawLog != null) {
+            dto.setRawCucumberLogGrouped(CucumberLogUtils.groupRawCucumberLog(rawLog));
+        }
+
+        try {
+            if (h.getOutputLog() != null) {
+                dto.setOutputLog(mapper.readValue(h.getOutputLog(), Object.class));
+            }
+            if (h.getXmlParsedDifferencesJson() != null) {
+                dto.setXmlParsedDifferencesJson(mapper.readValue(h.getXmlParsedDifferencesJson(),
+                        new TypeReference<List<Map<String, Object>>>() {}));
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to parse stored JSON for history {}: {}", historyId, e.getMessage());
+        }
+
+        // Use existing report generator that returns HTML
+        String html = caseReportService.generateHtmlReport(dto);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.TEXT_HTML);
+        return new ResponseEntity<>(html, headers, HttpStatus.OK);
+    }
 }

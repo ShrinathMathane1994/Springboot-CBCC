@@ -498,11 +498,18 @@ public class TestCaseReportService {
 				.append("</script></head><body>");
 
 		// Header
-		html.append("<h1><span class='icon'>📋</span>Test Case Execution Report")
-				.append("<span class='pdf-icon' onclick='expandAllAndPrint()'>🖨️</span>")
-				.append("<span class='dark-toggle' onclick='toggleDark()'>🌙</span></h1>");
+        // Add Test Case Name
+        String tcId = dto.getTestCaseId() != null
+                ? String.valueOf(dto.getTestCaseId())
+                : "";
 
-		String runStatus = dto.getRunStatus() == null ? "N/A" : dto.getRunStatus();
+        html.append("<h1><span class='icon'>📋</span>Test Case ")
+                .append(tcId)
+                .append(" Execution Report")
+                .append("<span class='pdf-icon' onclick='expandAllAndPrint()'>🖨️</span>")
+                .append("<span class='dark-toggle' onclick='toggleDark()'>🌙</span></h1>");
+
+        String runStatus = dto.getRunStatus() == null ? "N/A" : dto.getRunStatus();
 		String runBadgeClass = runStatus.toLowerCase().contains("fail") ? "badge-fail"
 				: runStatus.toLowerCase().contains("error") ? "badge-fail"
 						: runStatus.toLowerCase().contains("unex") ? "badge-warn"

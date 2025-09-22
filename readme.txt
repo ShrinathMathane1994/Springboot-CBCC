@@ -268,7 +268,10 @@ GET /api/test-cases/{id}/run-history
 GET /api/test-cases/{id}/run-history/latest - Latest Record Only
 
 🕓 Testcase last run html report
-http://localhost:8080/api/test-cases/{id}/html-latest
+http://localhost:8080/api/test-cases/{tcId}/html-latest
+
+🕓 Testcase html report history id wise
+http://localhost:8080/api/test-cases/run-history/{historyId}/html
 
 📁 Download Input/Output Files
 GET /api/test-cases/{id}/download?fileType=input

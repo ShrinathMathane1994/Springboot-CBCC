@@ -1,5 +1,6 @@
 package com.qa.cbcc.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
 
 public class TestCaseResponseDTO {
@@ -9,36 +10,24 @@ public class TestCaseResponseDTO {
     private String featureScenarioJson;
     private String inputFile;
     private String outputFile;
+
+    @JsonFormat(pattern = "yyyy-MM-dd hh:mm:ss a")
     private LocalDateTime createdOn;
+
+    @JsonFormat(pattern = "yyyy-MM-dd hh:mm:ss a")
     private LocalDateTime modifiedOn;
+
     private Boolean isActive;
     private String country;
     private String region;
     private String pod;
+
+    @JsonFormat(pattern = "yyyy-MM-dd hh:mm:ss a")
     private LocalDateTime executionOn;
+
     private String executionStatus;
 
-
-
-    public String getCountry() {
-		return country;
-	}
-	public void setCountry(String country) {
-		this.country = country;
-	}
-	public String getRegion() {
-		return region;
-	}
-	public void setRegion(String region) {
-		this.region = region;
-	}
-	public String getPod() {
-		return pod;
-	}
-	public void setPod(String pod) {
-		this.pod = pod;
-	}
-	// Getters and Setters
+    // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -65,21 +54,19 @@ public class TestCaseResponseDTO {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
-    
-    public LocalDateTime getExecutionOn() {
-        return executionOn;
-    }
 
-    public void setExecutionOn(LocalDateTime executionOn) {
-        this.executionOn = executionOn;
-    }
+    public String getCountry() { return country; }
+    public void setCountry(String country) { this.country = country; }
 
-    public String getExecutionStatus() {
-        return executionStatus;
-    }
+    public String getRegion() { return region; }
+    public void setRegion(String region) { this.region = region; }
 
-    public void setExecutionStatus(String executionStatus) {
-        this.executionStatus = executionStatus;
-    }
+    public String getPod() { return pod; }
+    public void setPod(String pod) { this.pod = pod; }
 
+    public LocalDateTime getExecutionOn() { return executionOn; }
+    public void setExecutionOn(LocalDateTime executionOn) { this.executionOn = executionOn; }
+
+    public String getExecutionStatus() { return executionStatus; }
+    public void setExecutionStatus(String executionStatus) { this.executionStatus = executionStatus; }
 }
