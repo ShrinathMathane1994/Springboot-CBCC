@@ -1,0 +1,67 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Test Case Flow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- API CONNECTOR MASTER -->
+        <mxCell id="api" value="API CONNECTOR MASTER&#10;&#10;• Token Generation API&#10;• Payment Processing API&#10;• Validation API&#10;&#10;Defines:&#10;• Auth strategy&#10;• API request&#10;• Response extraction&#10;• Expected output &amp; status"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="300" height="220" as="geometry"/>
+        </mxCell>
+
+        <!-- DB CONNECTOR MASTER -->
+        <mxCell id="db" value="DB CONNECTOR MASTER&#10;&#10;• DB Connection&#10;• DB Queries (0..N)&#10;• Response Extraction&#10;&#10;Defines:&#10;• Query logic&#10;• Extracted DB fields&#10;• Validation rules"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="780" y="40" width="300" height="220" as="geometry"/>
+        </mxCell>
+
+        <!-- TEST CASE CONFIGURATION -->
+        <mxCell id="tc" value="TEST CASE CONFIGURATION&#10;&#10;1. Select Environment&#10;2. Select Payment Processing API Connector (MANDATORY)&#10;3. Upload Input File&#10;4. Select Validation Connector(s)&#10;   • API Validation Connector&#10;   • DB Validation Connector&#10;&#10;(Expected output &amp; status are derived from Validation Connector)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="390" y="300" width="360" height="260" as="geometry"/>
+        </mxCell>
+
+        <!-- EXECUTION ENGINE -->
+        <mxCell id="engine" value="TEST CASE EXECUTION ENGINE&#10;&#10;Step 1: Execute Payment API&#10;(Fetch token if required)&#10;&#10;Step 2: Capture API response fields&#10;&#10;Step 3: Execute Validation&#10;• API Validation&#10;• DB Queries &amp; Validation"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="410" y="620" width="320" height="200" as="geometry"/>
+        </mxCell>
+
+        <!-- EXECUTION RESULT -->
+        <mxCell id="result" value="EXECUTION RESULT&#10;&#10;✔ PASS / ✖ FAIL&#10;✔ API validation details&#10;✔ DB validation details&#10;✔ Evidence &amp; logs"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="440" y="860" width="260" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- EDGES -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeWidth=2;"
+          edge="1" parent="1" source="api" target="tc">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeWidth=2;"
+          edge="1" parent="1" source="db" target="tc">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeWidth=2;"
+          edge="1" parent="1" source="tc" target="engine">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeWidth=2;"
+          edge="1" parent="1" source="engine" target="result">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
