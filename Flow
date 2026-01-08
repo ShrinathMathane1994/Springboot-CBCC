@@ -1,0 +1,70 @@
+┌──────────────────────────────┐
+│ API CONNECTOR MASTER         │
+│------------------------------│
+│ - Token Generation API       │
+│ - Payment Processing API     │
+│ - Validation API             │
+│                              │
+│ Defines:                     │
+│ - Auth strategy              │
+│ - API request                │
+│ - Response extraction        │
+└───────────────┬──────────────┘
+                │
+                │
+┌───────────────▼──────────────┐
+│ DB CONNECTOR MASTER          │
+│------------------------------│
+│ - DB Connection              │
+│ - DB Queries (0..N)          │
+│ - Response extraction        │
+│                              │
+│ Defines:                     │
+│ - Query logic                │
+│ - Extracted DB fields        │
+└───────────────┬──────────────┘
+                │
+                │
+┌───────────────▼──────────────┐
+│ TEST CASE CONFIGURATION      │
+│------------------------------│
+│ 1. Select Environment        │
+│                              │
+│ 2. Select Payment Processing │
+│    API Connector (MANDATORY) │
+│                              │
+│ 3. Upload Input File         │
+│                              │
+│ 4. Select Validation         │
+│    Connector(s) (0..N)       │
+│    - API Validation          │
+│    - DB Validation           │
+└───────────────┬──────────────┘
+                │
+                │
+┌───────────────▼──────────────┐
+│ TEST CASE EXECUTION ENGINE   │
+│------------------------------│
+│ Step 1: Execute Payment API  │
+│         (Use token if needed)│
+│                              │
+│ Step 2: Capture API response │
+│         fields               │
+│                              │
+│ Step 3: Execute Validation   │
+│         Connectors           │
+│   - API validation           │
+│   - DB queries & validation  │
+│                              │
+│ Step 4: Compare extracted    │
+│         values               │
+└───────────────┬──────────────┘
+                │
+                │
+┌───────────────▼──────────────┐
+│ EXECUTION RESULT             │
+│------------------------------│
+│ - PASS / FAIL                │
+│ - Validation details         │
+│ - API & DB evidence          │
+└──────────────────────────────┘
