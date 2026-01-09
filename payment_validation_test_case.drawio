@@ -1,0 +1,40 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Payment Validation Test Case">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="2" value="Payment Validation Flow&#10;(Process payment file → AMH → GMO → GPS)" style="text;html=1;align=center;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="200" y="20" width="450" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Test Case Details -->
+        <mxCell id="3" value="TEST CASE DETAILS&#10;&#10;Test Case Name: TC001 – End-to-End Payment Validation&#10;Environment: SIT&#10;Region: EMEA&#10;Country: GB&#10;Payment Processor: Payment P1 SIT&#10;Input Payment File: Uploaded file&#10;Tags: UK Regression Test"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf" vertex="1" parent="1">
+          <mxGeometry x="50" y="120" width="350" height="220" as="geometry"/>
+        </mxCell>
+
+        <!-- Payment Processing -->
+        <mxCell id="4" value="Payment Processing API Connector&#10;(API Connector)&#10;&#10;• Executes payment API&#10;• Captures txnId, status"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366" vertex="1" parent="1">
+          <mxGeometry x="450" y="120" width="350" height="150" as="geometry"/>
+        </mxCell>
+
+        <!-- Validation Flow -->
+        <mxCell id="5" value="VALIDATION FLOW&#10;&#10;Step 1: AMH SIT (API Validation)&#10;Expected: Sent to processor&#10;&#10;Step 2: GMO SIT (DB Validation)&#10;Expected: DB payload match&#10;&#10;Step 3: GPS SIT (API Validation)&#10;Expected: Status 200 OK"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656" vertex="1" parent="1">
+          <mxGeometry x="200" y="320" width="450" height="220" as="geometry"/>
+        </mxCell>
+
+        <!-- Result -->
+        <mxCell id="6" value="EXECUTION RESULT&#10;&#10;• Compare expected vs actual&#10;• Generate PASS / FAIL&#10;• Store logs & evidence"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450" vertex="1" parent="1">
+          <mxGeometry x="200" y="580" width="450" height="150" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
