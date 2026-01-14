@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="Test Case List">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="list" value="Test Case Listing Screen&#10;TC ID | Description | Env | Country | Created On | Execution On | Status | Actions" 
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" 
+          vertex="1" parent="1">
+          <mxGeometry x="160" y="120" width="520" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="viewBtn" value="View (click)" 
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" 
+          vertex="1" parent="1" link="page=Test Case Details">
+          <mxGeometry x="360" y="290" width="120" height="40" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Test Case Details">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="details" value="Test Case Details Screen&#10;All test case configuration & results" 
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" 
+          vertex="1" parent="1">
+          <mxGeometry x="160" y="120" width="520" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="backBtn" value="Back to Test Case List" 
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" 
+          vertex="1" parent="1" link="page=Test Case List">
+          <mxGeometry x="360" y="290" width="200" height="40" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
